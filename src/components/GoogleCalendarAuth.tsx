@@ -60,8 +60,15 @@ export default function GoogleCalendarAuth({ onAuthChange, onCalendarsLoad }: Go
     try {
       setIsLoading(true)
       setError(null)
+      
+      console.log('Google Calendar: 로그인 시도 중...')
+      console.log('Google Calendar config:', {
+        hasClientId: !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+        clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.substring(0, 20) + '...'
+      })
 
       const success = await googleCalendar.signIn()
+      console.log('Google Calendar: 로그인 결과:', success)
       
       if (success) {
         const currentUser = googleCalendar.getCurrentUser()

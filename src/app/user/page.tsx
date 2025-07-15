@@ -9,10 +9,20 @@ import LeaveManagement from '@/components/LeaveManagement'
 import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 
+interface ReviewLink {
+  id: string
+  user_id: string
+  employee_name: string
+  review_url: string
+  season: string
+  is_active: boolean
+}
+
 export default function UserDashboard() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [isPromotionTarget, setIsPromotionTarget] = useState(false)
+  const [reviewLink, setReviewLink] = useState<ReviewLink | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -36,6 +46,22 @@ export default function UserDashboard() {
         }
       } catch (error) {
         console.error("Failed to check promotion status:", error)
+      }
+
+      // 개별 리뷰 링크 가져오기
+      try {
+        const { data: reviewData } = await supabase
+          .from('review_links')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .eq('is_active', true)
+          .single()
+        
+        if (reviewData) {
+          setReviewLink(reviewData)
+        }
+      } catch (error) {
+        console.error("Failed to fetch review link:", error)
       }
     }
 
@@ -202,7 +228,7 @@ export default function UserDashboard() {
             </div>
 
             {/* 반기 리뷰 위젯 (시즌별 표시) */}
-            {isReviewSeason && (
+            {isReviewSeason && reviewLink && (
               <div className="bg-orange-50 overflow-hidden shadow rounded-lg border border-orange-200">
                 <div className="p-5">
                   <div className="flex items-center">
@@ -226,13 +252,43 @@ export default function UserDashboard() {
                 <div className="bg-orange-100 px-5 py-3">
                   <div className="text-sm">
                     <a 
-                      href="https://script.google.com/a/motionsense.co.kr/s/AKfycbx7_GHdbPcKU8WMHVyz8urhEY7N_FRm9URhbk0XbZ5t5hzrxE8aKgAe0NLFupK9WqgnFQ/exec"
+                      href={reviewLink.review_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-medium text-orange-600 hover:text-orange-500"
                     >
                       반기 리뷰 시작하기
                     </a>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 반기 리뷰 위젯 (리뷰 링크가 없는 경우) */}
+            {isReviewSeason && !reviewLink && (
+              <div className="bg-gray-50 overflow-hidden shadow rounded-lg border border-gray-200">
+                <div className="p-5">
+                  <div className="flex items-center">
+                    <div className="flex-shrink-0">
+                      <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                    </div>
+                    <div className="ml-5 w-0 flex-1">
+                      <dl>
+                        <dt className="text-sm font-medium text-gray-600 truncate">
+                          반기 리뷰
+                        </dt>
+                        <dd className="text-lg font-medium text-gray-900">
+                          {currentMonth === 1 ? '상반기' : '하반기'} 리뷰 시즌
+                        </dd>
+                      </dl>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-100 px-5 py-3">
+                  <div className="text-sm text-gray-600">
+                    개별 리뷰 링크가 아직 설정되지 않았습니다. 관리자에게 문의해주세요.
                   </div>
                 </div>
               </div>

@@ -22,6 +22,7 @@ function getAuthSupabase() {
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json()
+    const authSupabase = getAuthSupabase()
 
     // 1. 사용자 조회
     const { data: user, error: userError } = await authSupabase
@@ -55,7 +56,11 @@ export async function POST(request: NextRequest) {
       role: user.role,
       employee_id: user.employee_id,
       department: user.department,
-      position: user.position
+      position: user.position,
+      hire_date: user.hire_date,
+      phone: user.phone,
+      dob: user.dob,
+      address: user.address
     }
 
     return NextResponse.json({

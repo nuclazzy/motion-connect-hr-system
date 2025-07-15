@@ -81,9 +81,8 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   }
 
   const getWeekDays = () => {
-    const today = new Date()
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - today.getDay()) // 일요일부터 시작
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay()) // 일요일부터 시작
 
     const days = []
     for (let i = 0; i < 7; i++) {

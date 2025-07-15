@@ -41,7 +41,8 @@ export default function AdminEmployeeManagement() {
     address: '',
     work_type: '정규직',
     hire_date: '',
-    contract_end_date: null as string | null
+    contract_end_date: null as string | null,
+    newPassword: ''
   })
 
   useEffect(() => {
@@ -80,7 +81,8 @@ export default function AdminEmployeeManagement() {
       address: '',
       work_type: '정규직',
       hire_date: new Date().toISOString().split('T')[0],
-      contract_end_date: null
+      contract_end_date: null,
+      newPassword: ''
     })
     setEditingEmployee(null)
     setShowAddForm(true)
@@ -99,7 +101,8 @@ export default function AdminEmployeeManagement() {
       address: employee.address || '',
       work_type: employee.work_type || '정규직',
       hire_date: employee.hire_date || '',
-      contract_end_date: employee.contract_end_date || null
+      contract_end_date: employee.contract_end_date || null,
+      newPassword: ''
     })
     setEditingEmployee(employee)
     setShowAddForm(true)
@@ -120,18 +123,29 @@ export default function AdminEmployeeManagement() {
 
     try {
       if (editingEmployee) {
-        // 수정
-        const { data, error } = await supabase
-          .from('users')
-          .update(dataToSubmit)
-          .eq('id', editingEmployee.id)
-          .select()
-          .single()
+        // 관리자 API를 통한 수정
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+        
+        const response = await fetch(`/api/admin/users/${editingEmployee.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            adminId: currentUser.id,
+            ...dataToSubmit,
+            newPassword: formData.newPassword || undefined
+          }),
+        })
 
-        if (error) throw error;
+        const result = await response.json()
+
+        if (!result.success) {
+          throw new Error(result.error || '수정에 실패했습니다.')
+        }
 
         // 입사일이 변경되었을 수 있으므로 연차 정보도 업데이트
-        const annual_days = calculateAnnualLeave(data.hire_date);
+        const annual_days = calculateAnnualLeave(result.user.hire_date);
         const { error: leaveError } = await supabase
             .from('leave_days')
             .update({ 
@@ -142,7 +156,7 @@ export default function AdminEmployeeManagement() {
                     used_sick_days: 0
                 }
             })
-            .eq('user_id', data.id)
+            .eq('user_id', result.user.id)
 
         if (leaveError) throw leaveError;
 
@@ -199,6 +213,21 @@ export default function AdminEmployeeManagement() {
   }
 
   const handleCloseForm = () => {
+    setFormData({
+      name: '',
+      email: '',
+      employee_id: '',
+      department: '',
+      position: '',
+      role: 'user' as 'admin' | 'user',
+      phone: '',
+      dob: '',
+      address: '',
+      work_type: '정규직',
+      hire_date: '',
+      contract_end_date: null as string | null,
+      newPassword: ''
+    })
     setShowAddForm(false)
     setEditingEmployee(null)
   }
@@ -623,6 +652,19 @@ export default function AdminEmployeeManagement() {
                       onChange={(e) => setFormData({...formData, contract_end_date: e.target.value})}
                       className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       required
+                    />
+                  </div>
+                )}
+
+                {editingEmployee && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">새 비밀번호 (선택사항)</label>
+                    <input
+                      type="password"
+                      value={formData.newPassword}
+                      onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      placeholder="새 비밀번호를 입력하세요 (입력하지 않으면 기존 비밀번호 유지)"
                     />
                   </div>
                 )}

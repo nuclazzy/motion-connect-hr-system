@@ -12,6 +12,10 @@ export interface User {
   employee_id: string
   department: string
   position: string
+  hire_date: string
+  phone?: string
+  dob?: string
+  address?: string
 }
 
 export interface LoginCredentials {
@@ -119,12 +123,42 @@ export function checkPermission(user: User | null, requiredRole: 'admin' | 'user
 /**
  * 사용자 정보 업데이트
  */
-export async function updateUserProfile(userId: string, updateData: Partial<User>): Promise<AuthResult> {
-  // TODO: API Route로 이동 필요
-  console.log('updateUserProfile 호출됨:', { userId, updateData })
-  
-  return {
-    success: false,
-    error: '현재 사용자 정보 업데이트 기능이 비활성화되어 있습니다.'
+export async function updateUserProfile(userId: string, updateData: { phone?: string, dob?: string, address?: string }): Promise<AuthResult> {
+  try {
+    const response = await fetch('/api/user/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        userId,
+        ...updateData
+      }),
+    })
+
+    const result = await response.json()
+
+    if (result.success && result.user) {
+      // localStorage의 사용자 정보도 업데이트
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('motion-connect-user', JSON.stringify(result.user))
+      }
+      
+      return {
+        success: true,
+        user: result.user
+      }
+    } else {
+      return {
+        success: false,
+        error: result.error || '프로필 업데이트에 실패했습니다.'
+      }
+    }
+  } catch (error) {
+    console.error('프로필 업데이트 오류:', error)
+    return {
+      success: false,
+      error: '프로필 업데이트 중 오류가 발생했습니다.'
+    }
   }
 }

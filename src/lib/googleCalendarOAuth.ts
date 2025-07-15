@@ -60,9 +60,17 @@ class GoogleCalendarOAuth {
   // Google API 초기화
   async initializeGoogleAPI(): Promise<void> {
     return new Promise((resolve, reject) => {
+      console.log('Google API 초기화 시작...')
+      console.log('Client ID:', this.config.clientId)
+      if (typeof window !== 'undefined') {
+        console.log('현재 도메인:', window.location.origin)
+      }
+      
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (this.gapi as any)?.load('client:auth2', async () => {
         try {
+          console.log('Google client:auth2 로드 완료')
+          
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           await (this.gapi as any)?.client?.init({
             clientId: this.config.clientId,
@@ -70,17 +78,28 @@ class GoogleCalendarOAuth {
             discoveryDocs: this.config.discoveryDocs
           })
 
+          console.log('Google client 초기화 완료')
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const authInstance = (this.gapi as any)?.auth2?.getAuthInstance()
           this.isSignedIn = authInstance?.isSignedIn?.get() || false
           
+          console.log('현재 로그인 상태:', this.isSignedIn)
+          
           // 로그인 상태 변경 리스너
           authInstance?.isSignedIn?.listen((isSignedIn: boolean) => {
             this.isSignedIn = isSignedIn
+            console.log('로그인 상태 변경:', isSignedIn)
           })
 
           resolve()
         } catch (error) {
+          console.error('Google API 초기화 실패:', error)
+          console.error('에러 상세:', {
+            name: (error as Error)?.name,
+            message: (error as Error)?.message,
+            stack: (error as Error)?.stack
+          })
           reject(error)
         }
       })
@@ -90,8 +109,20 @@ class GoogleCalendarOAuth {
   // 사용자 로그인
   async signIn(): Promise<boolean> {
     try {
+      if (!this.config.clientId) {
+        console.error('Google Client ID가 설정되지 않았습니다.')
+        throw new Error('Google Client ID가 설정되지 않았습니다.')
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const authInstance = (this.gapi as any)?.auth2?.getAuthInstance()
+      
+      if (!authInstance) {
+        console.error('Google Auth instance가 초기화되지 않았습니다.')
+        throw new Error('Google Auth instance가 초기화되지 않았습니다.')
+      }
+
+      console.log('Google signIn 호출 중...')
       await authInstance?.signIn()
       this.isSignedIn = true
       return true

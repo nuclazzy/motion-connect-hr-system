@@ -7,6 +7,7 @@ import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
+import AdminReviewManagement from '@/components/AdminReviewManagement'
 import CalendarSettings from '@/components/CalendarSettings'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
@@ -105,6 +106,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
                 <AdminEmployeeManagement />
                 <AdminLeaveManagement />
+                <AdminReviewManagement />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
                 <CalendarSettings />

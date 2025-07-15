@@ -10,16 +10,39 @@ interface UserProfileProps {
 
 export default function UserProfile({ user, onProfileUpdate }: UserProfileProps) {
   const [isEditing, setIsEditing] = useState(false)
+  const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [formData, setFormData] = useState({
-    name: user.name,
-    department: user.department,
-    position: user.position,
-    phone: '',
-    dob: '',
-    address: ''
+    phone: user.phone || '',
+    dob: user.dob || '',
+    address: user.address || ''
+  })
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
   })
   const [loading, setLoading] = useState(false)
+  const [passwordLoading, setPasswordLoading] = useState(false)
   const [error, setError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+
+  // 근무년차 계산 함수
+  const calculateYearsOfService = (hireDate: string) => {
+    if (!hireDate) return '미정'
+    
+    const hire = new Date(hireDate)
+    const now = new Date()
+    const diffTime = Math.abs(now.getTime() - hire.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    const years = Math.floor(diffDays / 365)
+    
+    if (years === 0) {
+      return '1년차 미만'
+    } else {
+      return `${years + 1}년차`
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,6 +55,8 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
       if (result.success && result.user) {
         onProfileUpdate(result.user)
         setIsEditing(false)
+        setSuccessMessage('프로필이 성공적으로 업데이트되었습니다.')
+        setTimeout(() => setSuccessMessage(''), 3000)
       } else {
         setError(result.error || '프로필 업데이트에 실패했습니다.')
       }
@@ -42,156 +67,180 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
     }
   }
 
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordLoading(true)
+    setPasswordError('')
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('새 비밀번호가 일치하지 않습니다.')
+      setPasswordLoading(false)
+      return
+    }
+
+    if (passwordData.newPassword.length < 4) {
+      setPasswordError('새 비밀번호는 최소 4자 이상이어야 합니다.')
+      setPasswordLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          currentPassword: passwordData.currentPassword,
+          newPassword: passwordData.newPassword
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        setShowPasswordChange(false)
+        setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+        setSuccessMessage('비밀번호가 성공적으로 변경되었습니다.')
+        setTimeout(() => setSuccessMessage(''), 3000)
+      } else {
+        setPasswordError(result.error || '비밀번호 변경에 실패했습니다.')
+      }
+    } catch {
+      setPasswordError('비밀번호 변경 중 오류가 발생했습니다.')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   const handleCancel = () => {
     setFormData({
-      name: user.name,
-      department: user.department,
-      position: user.position,
-      phone: '',
-      dob: '',
-      address: ''
+      phone: user.phone || '',
+      dob: user.dob || '',
+      address: user.address || ''
     })
     setIsEditing(false)
     setError('')
   }
 
+  const formatDate = (dateString: string) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    return date.toLocaleDateString('ko-KR')
+  }
+
   if (isEditing) {
     return (
-      <div className="bg-white overflow-hidden shadow rounded-lg">
-        <form onSubmit={handleSubmit}>
-          <div className="p-5">
-            <div className="flex items-center mb-4">
-              <div className="flex-shrink-0">
-                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <div className="ml-5">
-                <h3 className="text-lg font-medium text-gray-900">내 정보 수정</h3>
-              </div>
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-200">
+          <h3 className="text-lg font-medium text-gray-900">프로필 수정</h3>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-5">
+          {error && (
+            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                이름 (수정 불가)
+              </label>
+              <input
+                type="text"
+                value={user.name}
+                className="w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed"
+                disabled
+                readOnly
+              />
             </div>
 
-            {error && (
-              <div className="mb-4 text-red-600 text-sm">
-                {error}
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                부서 (수정 불가)
+              </label>
+              <input
+                type="text"
+                value={user.department}
+                className="w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed"
+                disabled
+                readOnly
+              />
+            </div>
 
-            <div className="space-y-4">
-              <h4 className="text-sm font-medium text-gray-900 mb-3">회사 정보 (관리자만 수정 가능)</h4>
-              
-              <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  이름
-                </label>
-                <input
-                  type="text"
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-100"
-                  required
-                  disabled
-                  title="회사 정보는 관리자만 수정 가능합니다"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                직책 (수정 불가)
+              </label>
+              <input
+                type="text"
+                value={user.position}
+                className="w-full border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed"
+                disabled
+                readOnly
+              />
+            </div>
 
-              <div>
-                <label htmlFor="department" className="block text-sm font-medium text-gray-700">
-                  부서
-                </label>
-                <input
-                  type="text"
-                  id="department"
-                  value={formData.department}
-                  onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-100"
-                  required
-                  disabled
-                  title="회사 정보는 관리자만 수정 가능합니다"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                전화번호
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="010-0000-0000"
+              />
+            </div>
 
-              <div>
-                <label htmlFor="position" className="block text-sm font-medium text-gray-700">
-                  직책
-                </label>
-                <input
-                  type="text"
-                  id="position"
-                  value={formData.position}
-                  onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  required
-                  disabled
-                  title="회사 정보는 관리자만 수정 가능합니다"
-                />
-              </div>
-              
-              <hr className="my-4" />
-              <h4 className="text-sm font-medium text-gray-900 mb-3">개인 정보 (수정 가능)</h4>
-              
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                  전화번호
-                </label>
-                <input
-                  type="tel"
-                  id="phone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="010-0000-0000"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="dob" className="block text-sm font-medium text-gray-700">
-                  생년월일
-                </label>
-                <input
-                  type="date"
-                  id="dob"
-                  value={formData.dob}
-                  onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                />
-              </div>
-              
-              <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                  주소
-                </label>
-                <textarea
-                  id="address"
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  rows={2}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  placeholder="주소를 입력하세요"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                생년월일
+              </label>
+              <input
+                type="date"
+                value={formData.dob}
+                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+              />
+            </div>
 
-              <div className="text-sm text-gray-600">
-                <p>사번: {user.employee_id}</p>
-                <p>이메일: {user.email}</p>
-                <p>근무년차: 1년차</p>
-              </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                주소
+              </label>
+              <textarea
+                value={formData.address}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                rows={2}
+                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                placeholder="주소를 입력하세요"
+              />
             </div>
           </div>
 
-          <div className="bg-gray-50 px-5 py-3 flex justify-end space-x-3">
+          <div className="mt-4 text-sm text-gray-600">
+            <p>사번: {user.employee_id}</p>
+            <p>이메일: {user.email}</p>
+            <p>근무년차: {calculateYearsOfService(user.hire_date)}</p>
+          </div>
+
+          <div className="mt-6 flex justify-end space-x-3">
             <button
               type="button"
               onClick={handleCancel}
-              className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
               취소
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
             >
               {loading ? '저장 중...' : '저장'}
             </button>
@@ -202,45 +251,155 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
   }
 
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
-      <div className="p-5">
-        <div className="flex items-center">
-          <div className="flex-shrink-0">
-            <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-          <div className="ml-5 w-0 flex-1">
-            <dl>
-              <dt className="text-sm font-medium text-gray-500 truncate">
-                내 정보
-              </dt>
-              <dd className="text-lg font-medium text-gray-900">
-                {user.name}
-              </dd>
-            </dl>
-          </div>
-        </div>
-        <div className="mt-3">
-          <div className="text-sm text-gray-600 space-y-1">
-            <p>사번: {user.employee_id}</p>
-            <p>부서: {user.department}</p>
-            <p>직책: {user.position}</p>
-            <p>이메일: {user.email}</p>
-            <p>근무년차: 1년차</p>
-          </div>
-        </div>
+    <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-medium text-gray-900">내 정보</h3>
       </div>
-      <div className="bg-gray-50 px-5 py-3">
-        <div className="text-sm">
+      
+      <div className="p-5">
+        {successMessage && (
+          <div className="mb-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded">
+            {successMessage}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-500">이름</label>
+              <p className="mt-1 text-sm text-gray-900">{user.name}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">부서</label>
+              <p className="mt-1 text-sm text-gray-900">{user.department}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">직책</label>
+              <p className="mt-1 text-sm text-gray-900">{user.position}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">전화번호</label>
+              <p className="mt-1 text-sm text-gray-900">{user.phone || '미입력'}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">생년월일</label>
+              <p className="mt-1 text-sm text-gray-900">{user.dob ? formatDate(user.dob) : '미입력'}</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-500">입사일</label>
+              <p className="mt-1 text-sm text-gray-900">{formatDate(user.hire_date)}</p>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-gray-500">주소</label>
+              <p className="mt-1 text-sm text-gray-900">{user.address || '미입력'}</p>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="text-sm text-gray-600 space-y-1">
+              <p>사번: {user.employee_id}</p>
+              <p>이메일: {user.email}</p>
+              <p>근무년차: {calculateYearsOfService(user.hire_date)}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex space-x-3">
           <button 
             onClick={() => setIsEditing(true)}
-            className="font-medium text-indigo-600 hover:text-indigo-500"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700"
           >
-            정보 수정
+            프로필 수정
+          </button>
+          <button 
+            onClick={() => setShowPasswordChange(true)}
+            className="px-4 py-2 bg-gray-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-gray-700"
+          >
+            비밀번호 변경
           </button>
         </div>
       </div>
+
+      {/* 비밀번호 변경 모달 */}
+      {showPasswordChange && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">비밀번호 변경</h3>
+            </div>
+            
+            <form onSubmit={handlePasswordChange} className="p-6">
+              {passwordError && (
+                <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
+                  {passwordError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    현재 비밀번호
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordData.currentPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    새 비밀번호
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordData.newPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    새 비밀번호 확인
+                  </label>
+                  <input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordChange(false)
+                    setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
+                    setPasswordError('')
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {passwordLoading ? '변경 중...' : '변경'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

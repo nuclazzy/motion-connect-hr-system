@@ -149,7 +149,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   useEffect(() => {
     fetchLeaveData()
     fetchLeaveEvents()
-  }, [user.id, fetchLeaveData, fetchLeaveEvents])
+  }, [user.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openFormModal = (formType: string, formUrl: string) => {
     // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
