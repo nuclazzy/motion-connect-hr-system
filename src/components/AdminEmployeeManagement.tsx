@@ -42,7 +42,8 @@ export default function AdminEmployeeManagement() {
     work_type: '정규직',
     hire_date: '',
     contract_end_date: null as string | null,
-    newPassword: ''
+    newPassword: '',
+    reviewUrl: ''
   })
 
   useEffect(() => {
@@ -82,13 +83,30 @@ export default function AdminEmployeeManagement() {
       work_type: '정규직',
       hire_date: new Date().toISOString().split('T')[0],
       contract_end_date: null,
-      newPassword: ''
+      newPassword: '',
+      reviewUrl: ''
     })
     setEditingEmployee(null)
     setShowAddForm(true)
   }
 
-  const handleEditEmployee = (employee: Employee) => {
+  const handleEditEmployee = async (employee: Employee) => {
+    // 기존 리뷰 링크 조회
+    let existingReviewUrl = ''
+    try {
+      const { data: reviewData } = await supabase
+        .from('review_links')
+        .select('review_url')
+        .eq('user_id', employee.id)
+        .single()
+      
+      if (reviewData) {
+        existingReviewUrl = reviewData.review_url
+      }
+    } catch (error) {
+      console.log('No existing review link found:', error)
+    }
+
     setFormData({
       name: employee.name,
       email: employee.email,
@@ -102,7 +120,8 @@ export default function AdminEmployeeManagement() {
       work_type: employee.work_type || '정규직',
       hire_date: employee.hire_date || '',
       contract_end_date: employee.contract_end_date || null,
-      newPassword: ''
+      newPassword: '',
+      reviewUrl: existingReviewUrl
     })
     setEditingEmployee(employee)
     setShowAddForm(true)
@@ -160,6 +179,31 @@ export default function AdminEmployeeManagement() {
 
         if (leaveError) throw leaveError;
 
+        // 리뷰 링크 저장/업데이트
+        if (formData.reviewUrl.trim()) {
+          const { error: reviewError } = await supabase
+            .from('review_links')
+            .upsert([{
+              user_id: result.user.id,
+              employee_name: result.user.name,
+              review_url: formData.reviewUrl.trim(),
+              season: 'both',
+              is_active: true
+            }], {
+              onConflict: 'user_id'
+            })
+          
+          if (reviewError) {
+            console.error('리뷰 링크 저장 실패:', reviewError)
+          }
+        } else {
+          // 리뷰 URL이 비어있으면 기존 링크 삭제
+          await supabase
+            .from('review_links')
+            .delete()
+            .eq('user_id', result.user.id)
+        }
+
         alert('직원 정보가 수정되었습니다.')
         setShowAddForm(false)
         fetchEmployees()
@@ -200,6 +244,23 @@ export default function AdminEmployeeManagement() {
             throw leaveError;
         }
 
+        // 리뷰 링크 저장 (새 직원 추가 시)
+        if (formData.reviewUrl.trim()) {
+          const { error: reviewError } = await supabase
+            .from('review_links')
+            .insert([{
+              user_id: newUserData.id,
+              employee_name: newUserData.name,
+              review_url: formData.reviewUrl.trim(),
+              season: 'both',
+              is_active: true
+            }])
+          
+          if (reviewError) {
+            console.error('리뷰 링크 저장 실패:', reviewError)
+          }
+        }
+
         alert('새 직원이 추가되었습니다. (기본 비밀번호: 0000)')
         setShowAddForm(false)
         fetchEmployees()
@@ -226,7 +287,8 @@ export default function AdminEmployeeManagement() {
       work_type: '정규직',
       hire_date: '',
       contract_end_date: null as string | null,
-      newPassword: ''
+      newPassword: '',
+      reviewUrl: ''
     })
     setShowAddForm(false)
     setEditingEmployee(null)
@@ -655,6 +717,18 @@ export default function AdminEmployeeManagement() {
                     />
                   </div>
                 )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">반기 리뷰 링크 (선택사항)</label>
+                  <input
+                    type="url"
+                    value={formData.reviewUrl}
+                    onChange={(e) => setFormData({...formData, reviewUrl: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    placeholder="https://docs.google.com/spreadsheets/..."
+                  />
+                  <p className="mt-1 text-xs text-gray-500">직원의 개별 반기 리뷰 스프레드시트 링크를 입력하세요</p>
+                </div>
 
                 {editingEmployee && (
                   <div>
