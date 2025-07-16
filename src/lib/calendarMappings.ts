@@ -19,8 +19,9 @@ export interface CalendarMapping {
 }
 
 // 특정 기능에 연결된 활성 캘린더들을 가져오는 함수
-export async function getCalendarsForFeature(featureId: string) {
+export async function getCalendarsForFeature(featureId: string, teamName?: string) {
   try {
+    // 우선 테이블이 존재하는지 확인하고, 없으면 기본 방식 사용
     const { data, error } = await supabase
       .from('calendar_feature_mappings')
       .select(`
@@ -29,17 +30,44 @@ export async function getCalendarsForFeature(featureId: string) {
       `)
       .eq('feature_id', featureId)
       .eq('is_active', true)
-      .eq('calendar_config.is_active', true)
 
     if (error) {
+      // 테이블이 없으면 모든 활성 캘린더 반환 (기존 방식과 호환)
+      if (error.code === '42P01') {
+        console.log(`캘린더 매핑 테이블이 없어서 기본 방식 사용: ${featureId}`)
+        return await getAllActiveCalendarConfigs()
+      }
       console.error(`기능 ${featureId}의 캘린더 매핑 조회 실패:`, error)
-      return []
+      return await getAllActiveCalendarConfigs()
     }
 
-    return (data as CalendarMapping[]) || []
+    // 팀 이름이 지정된 경우 해당 팀에 맞는 매핑만 필터링
+    let mappings = (data as CalendarMapping[]) || []
+    if (teamName && mappings.length > 0) {
+      mappings = mappings.filter(mapping => {
+        // feature_id에 팀 정보가 포함된 경우 (format: featureId:teamName)
+        if (mapping.feature_id.includes(':')) {
+          const [baseFeatureId, mappingTeamName] = mapping.feature_id.split(':')
+          return baseFeatureId === featureId && mappingTeamName === teamName
+        }
+        // 팀 정보가 없는 경우 캘린더 설정의 target_name으로 필터링
+        return mapping.calendar_config.target_name === teamName ||
+               mapping.calendar_config.calendar_alias?.includes(teamName)
+      })
+    } else if (!teamName) {
+      // 팀 이름이 지정되지 않은 경우 일반 매핑만 가져오기 (팀별 매핑 제외)
+      mappings = mappings.filter(mapping => !mapping.feature_id.includes(':'))
+    }
+
+    // 매핑이 없으면 기본 방식 사용
+    if (mappings.length === 0) {
+      return await getAllActiveCalendarConfigs()
+    }
+
+    return mappings
   } catch (error) {
     console.error(`기능 ${featureId}의 캘린더 매핑 조회 오류:`, error)
-    return []
+    return await getAllActiveCalendarConfigs()
   }
 }
 

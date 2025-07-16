@@ -144,7 +144,9 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     try {
       // 휴가 관리 기능에 연결된 캘린더들만 가져오기
       const mappings = await getCalendarsForFeature('leave-management')
-      const configs = mappings.map(mapping => mapping.calendar_config)
+      const configs = mappings.map(mapping => 
+        'calendar_config' in mapping ? mapping.calendar_config : mapping
+      )
       setCalendarConfigs(configs)
     } catch (error) {
       console.error('휴가 관리 캘린더 설정 조회 오류:', error)

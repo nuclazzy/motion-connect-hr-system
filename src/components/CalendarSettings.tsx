@@ -23,14 +23,41 @@ export default function CalendarSettings() {
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [selectedConfig, setSelectedConfig] = useState<CalendarConfig | null>(null)
   const [connectedFeatures, setConnectedFeatures] = useState<Record<string, string[]>>({})
+  const [selectedTeamForFeature, setSelectedTeamForFeature] = useState<Record<string, string>>({})
 
-  // 연결 가능한 기능 목록
+  // 연결 가능한 기능 목록 (팀별 연결 지원)
   const availableFeatures = [
-    { id: 'team-schedule', name: '팀 일정 관리', description: '팀별 미팅 및 일정 표시' },
-    { id: 'admin-schedule', name: '관리자 팀 일정', description: '전체 팀 일정 관리' },
-    { id: 'leave-management', name: '휴가 관리', description: '휴가 캘린더에 이벤트 표시' },
-    { id: 'meeting-rooms', name: '회의실 예약', description: '회의실 가용성 및 예약 관리' },
-    { id: 'company-events', name: '회사 행사', description: '전사 행사 및 공지사항' },
+    { 
+      id: 'team-schedule', 
+      name: '팀 일정 관리', 
+      description: '팀별 미팅 및 일정 표시', 
+      supportsTeams: true,
+      teams: ['개발팀', '마케팅팀', '영업팀', '인사팀', '재무팀'] // 실제 팀 목록
+    },
+    { 
+      id: 'admin-schedule', 
+      name: '관리자 팀 일정', 
+      description: '전체 팀 일정 관리', 
+      supportsTeams: false 
+    },
+    { 
+      id: 'leave-management', 
+      name: '휴가 관리', 
+      description: '휴가 캘린더에 이벤트 표시', 
+      supportsTeams: false 
+    },
+    { 
+      id: 'meeting-rooms', 
+      name: '회의실 예약', 
+      description: '회의실 가용성 및 예약 관리', 
+      supportsTeams: false 
+    },
+    { 
+      id: 'company-events', 
+      name: '회사 행사', 
+      description: '전사 행사 및 공지사항', 
+      supportsTeams: false 
+    },
   ]
   const [formData, setFormData] = useState({
     config_type: 'team' as 'team' | 'function',
@@ -54,6 +81,11 @@ export default function CalendarSettings() {
         .eq('is_active', true)
 
       if (error) {
+        // 테이블이 없으면 무시 (나중에 생성됨)
+        if (error.code === '42P01') {
+          console.log('캘린더 매핑 테이블이 아직 생성되지 않았습니다.')
+          return
+        }
         console.error('기능 매핑 조회 실패:', error)
       } else {
         // 데이터를 connectedFeatures 형태로 변환
@@ -62,7 +94,9 @@ export default function CalendarSettings() {
           if (!mappings[mapping.calendar_config_id]) {
             mappings[mapping.calendar_config_id] = []
           }
-          mappings[mapping.calendar_config_id].push(mapping.feature_id)
+          // feature_id에 팀 정보가 포함되어 있으므로 그대로 사용
+          const connectionKey = mapping.feature_id
+          mappings[mapping.calendar_config_id].push(connectionKey)
         })
         setConnectedFeatures(mappings)
       }
@@ -235,22 +269,46 @@ export default function CalendarSettings() {
     setShowConnectModal(true)
   }
 
-  const handleFeatureToggle = (featureId: string, connected: boolean) => {
+  const handleFeatureToggle = (featureId: string, connected: boolean, teamName?: string) => {
     if (!selectedConfig) return
 
     setConnectedFeatures(prev => {
       const configConnections = prev[selectedConfig.id] || []
+      
       if (connected) {
-        // 기능 연결
+        // 기능 연결 - 팀별 기능의 경우 팀 정보도 저장
+        const connectionKey = teamName ? `${featureId}:${teamName}` : featureId
+        
+        // 팀 정보 저장
+        if (teamName) {
+          setSelectedTeamForFeature(teamPrev => ({
+            ...teamPrev,
+            [`${selectedConfig.id}:${featureId}`]: teamName
+          }))
+        }
+        
         return {
           ...prev,
-          [selectedConfig.id]: [...configConnections, featureId]
+          [selectedConfig.id]: [...configConnections.filter(id => !id.startsWith(`${featureId}:`)), connectionKey]
         }
       } else {
         // 기능 연결 해제
+        const connectionsToRemove = teamName 
+          ? [`${featureId}:${teamName}`]
+          : configConnections.filter(id => id === featureId || id.startsWith(`${featureId}:`))
+        
+        // 팀 정보도 제거
+        if (teamName) {
+          setSelectedTeamForFeature(teamPrev => {
+            const newTeamPrev = { ...teamPrev }
+            delete newTeamPrev[`${selectedConfig.id}:${featureId}`]
+            return newTeamPrev
+          })
+        }
+        
         return {
           ...prev,
-          [selectedConfig.id]: configConnections.filter(id => id !== featureId)
+          [selectedConfig.id]: configConnections.filter(id => !connectionsToRemove.includes(id))
         }
       }
     })
@@ -262,6 +320,20 @@ export default function CalendarSettings() {
     try {
       const connections = connectedFeatures[selectedConfig.id] || []
       
+      // 테이블이 존재하는지 확인
+      const { error: testError } = await supabase
+        .from('calendar_feature_mappings')
+        .select('id')
+        .limit(1)
+
+      if (testError && testError.code === '42P01') {
+        // 테이블이 없으면 알림만 표시하고 로컬 상태만 업데이트
+        alert(`캘린더 매핑 테이블이 생성되지 않았습니다. 데이터베이스에 SQL 스키마를 실행해주세요.\n\n현재는 로컬 설정만 저장됩니다.`)
+        setShowConnectModal(false)
+        setSelectedConfig(null)
+        return
+      }
+
       // 기존 매핑들을 모두 비활성화
       await supabase
         .from('calendar_feature_mappings')
@@ -270,12 +342,15 @@ export default function CalendarSettings() {
 
       // 새로운 매핑들을 생성하거나 활성화
       if (connections.length > 0) {
-        const mappingsToInsert = connections.map(featureId => {
+        const mappingsToInsert = connections.map(connectionKey => {
+          // 팀별 연결인지 확인 (format: featureId:teamName)
+          const [featureId, teamName] = connectionKey.includes(':') ? connectionKey.split(':') : [connectionKey, undefined]
           const feature = availableFeatures.find(f => f.id === featureId)
+          
           return {
             calendar_config_id: selectedConfig.id,
-            feature_id: featureId,
-            feature_name: feature?.name || featureId,
+            feature_id: teamName ? `${featureId}:${teamName}` : featureId, // 팀 정보를 feature_id에 포함
+            feature_name: teamName ? `${feature?.name} (${teamName})` : (feature?.name || featureId),
             is_active: true
           }
         })
@@ -379,14 +454,19 @@ export default function CalendarSettings() {
                             <div className="mt-2">
                               <p className="text-xs text-gray-500 mb-1">연결된 기능:</p>
                               <div className="flex flex-wrap gap-1">
-                                {connectedFeatures[config.id].map(featureId => {
+                                {connectedFeatures[config.id].map(connectionKey => {
+                                  // 팀별 연결인지 확인 (format: featureId:teamName)
+                                  const [featureId, teamName] = connectionKey.includes(':') ? connectionKey.split(':') : [connectionKey, undefined]
                                   const feature = availableFeatures.find(f => f.id === featureId)
+                                  const displayName = teamName ? `${feature?.name} (${teamName})` : feature?.name
+                                  
                                   return feature ? (
                                     <span 
-                                      key={featureId}
+                                      key={connectionKey}
                                       className="inline-block bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full"
+                                      title={teamName ? `${feature.name} - ${teamName} 팀` : feature.name}
                                     >
-                                      {feature.name}
+                                      {displayName}
                                     </span>
                                   ) : null
                                 })}
@@ -554,24 +634,54 @@ export default function CalendarSettings() {
                   </p>
                   
                   {availableFeatures.map((feature) => {
-                    const isConnected = (connectedFeatures[selectedConfig.id] || []).includes(feature.id)
+                    const configConnections = connectedFeatures[selectedConfig.id] || []
+                    const baseFeatureConnected = configConnections.some(conn => 
+                      conn === feature.id || conn.startsWith(`${feature.id}:`)
+                    )
                     
                     return (
-                      <div key={feature.id} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
-                        <input
-                          type="checkbox"
-                          id={feature.id}
-                          checked={isConnected}
-                          onChange={(e) => handleFeatureToggle(feature.id, e.target.checked)}
-                          className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                        />
-                        <div className="flex-1">
-                          <label htmlFor={feature.id} className="text-sm font-medium text-gray-900 cursor-pointer">
-                            {feature.name}
-                          </label>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {feature.description}
-                          </p>
+                      <div key={feature.id} className="p-3 border border-gray-200 rounded-lg">
+                        <div className="flex items-start space-x-3">
+                          <input
+                            type="checkbox"
+                            id={feature.id}
+                            checked={baseFeatureConnected}
+                            onChange={(e) => handleFeatureToggle(feature.id, e.target.checked)}
+                            className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                          />
+                          <div className="flex-1">
+                            <label htmlFor={feature.id} className="text-sm font-medium text-gray-900 cursor-pointer">
+                              {feature.name}
+                            </label>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {feature.description}
+                            </p>
+                            
+                            {/* 팀별 연결 지원하는 기능인 경우 팀 선택 옵션 표시 */}
+                            {feature.supportsTeams && baseFeatureConnected && (
+                              <div className="mt-3 ml-6 space-y-2">
+                                <p className="text-xs font-medium text-gray-700">팀별 연결:</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {feature.teams?.map(team => {
+                                    const teamConnectionKey = `${feature.id}:${team}`
+                                    const isTeamConnected = configConnections.includes(teamConnectionKey)
+                                    
+                                    return (
+                                      <label key={team} className="flex items-center space-x-2 text-xs">
+                                        <input
+                                          type="checkbox"
+                                          checked={isTeamConnected}
+                                          onChange={(e) => handleFeatureToggle(feature.id, e.target.checked, team)}
+                                          className="h-3 w-3 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                        />
+                                        <span className="text-gray-600">{team}</span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     )
