@@ -20,6 +20,18 @@ export default function CalendarSettings() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingConfig, setEditingConfig] = useState<CalendarConfig | null>(null)
   const [formLoading, setFormLoading] = useState(false)
+  const [showConnectModal, setShowConnectModal] = useState(false)
+  const [selectedConfig, setSelectedConfig] = useState<CalendarConfig | null>(null)
+  const [connectedFeatures, setConnectedFeatures] = useState<Record<string, string[]>>({})
+
+  // 연결 가능한 기능 목록
+  const availableFeatures = [
+    { id: 'team-schedule', name: '팀 일정 관리', description: '팀별 미팅 및 일정 표시' },
+    { id: 'admin-schedule', name: '관리자 팀 일정', description: '전체 팀 일정 관리' },
+    { id: 'leave-management', name: '휴가 관리', description: '휴가 캘린더에 이벤트 표시' },
+    { id: 'meeting-rooms', name: '회의실 예약', description: '회의실 가용성 및 예약 관리' },
+    { id: 'company-events', name: '회사 행사', description: '전사 행사 및 공지사항' },
+  ]
   const [formData, setFormData] = useState({
     config_type: 'team' as 'team' | 'function',
     target_name: '',
@@ -31,7 +43,33 @@ export default function CalendarSettings() {
 
   useEffect(() => {
     fetchConfigs()
+    fetchFeatureMappings()
   }, [])
+
+  const fetchFeatureMappings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('calendar_feature_mappings')
+        .select('*')
+        .eq('is_active', true)
+
+      if (error) {
+        console.error('기능 매핑 조회 실패:', error)
+      } else {
+        // 데이터를 connectedFeatures 형태로 변환
+        const mappings: Record<string, string[]> = {}
+        data?.forEach(mapping => {
+          if (!mappings[mapping.calendar_config_id]) {
+            mappings[mapping.calendar_config_id] = []
+          }
+          mappings[mapping.calendar_config_id].push(mapping.feature_id)
+        })
+        setConnectedFeatures(mappings)
+      }
+    } catch (error) {
+      console.error('기능 매핑 조회 오류:', error)
+    }
+  }
 
   const fetchConfigs = async () => {
     try {
@@ -192,6 +230,82 @@ export default function CalendarSettings() {
     }
   }
 
+  const handleConnect = (config: CalendarConfig) => {
+    setSelectedConfig(config)
+    setShowConnectModal(true)
+  }
+
+  const handleFeatureToggle = (featureId: string, connected: boolean) => {
+    if (!selectedConfig) return
+
+    setConnectedFeatures(prev => {
+      const configConnections = prev[selectedConfig.id] || []
+      if (connected) {
+        // 기능 연결
+        return {
+          ...prev,
+          [selectedConfig.id]: [...configConnections, featureId]
+        }
+      } else {
+        // 기능 연결 해제
+        return {
+          ...prev,
+          [selectedConfig.id]: configConnections.filter(id => id !== featureId)
+        }
+      }
+    })
+  }
+
+  const saveConnections = async () => {
+    if (!selectedConfig) return
+
+    try {
+      const connections = connectedFeatures[selectedConfig.id] || []
+      
+      // 기존 매핑들을 모두 비활성화
+      await supabase
+        .from('calendar_feature_mappings')
+        .update({ is_active: false })
+        .eq('calendar_config_id', selectedConfig.id)
+
+      // 새로운 매핑들을 생성하거나 활성화
+      if (connections.length > 0) {
+        const mappingsToInsert = connections.map(featureId => {
+          const feature = availableFeatures.find(f => f.id === featureId)
+          return {
+            calendar_config_id: selectedConfig.id,
+            feature_id: featureId,
+            feature_name: feature?.name || featureId,
+            is_active: true
+          }
+        })
+
+        // upsert 방식으로 저장 (있으면 업데이트, 없으면 생성)
+        const { error } = await supabase
+          .from('calendar_feature_mappings')
+          .upsert(mappingsToInsert, {
+            onConflict: 'calendar_config_id,feature_id'
+          })
+
+        if (error) {
+          console.error('기능 매핑 저장 실패:', error)
+          alert('기능 연결 저장에 실패했습니다.')
+          return
+        }
+      }
+
+      // 데이터 새로고침
+      await fetchFeatureMappings()
+      
+      alert(`${selectedConfig.calendar_alias || selectedConfig.target_name} 캘린더의 기능 연결이 저장되었습니다.`)
+      setShowConnectModal(false)
+      setSelectedConfig(null)
+    } catch (error) {
+      console.error('연결 설정 저장 오류:', error)
+      alert('연결 설정 저장에 실패했습니다.')
+    }
+  }
+
   if (loading) {
     return (
       <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -259,6 +373,26 @@ export default function CalendarSettings() {
                           {config.description && (
                             <p className="text-xs text-gray-600 mt-1">{config.description}</p>
                           )}
+                          
+                          {/* 연결된 기능들 표시 */}
+                          {connectedFeatures[config.id] && connectedFeatures[config.id].length > 0 && (
+                            <div className="mt-2">
+                              <p className="text-xs text-gray-500 mb-1">연결된 기능:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {connectedFeatures[config.id].map(featureId => {
+                                  const feature = availableFeatures.find(f => f.id === featureId)
+                                  return feature ? (
+                                    <span 
+                                      key={featureId}
+                                      className="inline-block bg-indigo-100 text-indigo-800 text-xs px-2 py-0.5 rounded-full"
+                                    >
+                                      {feature.name}
+                                    </span>
+                                  ) : null
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -272,6 +406,12 @@ export default function CalendarSettings() {
                         }`}
                       >
                         {config.is_active ? '활성' : '비활성'}
+                      </button>
+                      <button
+                        onClick={() => handleConnect(config)}
+                        className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      >
+                        연결하기
                       </button>
                       <button
                         onClick={() => handleEdit(config)}
@@ -394,6 +534,69 @@ export default function CalendarSettings() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 기능 연결 모달 */}
+        {showConnectModal && selectedConfig && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+              <div className="mt-3">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  기능 연결 설정 - {selectedConfig.calendar_alias || selectedConfig.target_name}
+                </h3>
+                
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 mb-4">
+                    이 캘린더를 사용할 기능들을 선택하세요:
+                  </p>
+                  
+                  {availableFeatures.map((feature) => {
+                    const isConnected = (connectedFeatures[selectedConfig.id] || []).includes(feature.id)
+                    
+                    return (
+                      <div key={feature.id} className="flex items-start space-x-3 p-3 border border-gray-200 rounded-lg">
+                        <input
+                          type="checkbox"
+                          id={feature.id}
+                          checked={isConnected}
+                          onChange={(e) => handleFeatureToggle(feature.id, e.target.checked)}
+                          className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <div className="flex-1">
+                          <label htmlFor={feature.id} className="text-sm font-medium text-gray-900 cursor-pointer">
+                            {feature.name}
+                          </label>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {feature.description}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowConnectModal(false)
+                      setSelectedConfig(null)
+                    }}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveConnections}
+                    className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    연결 저장
+                  </button>
+                </div>
               </div>
             </div>
           </div>

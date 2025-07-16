@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
+import { getCalendarsForFeature } from '@/lib/calendarMappings'
 import LeaveStatusModal from './LeaveStatusModal'
 
 // 한국 공휴일 데이터 (2024년)
@@ -141,19 +142,12 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
   const fetchCalendarConfigs = async () => {
     try {
-      const { data, error } = await supabase
-        .from('calendar_configs')
-        .select('*')
-        .eq('is_active', true)
-        .order('config_type', { ascending: true })
-
-      if (error) {
-        console.error('캘린더 설정 조회 실패:', error)
-      } else {
-        setCalendarConfigs(data || [])
-      }
+      // 휴가 관리 기능에 연결된 캘린더들만 가져오기
+      const mappings = await getCalendarsForFeature('leave-management')
+      const configs = mappings.map(mapping => mapping.calendar_config)
+      setCalendarConfigs(configs)
     } catch (error) {
-      console.error('캘린더 설정 조회 오류:', error)
+      console.error('휴가 관리 캘린더 설정 조회 오류:', error)
     }
   }
 

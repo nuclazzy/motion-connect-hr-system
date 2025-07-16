@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
+import { getCalendarsForFeature } from '@/lib/calendarMappings'
 
 interface Meeting {
   id: string
@@ -64,19 +65,12 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
 
   const fetchCalendarConfigs = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('calendar_configs')
-        .select('*')
-        .eq('is_active', true)
-        .order('config_type', { ascending: true })
-
-      if (error) {
-        console.error('캘린더 설정 조회 실패:', error)
-      } else {
-        setCalendarConfigs(data || [])
-      }
+      // 관리자 팀 일정 기능에 연결된 캘린더들만 가져오기
+      const mappings = await getCalendarsForFeature('admin-schedule')
+      const configs = mappings.map(mapping => mapping.calendar_config)
+      setCalendarConfigs(configs)
     } catch (error) {
-      console.error('캘린더 설정 조회 오류:', error)
+      console.error('관리자 팀 일정 캘린더 설정 조회 오류:', error)
     }
   }, [])
 
