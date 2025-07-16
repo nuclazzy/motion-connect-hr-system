@@ -134,7 +134,6 @@ export default function UserDashboard() {
     }
   }
 
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 헤더 */}
@@ -490,7 +489,6 @@ export default function UserDashboard() {
           <div className="mt-8">
             <UserFormManagement user={user} />
           </div>
-        </div>
         </div>
       </main>
 
