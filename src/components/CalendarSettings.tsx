@@ -328,6 +328,33 @@ export default function CalendarSettings() {
     if (!selectedConfig) return
 
     try {
+      // 현재 사용자 정보 확인
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        alert('사용자 인증에 실패했습니다. 다시 로그인해주세요.')
+        return
+      }
+
+      // 사용자 권한 확인
+      const { data: userData, error: roleError } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      if (roleError) {
+        console.error('사용자 권한 확인 실패:', roleError)
+        alert('사용자 권한 확인에 실패했습니다.')
+        return
+      }
+
+      console.log('현재 사용자 역할:', userData?.role)
+
+      if (userData?.role !== 'admin') {
+        alert('캘린더 연결 설정은 관리자만 가능합니다.')
+        return
+      }
+
       const connections = connectedFeatures[selectedConfig.id] || []
       
       // 테이블이 존재하는지 확인
