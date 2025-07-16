@@ -9,6 +9,8 @@ import LeaveManagement from '@/components/LeaveManagement'
 import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 import UserFormManagement from '@/components/UserFormManagement'
+import InternalMeeting from '@/components/InternalMeeting'
+import FieldTrip from '@/components/FieldTrip'
 
 interface ReviewLink {
   id: string
@@ -352,14 +354,8 @@ export default function UserDashboard() {
                   </div>
                 </div>
                 <div className="mt-3 space-y-2">
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium">외부 미팅/답사</p>
-                    <p className="text-xs text-gray-500">이번 주에는 예정된 외부 미팅/답사 일정이 없습니다.</p>
-                  </div>
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium">내부 회의/면담</p>
-                    <p className="text-xs text-gray-500">이번 주에는 예정된 내부 회의/면담 일정이 없습니다.</p>
-                  </div>
+                  <FieldTrip user={user} />
+                  <InternalMeeting user={user} />
                 </div>
               </div>
               <div className="bg-gray-50 px-5 py-3 space-y-2">

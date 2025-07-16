@@ -161,35 +161,54 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
     setCalendarLoading(true)
     try {
-      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      // 현재 년도 데이터만 조회
+      const currentYear = new Date().getFullYear()
+      const startOfYear = new Date(currentYear, 0, 1)
+      const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59)
 
-      const calendarIds = calendarConfigs.map(config => config.calendar_id)
-      
-      const response = await fetch('/api/calendar/events', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          calendarIds,
-          timeMin: startOfMonth.toISOString(),
-          timeMax: endOfMonth.toISOString()
-        }),
+      const allEvents: CalendarEvent[] = []
+
+      // 각 캘린더에서 사용자 이름으로 검색
+      for (const config of calendarConfigs) {
+        try {
+          const response = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              calendarId: config.calendar_id,
+              timeMin: startOfYear.toISOString(),
+              timeMax: endOfYear.toISOString(),
+              q: user.name, // 사용자 이름으로 검색
+              maxResults: 250
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data.events) {
+              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
+                ...event,
+                calendarName: config.calendar_alias || config.target_name,
+                calendarId: config.calendar_id
+              }))
+              allEvents.push(...eventsWithCalendarInfo)
+            }
+          }
+        } catch (error) {
+          console.error(`캘린더 ${config.calendar_alias} 이벤트 조회 오류:`, error)
+        }
+      }
+
+      // 현재 월의 이벤트만 필터링
+      const currentMonth = currentDate.getMonth()
+      const currentMonthEvents = allEvents.filter(event => {
+        const eventDate = new Date(event.start || '')
+        return eventDate.getMonth() === currentMonth
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const eventsWithNames = data.events?.map((event: CalendarEvent) => ({
-          ...event,
-          calendarName: calendarConfigs.find(config => config.calendar_id === event.calendarId)?.calendar_alias || 'Unknown Calendar'
-        })) || []
-        
-        setCalendarEvents(eventsWithNames)
-      } else {
-        console.error('캘린더 이벤트 조회 실패:', response.statusText)
-        setCalendarEvents([])
-      }
+      setCalendarEvents(currentMonthEvents)
     } catch (error) {
       console.error('캘린더 이벤트 조회 오류:', error)
       setCalendarEvents([])

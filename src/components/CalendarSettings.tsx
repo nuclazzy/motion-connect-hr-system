@@ -48,19 +48,19 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
     { 
       id: 'leave-management', 
       name: '휴가 관리', 
-      description: '휴가 캘린더에 이벤트 표시', 
+      description: '직원 휴가 및 연차 관리 (이름 기반 검색)', 
       supportsTeams: false 
     },
     { 
-      id: 'meeting-rooms', 
-      name: '회의실 예약', 
-      description: '회의실 가용성 및 예약 관리', 
+      id: 'internal-meeting', 
+      name: '내부 회의', 
+      description: '사내 회의 및 미팅 일정', 
       supportsTeams: false 
     },
     { 
-      id: 'company-events', 
-      name: '회사 행사', 
-      description: '전사 행사 및 공지사항', 
+      id: 'field-trip', 
+      name: '외부 답사', 
+      description: '외부 출장 및 답사 일정', 
       supportsTeams: false 
     },
   ]
