@@ -64,6 +64,24 @@ interface LeaveEvent {
   reason?: string
 }
 
+interface CalendarConfig {
+  id: string
+  config_type: 'team' | 'function'
+  target_name: string
+  calendar_id: string
+  calendar_alias: string | null
+  is_active: boolean
+}
+
+interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  description?: string
+  calendarName: string
+}
+
 interface LeaveManagementProps {
   user: User
 }
@@ -71,7 +89,11 @@ interface LeaveManagementProps {
 export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [leaveData, setLeaveData] = useState<LeaveData | null>(null)
   const [leaveEvents, setLeaveEvents] = useState<LeaveEvent[]>([])
+  const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [loading, setLoading] = useState(true)
+  const [calendarLoading, setCalendarLoading] = useState(false)
   const [showLeaveForm, setShowLeaveForm] = useState(false)
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -116,6 +138,69 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     }
   }
 
+  const fetchCalendarConfigs = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('calendar_configs')
+        .select('*')
+        .eq('is_active', true)
+        .order('config_type', { ascending: true })
+
+      if (error) {
+        console.error('캘린더 설정 조회 실패:', error)
+      } else {
+        setCalendarConfigs(data || [])
+      }
+    } catch (error) {
+      console.error('캘린더 설정 조회 오류:', error)
+    }
+  }
+
+  const fetchCalendarEvents = async () => {
+    if (!showCalendarEvents || calendarConfigs.length === 0) {
+      setCalendarEvents([])
+      return
+    }
+
+    setCalendarLoading(true)
+    try {
+      const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      const endOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+
+      const calendarIds = calendarConfigs.map(config => config.calendar_id)
+      
+      const response = await fetch('/api/calendar/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarIds,
+          timeMin: startOfMonth.toISOString(),
+          timeMax: endOfMonth.toISOString()
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const eventsWithNames = data.events?.map((event: any) => ({
+          ...event,
+          calendarName: calendarConfigs.find(config => config.calendar_id === event.calendarId)?.calendar_alias || 'Unknown Calendar'
+        })) || []
+        
+        setCalendarEvents(eventsWithNames)
+      } else {
+        console.error('캘린더 이벤트 조회 실패:', response.statusText)
+        setCalendarEvents([])
+      }
+    } catch (error) {
+      console.error('캘린더 이벤트 조회 오류:', error)
+      setCalendarEvents([])
+    } finally {
+      setCalendarLoading(false)
+    }
+  }
+
   const fetchLeaveEvents = async () => {
     try {
       // 실제로는 form_requests 테이블에서 승인된 휴가 신청을 가져와야 하지만,
@@ -149,7 +234,12 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   useEffect(() => {
     fetchLeaveData()
     fetchLeaveEvents()
+    fetchCalendarConfigs()
   }, [user.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    fetchCalendarEvents()
+  }, [currentDate, showCalendarEvents, calendarConfigs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openFormModal = (formType: string, formUrl: string) => {
     // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
@@ -219,6 +309,30 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     })
   }
 
+  const getCalendarEventsForDate = (dateString: string) => {
+    return calendarEvents.filter(event => {
+      const eventDate = new Date(event.start).toISOString().split('T')[0]
+      return eventDate === dateString
+    })
+  }
+
+  const getAllEventsForDate = (dateString: string) => {
+    const leaveEventsForDate = leaveEvents.filter(event => {
+      const startDate = new Date(event.start_date)
+      const endDate = new Date(event.end_date)
+      const checkDate = new Date(dateString)
+      return checkDate >= startDate && checkDate <= endDate
+    })
+
+    const calendarEventsForDate = getCalendarEventsForDate(dateString)
+    
+    return {
+      leaveEvents: leaveEventsForDate,
+      calendarEvents: calendarEventsForDate,
+      totalCount: leaveEventsForDate.length + calendarEventsForDate.length
+    }
+  }
+
   const isHoliday = (dateString: string) => {
     return koreanHolidays[dateString as keyof typeof koreanHolidays]
   }
@@ -254,11 +368,12 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       const hasLeave = hasLeaveEvent(dateString)
       const holiday = isHoliday(dateString)
       const isWeekend = (firstDay + day - 1) % 7 === 0 || (firstDay + day - 1) % 7 === 6
+      const dayEvents = getAllEventsForDate(dateString)
 
       days.push(
         <div
           key={day}
-          className={`p-2 min-h-[60px] border border-gray-200 ${
+          className={`p-2 min-h-[80px] border border-gray-200 ${
             isCurrentDay ? 'bg-blue-100 border-blue-300' : ''
           } ${isWeekend || holiday ? 'bg-red-50' : ''}`}
         >
@@ -276,6 +391,15 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               휴가
             </div>
           )}
+          {showCalendarEvents && dayEvents.calendarEvents.map((event, index) => (
+            <div 
+              key={`cal-${event.id}-${index}`}
+              className="text-xs bg-blue-100 text-blue-800 rounded px-1 mt-1 truncate"
+              title={`${event.title} (${event.calendarName})`}
+            >
+              {event.title}
+            </div>
+          ))}
         </div>
       )
     }
@@ -387,6 +511,25 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
             >
               목록
             </button>
+            {calendarConfigs.length > 0 && (
+              <button
+                onClick={() => setShowCalendarEvents(!showCalendarEvents)}
+                className={`px-3 py-1 text-sm rounded-md flex items-center space-x-1 ${
+                  showCalendarEvents 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+                disabled={calendarLoading}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Google 캘린더</span>
+                {calendarLoading && (
+                  <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+                )}
+              </button>
+            )}
           </div>
         </div>
 

@@ -55,7 +55,38 @@ export async function GET(request: NextRequest) {
 // 특정 캘린더 테스트용 엔드포인트
 export async function POST(request: NextRequest) {
   try {
-    const { calendarId } = await request.json()
+    const body = await request.json()
+    
+    // 특정 날짜 범위의 이벤트를 요청하는 경우
+    if (body.calendarIds && body.timeMin && body.timeMax) {
+      const { calendarIds, timeMin, timeMax } = body
+      
+      // Supabase에서 활성화된 캘린더 설정 가져오기
+      const { data: configs, error } = await supabase
+        .from('calendar_configs')
+        .select('*')
+        .eq('is_active', true)
+        .in('calendar_id', calendarIds)
+
+      if (error) {
+        console.error('캘린더 설정 조회 실패:', error)
+        return NextResponse.json({ error: '캘린더 설정을 가져올 수 없습니다.' }, { status: 500 })
+      }
+
+      if (!configs || configs.length === 0) {
+        return NextResponse.json({ events: [], message: '활성화된 캘린더가 없습니다.' })
+      }
+      
+      const events = await googleCalendarService.getEventsFromMultipleCalendars(configs, timeMin, timeMax)
+      
+      return NextResponse.json({ 
+        events,
+        calendarsCount: configs.length 
+      })
+    }
+    
+    // 단일 캘린더 테스트
+    const { calendarId } = body
     
     if (!calendarId) {
       return NextResponse.json({ error: '캘린더 ID가 필요합니다.' }, { status: 400 })

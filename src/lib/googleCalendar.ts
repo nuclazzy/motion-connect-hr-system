@@ -42,7 +42,7 @@ class GoogleCalendarService {
   }
 
   // 특정 캘린더에서 이벤트 가져오기
-  async getEventsFromCalendar(calendarId: string, maxResults: number = 10): Promise<CalendarEvent[]> {
+  async getEventsFromCalendar(calendarId: string, maxResults: number = 10, timeMin?: string, timeMax?: string): Promise<CalendarEvent[]> {
     try {
       const now = new Date()
       const endTime = new Date()
@@ -50,8 +50,8 @@ class GoogleCalendarService {
 
       const response = await this.calendar.events.list({
         calendarId: calendarId,
-        timeMin: now.toISOString(),
-        timeMax: endTime.toISOString(),
+        timeMin: timeMin || now.toISOString(),
+        timeMax: timeMax || endTime.toISOString(),
         maxResults: maxResults,
         singleEvents: true,
         orderBy: 'startTime',
@@ -84,11 +84,11 @@ class GoogleCalendarService {
   }
 
   // 여러 캘린더에서 이벤트 가져오기
-  async getEventsFromMultipleCalendars(configs: CalendarConfig[]): Promise<CalendarEvent[]> {
+  async getEventsFromMultipleCalendars(configs: CalendarConfig[], timeMin?: string, timeMax?: string): Promise<CalendarEvent[]> {
     const activeConfigs = configs.filter(config => config.is_active)
     
     const eventPromises = activeConfigs.map(async (config) => {
-      const events = await this.getEventsFromCalendar(config.calendar_id, 5)
+      const events = await this.getEventsFromCalendar(config.calendar_id, 50, timeMin, timeMax)
       return events.map(event => ({
         ...event,
         calendarName: config.calendar_alias || config.target_name,
