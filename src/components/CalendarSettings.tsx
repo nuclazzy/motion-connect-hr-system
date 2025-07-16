@@ -23,7 +23,6 @@ export default function CalendarSettings() {
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [selectedConfig, setSelectedConfig] = useState<CalendarConfig | null>(null)
   const [connectedFeatures, setConnectedFeatures] = useState<Record<string, string[]>>({})
-  const [selectedTeamForFeature, setSelectedTeamForFeature] = useState<Record<string, string>>({})
 
   // 연결 가능한 기능 목록 (팀별 연결 지원)
   const availableFeatures = [
@@ -279,13 +278,6 @@ export default function CalendarSettings() {
         // 기능 연결 - 팀별 기능의 경우 팀 정보도 저장
         const connectionKey = teamName ? `${featureId}:${teamName}` : featureId
         
-        // 팀 정보 저장
-        if (teamName) {
-          setSelectedTeamForFeature(teamPrev => ({
-            ...teamPrev,
-            [`${selectedConfig.id}:${featureId}`]: teamName
-          }))
-        }
         
         return {
           ...prev,
@@ -297,14 +289,6 @@ export default function CalendarSettings() {
           ? [`${featureId}:${teamName}`]
           : configConnections.filter(id => id === featureId || id.startsWith(`${featureId}:`))
         
-        // 팀 정보도 제거
-        if (teamName) {
-          setSelectedTeamForFeature(teamPrev => {
-            const newTeamPrev = { ...teamPrev }
-            delete newTeamPrev[`${selectedConfig.id}:${featureId}`]
-            return newTeamPrev
-          })
-        }
         
         return {
           ...prev,
