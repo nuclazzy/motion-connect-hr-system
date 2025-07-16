@@ -10,10 +10,16 @@ export async function GET() {
     console.log('OAuth Environment Check:', {
       clientId: clientId ? `${clientId.substring(0, 20)}...` : 'MISSING',
       clientSecret: clientSecret ? 'EXISTS' : 'MISSING',
-      redirectUri: redirectUri || 'MISSING'
+      redirectUri: redirectUri || 'MISSING',
+      allEnvVars: {
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: !!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
+        GOOGLE_CLIENT_SECRET: !!process.env.GOOGLE_CLIENT_SECRET,
+        GOOGLE_REDIRECT_URI: !!process.env.GOOGLE_REDIRECT_URI
+      }
     });
 
-    if (!clientId) {
+    if (!clientId || clientId.trim() === '') {
+      console.error('Client ID is missing or empty:', { clientId });
       return NextResponse.json(
         { 
           success: false, 
@@ -21,7 +27,8 @@ export async function GET() {
           debug: {
             clientId: clientId,
             clientSecret: clientSecret ? 'EXISTS' : 'MISSING',
-            redirectUri: redirectUri
+            redirectUri: redirectUri,
+            processEnv: Object.keys(process.env).filter(key => key.includes('GOOGLE'))
           }
         },
         { status: 500 }
@@ -37,6 +44,8 @@ export async function GET() {
       access_type: 'offline',
       prompt: 'consent'
     }).toString()}`;
+    
+    console.log('Generated auth URL:', authUrl);
     
     return NextResponse.redirect(authUrl);
   } catch (error) {

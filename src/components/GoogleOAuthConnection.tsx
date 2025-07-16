@@ -37,6 +37,7 @@ export default function GoogleOAuthConnection({ user }: GoogleOAuthConnectionPro
   }
 
   const handleConnectGoogle = () => {
+    console.log('Redirecting to Google OAuth...')
     window.location.href = '/api/auth/google'
   }
 
