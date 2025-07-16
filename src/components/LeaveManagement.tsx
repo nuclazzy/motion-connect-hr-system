@@ -79,6 +79,7 @@ interface CalendarEvent {
   start: string
   end: string
   description?: string
+  calendarId?: string
   calendarName: string
 }
 
@@ -183,7 +184,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
       if (response.ok) {
         const data = await response.json()
-        const eventsWithNames = data.events?.map((event: any) => ({
+        const eventsWithNames = data.events?.map((event: CalendarEvent) => ({
           ...event,
           calendarName: calendarConfigs.find(config => config.calendar_id === event.calendarId)?.calendar_alias || 'Unknown Calendar'
         })) || []

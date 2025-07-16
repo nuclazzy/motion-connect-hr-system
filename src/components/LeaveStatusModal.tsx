@@ -34,7 +34,7 @@ export default function LeaveStatusModal({ user, isOpen, onClose }: LeaveStatusM
     if (isOpen) {
       fetchLeaveRequests()
     }
-  }, [isOpen, user.id])
+  }, [isOpen, user.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchLeaveRequests = async () => {
     try {

@@ -150,7 +150,7 @@ class GoogleCalendarService {
   }
 
   // Google Calendar에 이벤트 생성
-  async createEvent(calendarId: string, eventData: any): Promise<any> {
+  async createEvent(calendarId: string, eventData: object): Promise<object | null> {
     try {
       const response = await this.calendar.events.insert({
         calendarId: calendarId,

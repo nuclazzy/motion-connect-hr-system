@@ -85,7 +85,7 @@ export default function AdminLeaveManagement() {
     fetchLeaveData()
     fetchLeaveRequests()
     fetchPromotionData()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchLeaveData = async () => {
     try {

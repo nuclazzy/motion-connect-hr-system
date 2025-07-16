@@ -25,6 +25,7 @@ interface CalendarEvent {
   end: string
   description?: string
   location?: string
+  calendarId?: string
   calendarName: string
   color?: string
 }
@@ -108,7 +109,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
 
       if (response.ok) {
         const data = await response.json()
-        const eventsWithNames = data.events?.map((event: any) => ({
+        const eventsWithNames = data.events?.map((event: CalendarEvent) => ({
           ...event,
           calendarName: calendarConfigs.find(config => config.calendar_id === event.calendarId)?.calendar_alias || 'Unknown Calendar'
         })) || []

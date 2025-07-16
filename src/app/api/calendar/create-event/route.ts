@@ -29,13 +29,13 @@ export async function POST(request: NextRequest) {
 
     const googleEvent = await googleCalendarService.createEvent(calendarId, eventData)
     
-    if (googleEvent) {
+    if (googleEvent && typeof googleEvent === 'object' && 'id' in googleEvent) {
       // Supabase 미팅 테이블에 Google Event ID 업데이트
       const { error } = await supabase
         .from('meetings')
         .update({ 
           calendar_id: calendarId,
-          google_event_id: googleEvent.id 
+          google_event_id: (googleEvent as { id: string }).id 
         })
         .eq('id', meeting.id)
 
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({ 
         success: true,
-        googleEventId: googleEvent.id,
+        googleEventId: (googleEvent as { id: string }).id,
         message: 'Google Calendar에 이벤트가 생성되었습니다.'
       })
     } else {
