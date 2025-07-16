@@ -52,12 +52,39 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// 특정 캘린더 테스트용 엔드포인트
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     
-    // 특정 날짜 범위의 이벤트를 요청하는 경우
+    // 단일 캘린더에서 이벤트 조회 (새로운 컴포넌트들 용)
+    if (body.calendarId && body.timeMin && body.timeMax) {
+      const { calendarId, timeMin, timeMax, q, maxResults = 50 } = body
+      
+      try {
+        const events = await googleCalendarService.getEventsFromCalendar(
+          calendarId, 
+          maxResults,
+          timeMin,
+          timeMax,
+          q // 검색 쿼리 (사용자 이름 등)
+        )
+        
+        return NextResponse.json({ 
+          events,
+          calendarId,
+          query: q || null
+        })
+      } catch (error) {
+        console.error(`캘린더 ${calendarId} 접근 오류:`, error)
+        return NextResponse.json({ 
+          events: [],
+          error: '캘린더에 접근할 수 없습니다.',
+          calendarId 
+        }, { status: 403 })
+      }
+    }
+    
+    // 다중 캘린더에서 이벤트 조회 (기존 방식)
     if (body.calendarIds && body.timeMin && body.timeMax) {
       const { calendarIds, timeMin, timeMax } = body
       
@@ -85,7 +112,7 @@ export async function POST(request: NextRequest) {
       })
     }
     
-    // 단일 캘린더 테스트
+    // 캘린더 접근 테스트 (기존 방식)
     const { calendarId } = body
     
     if (!calendarId) {
@@ -110,10 +137,10 @@ export async function POST(request: NextRequest) {
     }
 
   } catch (error) {
-    console.error('캘린더 테스트 오류:', error)
+    console.error('캘린더 API 오류:', error)
     return NextResponse.json({ 
       success: false,
-      error: '캘린더 테스트 중 오류가 발생했습니다.',
+      error: '캘린더 API 처리 중 오류가 발생했습니다.',
       details: error instanceof Error ? error.message : '알 수 없는 오류'
     }, { status: 500 })
   }

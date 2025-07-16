@@ -42,20 +42,35 @@ class GoogleCalendarService {
   }
 
   // 특정 캘린더에서 이벤트 가져오기
-  async getEventsFromCalendar(calendarId: string, maxResults: number = 10, timeMin?: string, timeMax?: string): Promise<CalendarEvent[]> {
+  async getEventsFromCalendar(calendarId: string, maxResults: number = 10, timeMin?: string, timeMax?: string, q?: string): Promise<CalendarEvent[]> {
     try {
       const now = new Date()
       const endTime = new Date()
       endTime.setDate(now.getDate() + 30) // 앞으로 30일간의 이벤트
 
-      const response = await this.calendar.events.list({
+      const params: {
+        calendarId: string
+        timeMin: string
+        timeMax: string
+        maxResults: number
+        singleEvents: boolean
+        orderBy: 'startTime'
+        q?: string
+      } = {
         calendarId: calendarId,
         timeMin: timeMin || now.toISOString(),
         timeMax: timeMax || endTime.toISOString(),
         maxResults: maxResults,
         singleEvents: true,
         orderBy: 'startTime',
-      })
+      }
+
+      // 검색 쿼리가 있으면 추가
+      if (q) {
+        params.q = q
+      }
+
+      const response = await this.calendar.events.list(params)
 
       const events = response.data.items || []
       
