@@ -35,7 +35,7 @@ class GoogleCalendarService {
         client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
         private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
       },
-      scopes: ['https://www.googleapis.com/auth/calendar.readonly'],
+      scopes: ['https://www.googleapis.com/auth/calendar'],
     })
 
     this.calendar = google.calendar({ version: 'v3', auth: this.auth })
@@ -145,6 +145,38 @@ class GoogleCalendarService {
       return true
     } catch (error) {
       console.error(`캘린더 ${calendarId} 접근 테스트 실패:`, error)
+      return false
+    }
+  }
+
+  // Google Calendar에 이벤트 생성
+  async createEvent(calendarId: string, eventData: any): Promise<any> {
+    try {
+      const response = await this.calendar.events.insert({
+        calendarId: calendarId,
+        requestBody: eventData,
+      })
+      
+      console.log('Google Calendar 이벤트 생성 성공:', response.data.id)
+      return response.data
+    } catch (error) {
+      console.error(`캘린더 ${calendarId}에 이벤트 생성 실패:`, error)
+      return null
+    }
+  }
+
+  // Google Calendar 이벤트 삭제
+  async deleteEvent(calendarId: string, eventId: string): Promise<boolean> {
+    try {
+      await this.calendar.events.delete({
+        calendarId: calendarId,
+        eventId: eventId,
+      })
+      
+      console.log('Google Calendar 이벤트 삭제 성공:', eventId)
+      return true
+    } catch (error) {
+      console.error(`캘린더 ${calendarId}에서 이벤트 ${eventId} 삭제 실패:`, error)
       return false
     }
   }

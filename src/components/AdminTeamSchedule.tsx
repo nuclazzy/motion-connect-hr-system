@@ -18,6 +18,26 @@ interface Meeting {
   }
 }
 
+interface CalendarEvent {
+  id: string
+  title: string
+  start: string
+  end: string
+  description?: string
+  location?: string
+  calendarName: string
+  color?: string
+}
+
+interface CalendarConfig {
+  id: string
+  config_type: 'team' | 'function'
+  target_name: string
+  calendar_id: string
+  calendar_alias: string | null
+  is_active: boolean
+}
+
 interface AdminTeamScheduleProps {
   user: User
 }
@@ -25,9 +45,13 @@ interface AdminTeamScheduleProps {
 export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
   const [selectedMeetingType, setSelectedMeetingType] = useState<'external' | 'internal'>('external')
+  const [calendarLoading, setCalendarLoading] = useState(false)
+  const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [formData, setFormData] = useState({
     title: '',
     date: '',
@@ -36,6 +60,71 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     description: '',
     created_by: user.id // 기본값은 관리자 자신
   })
+
+  const fetchCalendarConfigs = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('calendar_configs')
+        .select('*')
+        .eq('is_active', true)
+        .order('config_type', { ascending: true })
+
+      if (error) {
+        console.error('캘린더 설정 조회 실패:', error)
+      } else {
+        setCalendarConfigs(data || [])
+      }
+    } catch (error) {
+      console.error('캘린더 설정 조회 오류:', error)
+    }
+  }, [])
+
+  const fetchCalendarEvents = useCallback(async () => {
+    if (!showCalendarEvents || calendarConfigs.length === 0) {
+      setCalendarEvents([])
+      return
+    }
+
+    setCalendarLoading(true)
+    try {
+      const startOfWeek = new Date(currentDate)
+      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+
+      const calendarIds = calendarConfigs.map(config => config.calendar_id)
+      
+      const response = await fetch('/api/calendar/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarIds,
+          timeMin: startOfWeek.toISOString(),
+          timeMax: endOfWeek.toISOString()
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const eventsWithNames = data.events?.map((event: any) => ({
+          ...event,
+          calendarName: calendarConfigs.find(config => config.calendar_id === event.calendarId)?.calendar_alias || 'Unknown Calendar'
+        })) || []
+        
+        setCalendarEvents(eventsWithNames)
+      } else {
+        console.error('캘린더 이벤트 조회 실패:', response.statusText)
+        setCalendarEvents([])
+      }
+    } catch (error) {
+      console.error('캘린더 이벤트 조회 오류:', error)
+      setCalendarEvents([])
+    } finally {
+      setCalendarLoading(false)
+    }
+  }, [currentDate, showCalendarEvents, calendarConfigs])
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -65,7 +154,12 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   useEffect(() => {
     fetchMeetings()
     fetchAllUsers()
-  }, [fetchMeetings])
+    fetchCalendarConfigs()
+  }, [fetchMeetings, fetchCalendarConfigs])
+
+  useEffect(() => {
+    fetchCalendarEvents()
+  }, [fetchCalendarEvents])
 
   const fetchAllUsers = async () => {
     try {
@@ -98,6 +192,25 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     return meetings.filter(meeting => meeting.date === dateStr)
   }
 
+  const getCalendarEventsForDate = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return calendarEvents.filter(event => {
+      const eventDate = new Date(event.start).toISOString().split('T')[0]
+      return eventDate === dateStr
+    })
+  }
+
+  const getAllEventsForDate = (date: Date) => {
+    const meetingsForDate = getMeetingsForDate(date)
+    const events = getCalendarEventsForDate(date)
+    
+    return {
+      meetings: meetingsForDate,
+      calendarEvents: events,
+      totalCount: meetingsForDate.length + events.length
+    }
+  }
+
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate)
     if (direction === 'prev') {
@@ -116,7 +229,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     e.preventDefault()
     
     try {
-      const { error } = await supabase
+      const { data: meetingData, error } = await supabase
         .from('meetings')
         .insert([{
           meeting_type: selectedMeetingType,
@@ -128,22 +241,60 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
           created_by: formData.created_by
         }])
         .select()
+        .single()
 
       if (error) {
         console.error('미팅 등록 실패:', error)
         alert('미팅 등록에 실패했습니다.')
+        return
+      }
+
+      // Google Calendar 동기화 (선택사항)
+      if (calendarConfigs.length > 0 && confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')) {
+        try {
+          // 첫 번째 활성 캘린더 사용 (향후 사용자가 선택할 수 있도록 개선 가능)
+          const primaryCalendar = calendarConfigs[0]
+          
+          const response = await fetch('/api/calendar/create-event', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              meeting: {
+                ...meetingData,
+                time: formData.time || '00:00'
+              },
+              calendarId: primaryCalendar.calendar_id
+            }),
+          })
+
+          const result = await response.json()
+          if (result.success) {
+            alert('미팅이 성공적으로 등록되고 Google Calendar에도 추가되었습니다!')
+          } else {
+            alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
+          }
+        } catch (calError) {
+          console.error('Google Calendar 동기화 오류:', calError)
+          alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
+        }
       } else {
         alert('미팅이 성공적으로 등록되었습니다!')
-        setShowAddForm(false)
-        setFormData({
-          title: '',
-          date: '',
-          time: '',
-          location: '',
-          description: '',
-          created_by: user.id
-        })
-        fetchMeetings() // 목록 새로고침
+      }
+
+      setShowAddForm(false)
+      setFormData({
+        title: '',
+        date: '',
+        time: '',
+        location: '',
+        description: '',
+        created_by: user.id
+      })
+      fetchMeetings() // 목록 새로고침
+      if (calendarConfigs.length > 0) {
+        fetchCalendarEvents() // 캘린더 이벤트도 새로고침
       }
     } catch (error) {
       console.error('미팅 등록 오류:', error)
@@ -186,6 +337,25 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
             </div>
           </div>
           <div className="flex space-x-2">
+            {calendarConfigs.length > 0 && (
+              <button
+                onClick={() => setShowCalendarEvents(!showCalendarEvents)}
+                className={`px-3 py-1 text-sm rounded-md flex items-center space-x-1 ${
+                  showCalendarEvents 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+                disabled={calendarLoading}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span>Google 캘린더</span>
+                {calendarLoading && (
+                  <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+                )}
+              </button>
+            )}
             <button 
               onClick={() => setShowAddForm(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
@@ -230,6 +400,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
               {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
                 const day = weekDays[index]
                 const dayMeetings = getMeetingsForDate(day)
+                const dayEvents = getAllEventsForDate(day)
                 const isTodayDay = isToday(day)
                 const isWeekend = index === 0 || index === 6
                 
@@ -246,7 +417,8 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                       </div>
                     </div>
                     
-                    <div className="min-h-[120px] bg-white rounded border p-2 space-y-1">
+                    <div className="min-h-[140px] bg-white rounded border p-2 space-y-1">
+                      {/* 팀 미팅 표시 */}
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
@@ -261,7 +433,18 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                         </div>
                       ))}
                       
-                      {dayMeetings.length === 0 && (
+                      {/* Google Calendar 이벤트 표시 */}
+                      {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
+                        <div 
+                          key={`cal-${event.id}-${idx}`}
+                          className="text-xs p-1 rounded truncate bg-green-100 text-green-800 border-l-2 border-green-500"
+                          title={`${event.title} (${event.calendarName})`}
+                        >
+                          [{event.calendarName}] {event.title}
+                        </div>
+                      ))}
+                      
+                      {dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0) && (
                         <div className="text-xs text-gray-400 text-center pt-8">
                           일정 없음
                         </div>
