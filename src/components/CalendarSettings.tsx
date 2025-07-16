@@ -23,6 +23,7 @@ export default function CalendarSettings() {
   const [showConnectModal, setShowConnectModal] = useState(false)
   const [selectedConfig, setSelectedConfig] = useState<CalendarConfig | null>(null)
   const [connectedFeatures, setConnectedFeatures] = useState<Record<string, string[]>>({})
+  const [availableDepartments, setAvailableDepartments] = useState<string[]>([])
 
   // 연결 가능한 기능 목록 (팀별 연결 지원)
   const availableFeatures = [
@@ -31,7 +32,7 @@ export default function CalendarSettings() {
       name: '팀 일정 관리', 
       description: '팀별 미팅 및 일정 표시', 
       supportsTeams: true,
-      teams: ['개발팀', '마케팅팀', '영업팀', '인사팀', '재무팀'] // 실제 팀 목록
+      teams: availableDepartments // 실제 데이터베이스에서 가져온 부서 목록
     },
     { 
       id: 'admin-schedule', 
@@ -70,7 +71,32 @@ export default function CalendarSettings() {
   useEffect(() => {
     fetchConfigs()
     fetchFeatureMappings()
+    fetchDepartments()
   }, [])
+
+  const fetchDepartments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('department')
+        .not('department', 'is', null)
+        .not('department', 'eq', '')
+
+      if (error) {
+        console.error('부서 목록 조회 실패:', error)
+        // 기본값 사용
+        setAvailableDepartments(['개발팀', '마케팅팀', '영업팀', '인사팀', '재무팀'])
+      } else {
+        // 중복 제거 및 정렬
+        const uniqueDepartments = [...new Set(data.map(user => user.department))].sort()
+        setAvailableDepartments(uniqueDepartments)
+      }
+    } catch (error) {
+      console.error('부서 목록 조회 오류:', error)
+      // 기본값 사용
+      setAvailableDepartments(['개발팀', '마케팅팀', '영업팀', '인사팀', '재무팀'])
+    }
+  }
 
   const fetchFeatureMappings = async () => {
     try {
