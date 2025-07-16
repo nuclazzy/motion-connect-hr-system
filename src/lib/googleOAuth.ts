@@ -12,8 +12,17 @@ export class GoogleOAuthService {
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/api/auth/google/callback'
+      this.getRedirectUri()
     );
+  }
+
+  private getRedirectUri(): string {
+    // 프로덕션 환경에서는 실제 도메인 사용
+    if (process.env.NODE_ENV === 'production') {
+      return process.env.GOOGLE_REDIRECT_URI || 'https://motion-connect-hr-system.vercel.app/api/auth/google/callback';
+    }
+    // 개발 환경에서는 localhost 사용
+    return 'http://localhost:3000/api/auth/google/callback';
   }
 
   // Google OAuth 인증 URL 생성
@@ -21,7 +30,8 @@ export class GoogleOAuthService {
     const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
-      prompt: 'consent'
+      prompt: 'consent',
+      redirect_uri: this.getRedirectUri()
     });
     return authUrl;
   }
