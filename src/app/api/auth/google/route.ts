@@ -36,7 +36,7 @@ export async function GET() {
   } catch (error) {
     console.error('Google OAuth 인증 URL 생성 실패:', error);
     return NextResponse.json(
-      { success: false, error: 'Failed to generate auth URL', details: error.message },
+      { success: false, error: 'Failed to generate auth URL', details: (error as Error).message },
       { status: 500 }
     );
   }
