@@ -147,6 +147,10 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       const configs = mappings.map(mapping => 
         'calendar_config' in mapping ? mapping.calendar_config : mapping
       )
+      console.log('휴가 관리 연결된 캘린더 수:', configs.length)
+      if (configs.length === 0) {
+        console.log('휴가 관리에 연결된 캘린더가 없습니다. 관리자가 캘린더를 연결해주세요.')
+      }
       setCalendarConfigs(configs)
     } catch (error) {
       console.error('휴가 관리 캘린더 설정 조회 오류:', error)
