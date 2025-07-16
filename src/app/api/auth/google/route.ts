@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
-import { googleOAuthService } from '@/lib/googleOAuth';
 
 export async function GET() {
   try {
     // 환경 변수 확인
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'https://motion-connect.vercel.app/api/auth/google/callback';
     
     console.log('OAuth Environment Check:', {
       clientId: clientId ? `${clientId.substring(0, 20)}...` : 'MISSING',
@@ -29,8 +28,15 @@ export async function GET() {
       );
     }
 
-    // Google OAuth 인증 URL 생성
-    const authUrl = googleOAuthService.getAuthUrl();
+    // 직접 OAuth URL 생성 (googleOAuthService 대신)
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events',
+      access_type: 'offline',
+      prompt: 'consent'
+    }).toString()}`;
     
     return NextResponse.redirect(authUrl);
   } catch (error) {
