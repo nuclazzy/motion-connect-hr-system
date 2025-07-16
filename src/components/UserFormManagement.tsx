@@ -190,14 +190,15 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <button
-                          onClick={() => handleDeleteRequest(request.id, request.form_type)}
-                          className="text-red-600 hover:text-red-900"
-                          disabled={request.status === 'approved'}
-                          title={request.status === 'approved' ? '승인된 서식은 삭제할 수 없습니다' : '삭제'}
-                        >
-                          {request.status === 'approved' ? '삭제불가' : '삭제'}
-                        </button>
+                        {request.status !== 'approved' && (
+                          <button
+                            onClick={() => handleDeleteRequest(request.id, request.form_type)}
+                            className="text-red-600 hover:text-red-900"
+                            title="삭제"
+                          >
+                            삭제
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
