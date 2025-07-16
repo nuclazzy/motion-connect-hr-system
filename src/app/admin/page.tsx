@@ -107,7 +107,7 @@ export default function AdminDashboard() {
                 <AdminLeaveManagement />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
-                <CalendarSettings />
+                <CalendarSettings user={user} />
             </div>
           </div>
         </div>

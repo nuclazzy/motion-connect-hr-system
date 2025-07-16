@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { type User } from '@/lib/auth'
 
 interface CalendarConfig {
   id: string
@@ -14,7 +15,11 @@ interface CalendarConfig {
   is_active: boolean
 }
 
-export default function CalendarSettings() {
+interface CalendarSettingsProps {
+  user: User
+}
+
+export default function CalendarSettings({ user }: CalendarSettingsProps) {
   const [configs, setConfigs] = useState<CalendarConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -328,32 +333,13 @@ export default function CalendarSettings() {
     if (!selectedConfig) return
 
     try {
-      // 현재 사용자 정보 확인
-      const { data: { user }, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
-        alert('사용자 인증에 실패했습니다. 다시 로그인해주세요.')
-        return
-      }
-
-      // 사용자 권한 확인
-      const { data: userData, error: roleError } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (roleError) {
-        console.error('사용자 권한 확인 실패:', roleError)
-        alert('사용자 권한 확인에 실패했습니다.')
-        return
-      }
-
-      console.log('현재 사용자 역할:', userData?.role)
-
-      if (userData?.role !== 'admin') {
+      // 관리자 권한 확인
+      if (user.role !== 'admin') {
         alert('캘린더 연결 설정은 관리자만 가능합니다.')
         return
       }
+
+      console.log('현재 사용자:', user.name, '역할:', user.role)
 
       const connections = connectedFeatures[selectedConfig.id] || []
       
