@@ -72,6 +72,7 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
     description: '',
     color: '#3B82F6'
   })
+  const [formConnectedFeatures, setFormConnectedFeatures] = useState<string[]>([])
 
   useEffect(() => {
     fetchConfigs()
@@ -176,6 +177,11 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
       description: config.description || '',
       color: config.color || '#3B82F6'
     })
+    
+    // 기존 연결된 기능들 로드
+    const existingConnections = connectedFeatures[config.id] || []
+    setFormConnectedFeatures(existingConnections)
+    
     setEditingConfig(config)
     setShowAddForm(true)
   }
@@ -204,6 +210,8 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
           alert('캘린더 설정 수정에 실패했습니다.')
         } else {
           alert('캘린더 설정이 수정되었습니다.')
+          // 기능 연결 저장
+          await saveFormConnections(editingConfig.id)
           resetForm()
           fetchConfigs()
         }
@@ -226,6 +234,18 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
           alert('캘린더 설정 추가에 실패했습니다.')
         } else {
           alert('캘린더 설정이 추가되었습니다.')
+          // 새로 생성된 캘린더의 ID를 가져와서 기능 연결 저장
+          const { data: newConfig } = await supabase
+            .from('calendar_configs')
+            .select('id')
+            .eq('calendar_id', formData.calendar_id)
+            .eq('target_name', formData.target_name)
+            .single()
+          
+          if (newConfig) {
+            await saveFormConnections(newConfig.id)
+          }
+          
           resetForm()
           fetchConfigs()
         }
@@ -238,6 +258,68 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
     }
   }
 
+  const saveFormConnections = async (calendarConfigId: string) => {
+    if (user.role !== 'admin') return
+    if (formConnectedFeatures.length === 0) return
+
+    try {
+      // 기존 매핑들을 모두 비활성화
+      await supabase
+        .from('calendar_feature_mappings')
+        .update({ is_active: false })
+        .eq('calendar_config_id', calendarConfigId)
+
+      // 새로운 매핑들을 생성
+      const mappingsToInsert = formConnectedFeatures.map(connectionKey => {
+        const [featureId, teamName] = connectionKey.includes(':') ? connectionKey.split(':') : [connectionKey, undefined]
+        const feature = availableFeatures.find(f => f.id === featureId)
+        
+        return {
+          calendar_config_id: calendarConfigId,
+          feature_id: teamName ? `${featureId}:${teamName}` : featureId,
+          feature_name: teamName ? `${feature?.name} (${teamName})` : (feature?.name || featureId),
+          is_active: true
+        }
+      })
+
+      const { error } = await supabase
+        .from('calendar_feature_mappings')
+        .upsert(mappingsToInsert, {
+          onConflict: 'calendar_config_id,feature_id'
+        })
+
+      if (error) {
+        console.error('기능 매핑 저장 실패:', error)
+      } else {
+        console.log('기능 연결이 저장되었습니다.')
+        await fetchFeatureMappings()
+      }
+    } catch (error) {
+      console.error('기능 연결 저장 오류:', error)
+    }
+  }
+
+  const handleFormFeatureToggle = (featureId: string, connected: boolean, teamName?: string) => {
+    const connectionKey = teamName ? `${featureId}:${teamName}` : featureId
+    
+    if (connected) {
+      // 기능 연결 - 팀별 기능의 경우 기존 연결 제거 후 새로 추가
+      setFormConnectedFeatures(prev => [
+        ...prev.filter(id => !id.startsWith(`${featureId}:`)),
+        connectionKey
+      ])
+    } else {
+      // 기능 연결 해제
+      const connectionsToRemove = teamName 
+        ? [connectionKey]
+        : formConnectedFeatures.filter(id => id === featureId || id.startsWith(`${featureId}:`))
+      
+      setFormConnectedFeatures(prev => 
+        prev.filter(id => !connectionsToRemove.includes(id))
+      )
+    }
+  }
+
   const resetForm = () => {
     setFormData({
       config_type: 'team',
@@ -247,6 +329,7 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
       description: '',
       color: '#3B82F6'
     })
+    setFormConnectedFeatures([])
     setEditingConfig(null)
     setShowAddForm(false)
   }
@@ -618,6 +701,65 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
                       onChange={(e) => setFormData({...formData, color: e.target.value})}
                       className="mt-1 block w-full h-10 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
                     />
+                  </div>
+
+                  {/* 기능 연결 섹션 */}
+                  <div className="border-t border-gray-200 pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">연결할 기능 선택</label>
+                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                      {availableFeatures.map((feature) => {
+                        const baseFeatureConnected = formConnectedFeatures.some(conn => 
+                          conn === feature.id || conn.startsWith(`${feature.id}:`)
+                        )
+                        
+                        return (
+                          <div key={feature.id} className="p-3 border border-gray-200 rounded-lg">
+                            <div className="flex items-start space-x-3">
+                              <input
+                                type="checkbox"
+                                id={`form-${feature.id}`}
+                                checked={baseFeatureConnected}
+                                onChange={(e) => handleFormFeatureToggle(feature.id, e.target.checked)}
+                                className="mt-1 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                              />
+                              <div className="flex-1">
+                                <label htmlFor={`form-${feature.id}`} className="text-sm font-medium text-gray-900 cursor-pointer">
+                                  {feature.name}
+                                </label>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {feature.description}
+                                </p>
+                                
+                                {/* 팀별 연결 지원하는 기능인 경우 팀 선택 옵션 표시 */}
+                                {feature.supportsTeams && baseFeatureConnected && (
+                                  <div className="mt-3 ml-6 space-y-2">
+                                    <p className="text-xs font-medium text-gray-700">팀별 연결:</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                      {feature.teams?.map(team => {
+                                        const teamConnectionKey = `${feature.id}:${team}`
+                                        const isTeamConnected = formConnectedFeatures.includes(teamConnectionKey)
+                                        
+                                        return (
+                                          <label key={team} className="flex items-center space-x-2 text-xs">
+                                            <input
+                                              type="checkbox"
+                                              checked={isTeamConnected}
+                                              onChange={(e) => handleFormFeatureToggle(feature.id, e.target.checked, team)}
+                                              className="h-3 w-3 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                                            />
+                                            <span className="text-gray-600">{team}</span>
+                                          </label>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex justify-end space-x-3 pt-4">
