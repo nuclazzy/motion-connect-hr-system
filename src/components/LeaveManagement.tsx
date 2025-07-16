@@ -172,10 +172,11 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
       const allEvents: CalendarEvent[] = []
 
-      // 각 캘린더에서 사용자 이름으로 검색
+      // 각 캘린더에서 사용자 이름으로 검색 (개선된 Service Account 방식)
       for (const config of calendarConfigs) {
         try {
-          const response = await fetch('/api/calendar/events', {
+          // 새로운 V2 API 우선 시도
+          let response = await fetch('/api/calendar/eventsv2', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -188,6 +189,24 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               maxResults: 250
             }),
           })
+
+          // V2 실패 시 기존 방식으로 폴백
+          if (!response.ok) {
+            console.log(`V2 API 실패, 기존 방식으로 폴백: ${config.calendar_alias}`)
+            response = await fetch('/api/calendar/events', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                calendarId: config.calendar_id,
+                timeMin: startOfYear.toISOString(),
+                timeMax: endOfYear.toISOString(),
+                q: user.name, // 사용자 이름으로 검색
+                maxResults: 250
+              }),
+            })
+          }
 
           if (response.ok) {
             const data = await response.json()

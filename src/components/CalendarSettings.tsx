@@ -15,6 +15,16 @@ interface CalendarConfig {
   is_active: boolean
 }
 
+interface GoogleCalendar {
+  id: string
+  summary: string
+  description?: string
+  primary?: boolean
+  accessRole: string
+  backgroundColor?: string
+  foregroundColor?: string
+}
+
 interface CalendarSettingsProps {
   user: User
 }
@@ -29,6 +39,10 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
   const [selectedConfig, setSelectedConfig] = useState<CalendarConfig | null>(null)
   const [connectedFeatures, setConnectedFeatures] = useState<Record<string, string[]>>({})
   const [availableDepartments, setAvailableDepartments] = useState<string[]>([])
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendar[]>([])
+  const [showGoogleCalendars, setShowGoogleCalendars] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   // 연결 가능한 기능 목록 (팀별 연결 지원)
   const availableFeatures = [
@@ -79,6 +93,44 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
     fetchFeatureMappings()
     fetchDepartments()
   }, [])
+
+  const fetchGoogleCalendars = async (query: string = '') => {
+    setGoogleLoading(true)
+    try {
+      const url = query 
+        ? `/api/calendar/search?q=${encodeURIComponent(query)}`
+        : '/api/calendar/list'
+      
+      const response = await fetch(url)
+      const data = await response.json()
+      
+      if (data.success) {
+        setGoogleCalendars(data.calendars)
+        setShowGoogleCalendars(true)
+      } else {
+        alert('캘린더 목록을 가져오는데 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('Google 캘린더 목록 조회 실패:', error)
+      alert('캘린더 목록 조회에 실패했습니다.')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  const handleSearchCalendars = async () => {
+    await fetchGoogleCalendars(searchQuery)
+  }
+
+  const handleSelectGoogleCalendar = (calendar: GoogleCalendar) => {
+    setFormData({
+      ...formData,
+      calendar_id: calendar.id,
+      calendar_alias: calendar.summary,
+      description: calendar.description || ''
+    })
+    setShowGoogleCalendars(false)
+  }
 
   const fetchDepartments = async () => {
     try {
@@ -512,15 +564,29 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
             </div>
             <div className="ml-5">
               <h3 className="text-lg font-medium text-gray-900">캘린더 설정</h3>
-              <p className="text-sm text-gray-500">Google Calendar ID를 직접 입력하여 캘린더를 연동합니다</p>
+              <p className="text-sm text-gray-500">
+                Service Account로 접근 가능한 캘린더를 검색하거나 직접 ID를 입력하세요
+              </p>
             </div>
           </div>
-          <button
-            onClick={handleAddNew}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-          >
-            캘린더 추가
-          </button>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => fetchGoogleCalendars()}
+              disabled={googleLoading}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center space-x-2"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19a2 2 0 002 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+              </svg>
+              <span>{googleLoading ? '로딩...' : '캘린더 목록'}</span>
+            </button>
+            <button
+              onClick={handleAddNew}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+            >
+              수동 추가
+            </button>
+          </div>
         </div>
 
         {/* 설정된 캘린더 목록 */}
@@ -658,16 +724,26 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Google Calendar ID</label>
-                    <input
-                      type="text"
-                      value={formData.calendar_id}
-                      onChange={(e) => setFormData({...formData, calendar_id: e.target.value})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono text-xs"
-                      placeholder="example@group.calendar.google.com"
-                      required
-                    />
+                    <div className="mt-1 flex space-x-2">
+                      <input
+                        type="text"
+                        value={formData.calendar_id}
+                        onChange={(e) => setFormData({...formData, calendar_id: e.target.value})}
+                        className="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm font-mono text-xs"
+                        placeholder="example@group.calendar.google.com"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fetchGoogleCalendars()}
+                        disabled={googleLoading}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-md text-xs font-medium"
+                      >
+                        {googleLoading ? '로딩...' : '목록에서 선택'}
+                      </button>
+                    </div>
                     <p className="mt-1 text-xs text-gray-500">
-                      Google Calendar 설정에서 캘린더 ID를 복사해서 입력하세요
+                      목록에서 선택하거나 직접 캘린더 ID를 입력하세요
                     </p>
                   </div>
 
@@ -870,6 +946,105 @@ export default function CalendarSettings({ user }: CalendarSettingsProps) {
                     className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
                   >
                     연결 저장
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Google 캘린더 선택 모달 */}
+        {showGoogleCalendars && (
+          <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+            <div className="relative top-20 mx-auto p-5 border w-2/3 max-w-4xl shadow-lg rounded-md bg-white">
+              <div className="mt-3">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Google 캘린더 선택
+                </h3>
+                
+                {/* 검색 기능 */}
+                <div className="mb-4">
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="캘린더 검색..."
+                      className="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleSearchCalendars()
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={handleSearchCalendars}
+                      disabled={googleLoading}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    >
+                      {googleLoading ? '검색 중...' : '검색'}
+                    </button>
+                    <button
+                      onClick={() => fetchGoogleCalendars()}
+                      disabled={googleLoading}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-md text-sm font-medium"
+                    >
+                      전체 목록
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="max-h-96 overflow-y-auto space-y-3">
+                  {googleCalendars.length === 0 ? (
+                    <p className="text-gray-500 text-center py-8">
+                      접근 가능한 캘린더가 없습니다.
+                    </p>
+                  ) : (
+                    googleCalendars.map((calendar) => (
+                      <div 
+                        key={calendar.id} 
+                        className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => handleSelectGoogleCalendar(calendar)}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div 
+                            className="w-4 h-4 rounded-full mt-1 flex-shrink-0"
+                            style={{ backgroundColor: calendar.backgroundColor || '#3B82F6' }}
+                          ></div>
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900">
+                              {calendar.summary}
+                              {calendar.primary && (
+                                <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                  기본
+                                </span>
+                              )}
+                            </h4>
+                            {calendar.description && (
+                              <p className="text-xs text-gray-600 mt-1">{calendar.description}</p>
+                            )}
+                            <p className="text-xs text-gray-400 font-mono mt-1">
+                              ID: {calendar.id}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              권한: {calendar.accessRole === 'owner' ? '소유자' : 
+                                    calendar.accessRole === 'writer' ? '편집자' : 
+                                    calendar.accessRole === 'reader' ? '읽기전용' : calendar.accessRole}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4 mt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowGoogleCalendars(false)}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
                   </button>
                 </div>
               </div>

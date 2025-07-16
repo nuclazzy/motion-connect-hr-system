@@ -8,6 +8,8 @@ import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import CalendarSettings from '@/components/CalendarSettings'
+import CalendarPermissionManager from '@/components/CalendarPermissionManager'
+import CalendarEventCreator from '@/components/CalendarEventCreator'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
@@ -108,6 +110,8 @@ export default function AdminDashboard() {
                 <AdminFormManagement />
                 <AdminDocumentManagement />
                 <CalendarSettings user={user} />
+                <CalendarPermissionManager user={user} />
+                <CalendarEventCreator />
             </div>
           </div>
         </div>
