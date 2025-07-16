@@ -10,6 +10,7 @@ import AdminFormManagement from '@/components/AdminFormManagement'
 import CalendarSettings from '@/components/CalendarSettings'
 import CalendarPermissionManager from '@/components/CalendarPermissionManager'
 import CalendarEventCreator from '@/components/CalendarEventCreator'
+import GoogleOAuthConnection from '@/components/GoogleOAuthConnection'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
@@ -109,6 +110,7 @@ export default function AdminDashboard() {
                 <AdminLeaveManagement />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
+                <GoogleOAuthConnection user={user} />
                 <CalendarSettings user={user} />
                 <CalendarPermissionManager user={user} />
                 <CalendarEventCreator />
