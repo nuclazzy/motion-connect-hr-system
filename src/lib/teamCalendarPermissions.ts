@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 import { type User } from '@/lib/auth';
 
 export interface TeamCalendarPermission {
@@ -21,6 +21,7 @@ export class TeamCalendarPermissionService {
   // 사용자의 특정 캘린더에 대한 권한 확인
   async getUserCalendarPermissions(userId: string, calendarConfigId: string): Promise<CalendarAccessLevel> {
     try {
+      const supabase = await createServiceRoleClient();
       const { data, error } = await supabase
         .from('team_calendar_permissions')
         .select('permission_type')
@@ -52,6 +53,7 @@ export class TeamCalendarPermissionService {
   // 사용자가 접근 가능한 캘린더 목록 조회
   async getUserAccessibleCalendars(userId: string): Promise<string[]> {
     try {
+      const supabase = await createServiceRoleClient();
       const { data, error } = await supabase
         .from('team_calendar_permissions')
         .select('calendar_config_id')
@@ -78,6 +80,7 @@ export class TeamCalendarPermissionService {
     grantedBy: string
   ): Promise<{ success: boolean; message: string }> {
     try {
+      const supabase = await createServiceRoleClient();
       // 기존 권한 확인
       const { data: existingPermission } = await supabase
         .from('team_calendar_permissions')
@@ -122,6 +125,7 @@ export class TeamCalendarPermissionService {
     permissionType: 'read' | 'write' | 'admin'
   ): Promise<{ success: boolean; message: string }> {
     try {
+      const supabase = await createServiceRoleClient();
       const { error } = await supabase
         .from('team_calendar_permissions')
         .update({ is_active: false })
@@ -144,6 +148,7 @@ export class TeamCalendarPermissionService {
   // 특정 캘린더의 모든 권한 조회
   async getCalendarPermissions(calendarConfigId: string): Promise<TeamCalendarPermission[]> {
     try {
+      const supabase = await createServiceRoleClient();
       const { data, error } = await supabase
         .from('team_calendar_permissions')
         .select(`
@@ -177,6 +182,7 @@ export class TeamCalendarPermissionService {
       }
 
       // 2. 캘린더 설정 조회
+      const supabase = await createServiceRoleClient();
       const { data: calendarConfig } = await supabase
         .from('calendar_configs')
         .select('target_name, config_type')

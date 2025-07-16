@@ -89,18 +89,13 @@ export default function AdminLeaveManagement() {
 
   const fetchLeaveData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('leave_days')
-        .select(`
-          *,
-          user:users(name, department, position, termination_date)
-        `)
-        .order('user_id')
+      const response = await fetch('/api/admin/leave-data')
+      const result = await response.json()
 
-      if (error) {
-        console.error('휴가 데이터 조회 실패:', error)
+      if (result.success) {
+        setLeaveData(result.data || [])
       } else {
-        setLeaveData(data || [])
+        console.error('휴가 데이터 조회 실패:', result.error)
       }
     } catch (error) {
       console.error('휴가 데이터 조회 오류:', error)
@@ -111,20 +106,13 @@ export default function AdminLeaveManagement() {
   
   const fetchLeaveRequests = async () => {
     try {
-      const { data, error } = await supabase
-        .from('form_requests')
-        .select(`
-          *,
-          user:users(name, department, position)
-        `)
-        .eq('form_type', 'vacation')
-        .eq('status', 'pending')
-        .order('submitted_at', { ascending: false })
+      const response = await fetch('/api/admin/leave-requests')
+      const result = await response.json()
 
-      if (error) {
-        console.error('휴가 신청 조회 실패:', error)
+      if (result.success) {
+        setLeaveRequests(result.data || [])
       } else {
-        setLeaveRequests(data || [])
+        console.error('휴가 신청 조회 실패:', result.error)
       }
     } catch (error) {
       console.error('휴가 신청 조회 오류:', error)
