@@ -149,9 +149,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
   // }, [currentDate, showCalendarEvents, isGoogleAuthenticated, selectedCalendarIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const getWeekDays = () => {
-    const today = new Date()
-    const startOfWeek = new Date(today)
-    startOfWeek.setDate(today.getDate() - today.getDay()) // 일요일부터 시작
+    const startOfWeek = new Date(currentDate)
+    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay()) // 일요일부터 시작
 
     const days = []
     for (let i = 0; i < 7; i++) {
@@ -390,6 +389,30 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
           <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-sm font-medium text-gray-900">다른 팀 일정 - {formatWeekRange()}</h4>
+              <div className="flex space-x-2">
+                <button 
+                  onClick={() => navigateWeek('prev')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <button 
+                  onClick={goToThisWeek}
+                  className="bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs"
+                >
+                  이번 주
+                </button>
+                <button 
+                  onClick={() => navigateWeek('next')}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
             
             <div className="grid grid-cols-7 gap-2">

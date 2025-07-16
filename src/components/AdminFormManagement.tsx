@@ -61,12 +61,15 @@ export default function AdminFormManagement() {
 
   const handleStatusChange = async (requestId: string, newStatus: 'approved' | 'rejected') => {
     try {
+      // 현재 로그인한 관리자 정보 가져오기
+      const currentUser = JSON.parse(localStorage.getItem('motion-connect-user') || '{}')
+      
       const { error } = await supabase
         .from('form_requests')
         .update({
           status: newStatus,
           processed_at: new Date().toISOString(),
-          processed_by: 'admin' // 실제로는 현재 관리자 ID를 사용
+          processed_by: currentUser.id // 실제 관리자 UUID 사용
         })
         .eq('id', requestId)
 
@@ -80,6 +83,30 @@ export default function AdminFormManagement() {
     } catch (err) {
       console.error('상태 변경 오류:', err)
       alert('오류가 발생했습니다.')
+    }
+  }
+
+  const handleDeleteRequest = async (requestId: string, formType: string) => {
+    if (!confirm(`정말로 이 "${formType}" 신청을 삭제하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('form_requests')
+        .delete()
+        .eq('id', requestId)
+
+      if (error) {
+        console.error('서식 삭제 실패:', error)
+        alert('서식 삭제에 실패했습니다.')
+      } else {
+        alert('서식 신청이 삭제되었습니다.')
+        fetchFormRequests()
+      }
+    } catch (err) {
+      console.error('서식 삭제 오류:', err)
+      alert('삭제 중 오류가 발생했습니다.')
     }
   }
 
@@ -220,27 +247,36 @@ export default function AdminFormManagement() {
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {request.status === 'pending' && (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => handleStatusChange(request.id, 'approved')}
-                              className="text-green-600 hover:text-green-900"
-                            >
-                              승인
-                            </button>
-                            <button
-                              onClick={() => handleStatusChange(request.id, 'rejected')}
-                              className="text-red-600 hover:text-red-900"
-                            >
-                              거절
-                            </button>
-                          </div>
-                        )}
-                        {request.status !== 'pending' && (
-                          <span className="text-gray-400">
-                            {request.processed_at && formatDate(request.processed_at)}
-                          </span>
-                        )}
+                        <div className="flex space-x-2">
+                          {request.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => handleStatusChange(request.id, 'approved')}
+                                className="text-green-600 hover:text-green-900"
+                              >
+                                승인
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(request.id, 'rejected')}
+                                className="text-red-600 hover:text-red-900"
+                              >
+                                거절
+                              </button>
+                            </>
+                          )}
+                          {request.status !== 'pending' && (
+                            <span className="text-gray-400 text-xs">
+                              {request.processed_at && formatDate(request.processed_at)}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => handleDeleteRequest(request.id, request.form_type)}
+                            className="text-red-600 hover:text-red-900 ml-2"
+                            title="삭제"
+                          >
+                            삭제
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

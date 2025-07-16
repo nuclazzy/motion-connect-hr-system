@@ -8,6 +8,7 @@ import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
+import UserFormManagement from '@/components/UserFormManagement'
 
 interface ReviewLink {
   id: string
@@ -206,7 +207,7 @@ export default function UserDashboard() {
               <div className="bg-gray-50 px-5 py-3 space-y-2">
                 <div className="text-sm">
                   <a 
-                    href="https://script.google.com/a/motionsense.co.kr/s/AKfycbyJnyRdsSI_t8gr_ikoHswccl7rVMP7mPP9Qmy8t2vk2AOYFVnPFOb7u9MAmd0y_us2ag/exec"
+                    href="https://script.google.com/a/macros/motionsense.co.kr/s/AKfycbwBcCpDZZ3J5vxHswCXWgkrDJTcfLVCJPNcMSom7_K-pL9X6uXAvf-kZmE5ea-WyBD5Lw/exec"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-indigo-600 hover:text-indigo-500 block"
@@ -216,7 +217,7 @@ export default function UserDashboard() {
                 </div>
                 <div className="text-sm">
                   <a 
-                    href="https://script.google.com/a/motionsense.co.kr/s/AKfycbwBcCpDZZ3J5vxHswCXWgkrDJTcfLVCJPNcMSom7_K-pL9X6uXAvf-kZmE5ea-WyBD5Lw/exec?page=worktime"
+                    href="https://script.google.com/a/macros/motionsense.co.kr/s/AKfycbwBcCpDZZ3J5vxHswCXWgkrDJTcfLVCJPNcMSom7_K-pL9X6uXAvf-kZmE5ea-WyBD5Lw/exec?page=worktime"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-indigo-600 hover:text-indigo-500 block"
@@ -484,6 +485,12 @@ export default function UserDashboard() {
             <DocumentLibrary />
 
           </div>
+
+          {/* 서식 신청 내역 관리 */}
+          <div className="mt-8">
+            <UserFormManagement user={user} />
+          </div>
+        </div>
         </div>
       </main>
 
