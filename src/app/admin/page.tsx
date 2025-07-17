@@ -10,7 +10,7 @@ import ServiceAccountCalendarManager from '@/components/ServiceAccountCalendarMa
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
-import DocumentLibrary from '@/components/DocumentLibrary'
+import AdminWeeklySchedule from '@/components/AdminWeeklySchedule'
 import AdminLeavePromotion from '@/components/AdminLeavePromotion'
 import DirectCalendarAccess from '@/components/DirectCalendarAccess'
 
@@ -95,8 +95,8 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
                 <LeaveManagement user={user} />
-                <DocumentLibrary />
                 <AdminTeamSchedule user={user} />
+                <AdminWeeklySchedule user={user} />
             </div>
           </div>
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import { ADMIN_WEEKLY_CALENDARS } from '@/lib/calendarMapping'
 
 interface CalendarConfig {
   id: string
@@ -35,20 +36,25 @@ export default function InternalMeeting({ }: InternalMeetingProps) {
 
   const fetchCalendarConfigs = async () => {
     try {
-      // Service Account 기반 캘린더 설정 조회
-      const { data, error } = await supabase
-        .from('calendar_configs')
-        .select('*')
-        .eq('config_type', 'function')
-        .eq('target_name', 'internal-meeting')
-        .eq('is_active', true)
+      // 내부 회의 캘린더 직접 매핑 사용
+      const internalCalendar = ADMIN_WEEKLY_CALENDARS.find(cal => cal.type === 'internal')
       
-      if (error) throw error
-      console.log('내부 회의 연결된 캘린더 수:', data?.length || 0)
-      if ((data?.length || 0) === 0) {
-        console.log('내부 회의에 연결된 캘린더가 없습니다. 관리자가 캘린더를 연결해주세요.')
+      if (internalCalendar) {
+        const configs = [{
+          id: internalCalendar.id,
+          config_type: 'function' as const,
+          target_name: 'internal-meeting',
+          calendar_id: internalCalendar.id,
+          calendar_alias: internalCalendar.name,
+          description: null,
+          color: null,
+          is_active: true
+        }]
+        setCalendarConfigs(configs)
+      } else {
+        console.log('내부 회의 캘린더가 설정되지 않았습니다.')
+        setCalendarConfigs([])
       }
-      setCalendarConfigs(data || [])
     } catch (error) {
       console.error('내부 회의 캘린더 설정 조회 오류:', error)
     }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
 import LeaveStatusModal from './LeaveStatusModal'
+import { CALENDAR_IDS, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
 
 // 한국 공휴일 데이터 (2024년)
 const koreanHolidays = {
@@ -160,78 +161,103 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     }
   }
 
+  // 휴가 캘린더에 이벤트 생성하는 함수
+  const createLeaveCalendarEvent = async (leaveType: string, startDate: string, endDate: string, reason?: string) => {
+    try {
+      const eventData = {
+        summary: `${user.name} - ${leaveType}`,
+        description: reason ? `사유: ${reason}` : `${user.name}님의 ${leaveType}`,
+        start: {
+          date: startDate, // 종일 이벤트로 설정
+          timeZone: 'Asia/Seoul'
+        },
+        end: {
+          date: endDate === startDate ? 
+            new Date(new Date(endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] : // 하루 더 추가
+            new Date(new Date(endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          timeZone: 'Asia/Seoul'
+        },
+        attendees: [
+          {
+            email: user.email,
+            displayName: user.name
+          }
+        ]
+      }
+
+      const response = await fetch('/api/calendar/create-event-direct', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+          eventData
+        })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        console.log('휴가 캘린더 이벤트 생성 성공:', result.event)
+        // 캘린더 이벤트 새로고침
+        fetchCalendarEvents()
+        return result.event
+      } else {
+        console.error('휴가 캘린더 이벤트 생성 실패:', result.error)
+      }
+    } catch (error) {
+      console.error('휴가 캘린더 이벤트 생성 오류:', error)
+    }
+  }
+
   const fetchCalendarEvents = async () => {
-    if (!showCalendarEvents || calendarConfigs.length === 0) {
+    if (!showCalendarEvents) {
       setCalendarEvents([])
       return
     }
 
     setCalendarLoading(true)
     try {
-      // 현재 년도 데이터만 조회
-      const currentYear = new Date().getFullYear()
-      const startOfYear = new Date(currentYear, 0, 1)
-      const endOfYear = new Date(currentYear, 11, 31, 23, 59, 59)
-
       const allEvents: CalendarEvent[] = []
+      const { timeMin, timeMax } = getCurrentYearRange()
+      
+      // 휴가 캘린더에서 이벤트 가져오기
+      try {
+        const response = await fetch('/api/calendar/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+            timeMin,
+            timeMax,
+            q: user.name, // 사용자 이름으로 검색
+            maxResults: 250
+          }),
+        })
 
-      // 각 캘린더에서 사용자 이름으로 검색 (개선된 Service Account 방식)
-      for (const config of calendarConfigs) {
-        try {
-          // 새로운 V2 API 우선 시도
-          let response = await fetch('/api/calendar/eventsv2', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              calendarId: config.calendar_id,
-              timeMin: startOfYear.toISOString(),
-              timeMax: endOfYear.toISOString(),
-              q: user.name, // 사용자 이름으로 검색
-              maxResults: 250
-            }),
-          })
-
-          // V2 실패 시 기존 방식으로 폴백
-          if (!response.ok) {
-            console.log(`V2 API 실패, 기존 방식으로 폴백: ${config.calendar_alias}`)
-            response = await fetch('/api/calendar/events', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                calendarId: config.calendar_id,
-                timeMin: startOfYear.toISOString(),
-                timeMax: endOfYear.toISOString(),
-                q: user.name, // 사용자 이름으로 검색
-                maxResults: 250
-              }),
-            })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.events) {
+            const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
+              ...event,
+              calendarName: CALENDAR_NAMES[CALENDAR_IDS.LEAVE_MANAGEMENT],
+              calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT
+            }))
+            allEvents.push(...eventsWithCalendarInfo)
           }
-
-          if (response.ok) {
-            const data = await response.json()
-            if (data.events) {
-              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
-                ...event,
-                calendarName: config.calendar_alias || config.target_name,
-                calendarId: config.calendar_id
-              }))
-              allEvents.push(...eventsWithCalendarInfo)
-            }
-          }
-        } catch (error) {
-          console.error(`캘린더 ${config.calendar_alias} 이벤트 조회 오류:`, error)
         }
+      } catch (error) {
+        console.error('휴가 캘린더 이벤트 조회 오류:', error)
       }
 
       // 현재 월의 이벤트만 필터링
       const currentMonth = currentDate.getMonth()
+      const currentYear = currentDate.getFullYear()
       const currentMonthEvents = allEvents.filter(event => {
         const eventDate = new Date(event.start || '')
-        return eventDate.getMonth() === currentMonth
+        return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
       })
 
       setCalendarEvents(currentMonthEvents)
@@ -312,6 +338,25 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
           console.error('서식 신청 저장 실패:', error)
           alert('❌ 신청 저장에 실패했습니다. 다시 시도해주세요.')
         } else {
+          // 휴가 관련 서식인 경우 캘린더에 임시 이벤트 생성
+          if (formType.includes('휴가') || formType.includes('연차')) {
+            const today = new Date()
+            const dateString = today.toISOString().split('T')[0]
+            
+            try {
+              await createLeaveCalendarEvent(
+                `${formType} 신청`, 
+                dateString, 
+                dateString, 
+                `${user.name}님이 ${formType}를 신청했습니다. 승인 대기 중입니다.`
+              )
+              console.log('휴가 캘린더에 임시 이벤트 생성 완료')
+            } catch (calendarError) {
+              console.error('캘린더 이벤트 생성 실패:', calendarError)
+              // 캘린더 이벤트 생성 실패는 전체 프로세스를 중단하지 않음
+            }
+          }
+          
           alert('✅ 신청이 완료되었습니다!\n\n📄 작성한 서식을 인쇄하여 대표에게 제출해주세요.\n관리자가 확인 후 최종 승인 처리됩니다.')
         }
       } catch (error) {
