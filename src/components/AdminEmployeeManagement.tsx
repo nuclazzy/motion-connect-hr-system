@@ -50,6 +50,7 @@ export default function AdminEmployeeManagement() {
   const [formLoading, setFormLoading] = useState(false)
   const [showLeaveModal, setShowLeaveModal] = useState(false)
   const [selectedEmployeeLeave, setSelectedEmployeeLeave] = useState<LeaveData | null>(null)
+  const [employeeLeaveData, setEmployeeLeaveData] = useState<LeaveData | null>(null)
   const [leaveFormData, setLeaveFormData] = useState({
     annual_days: 0,
     used_annual_days: 0,
@@ -104,6 +105,63 @@ export default function AdminEmployeeManagement() {
     }
   }
 
+  const loadEmployeeLeaveData = async (employee: Employee) => {
+    try {
+      const { data: leaveData, error } = await supabase
+        .from('leave_days')
+        .select('*')
+        .eq('user_id', employee.id)
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching leave data:', error)
+        setEmployeeLeaveData(null)
+        return
+      }
+
+      if (!leaveData) {
+        // 휴가 데이터가 없으면 초기값으로 생성
+        const annualDays = employee.hire_date ? calculateAnnualLeave(employee.hire_date) : 15
+        const newLeaveData = {
+          user_id: employee.id,
+          leave_types: {
+            annual_days: annualDays,
+            used_annual_days: 0,
+            sick_days: 30,
+            used_sick_days: 0,
+            family_care_days: 90,
+            used_family_care_days: 0,
+            maternity_days: 90,
+            used_maternity_days: 0,
+            paternity_days: 10,
+            used_paternity_days: 0,
+            special_days: 5,
+            used_special_days: 0
+          }
+        }
+
+        const { data: insertedData, error: insertError } = await supabase
+          .from('leave_days')
+          .insert(newLeaveData)
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Error creating leave data:', insertError)
+          setEmployeeLeaveData(null)
+          return
+        }
+
+        setEmployeeLeaveData(insertedData)
+      } else {
+        setEmployeeLeaveData(leaveData)
+      }
+    } catch (error) {
+      console.error('Error in loadEmployeeLeaveData:', error)
+      setEmployeeLeaveData(null)
+    }
+  }
+
   const handleAddEmployee = () => {
     setFormData({
       name: '',
@@ -149,15 +207,7 @@ export default function AdminEmployeeManagement() {
             annual_days: annualDays,
             used_annual_days: 0,
             sick_days: 30,
-            used_sick_days: 0,
-            family_care_days: 90,
-            used_family_care_days: 0,
-            maternity_days: 90,
-            used_maternity_days: 0,
-            paternity_days: 10,
-            used_paternity_days: 0,
-            special_days: 5,
-            used_special_days: 0
+            used_sick_days: 0
           }
         }
 
@@ -179,14 +229,14 @@ export default function AdminEmployeeManagement() {
           used_annual_days: insertedData.leave_types.used_annual_days || 0,
           sick_days: insertedData.leave_types.sick_days || 0,
           used_sick_days: insertedData.leave_types.used_sick_days || 0,
-          family_care_days: insertedData.leave_types.family_care_days || 0,
-          used_family_care_days: insertedData.leave_types.used_family_care_days || 0,
-          maternity_days: insertedData.leave_types.maternity_days || 0,
-          used_maternity_days: insertedData.leave_types.used_maternity_days || 0,
-          paternity_days: insertedData.leave_types.paternity_days || 0,
-          used_paternity_days: insertedData.leave_types.used_paternity_days || 0,
-          special_days: insertedData.leave_types.special_days || 0,
-          used_special_days: insertedData.leave_types.used_special_days || 0
+          family_care_days: 0,
+          used_family_care_days: 0,
+          maternity_days: 0,
+          used_maternity_days: 0,
+          paternity_days: 0,
+          used_paternity_days: 0,
+          special_days: 0,
+          used_special_days: 0
         })
       } else {
         setSelectedEmployeeLeave(leaveData)
@@ -195,14 +245,14 @@ export default function AdminEmployeeManagement() {
           used_annual_days: leaveData.leave_types.used_annual_days || 0,
           sick_days: leaveData.leave_types.sick_days || 0,
           used_sick_days: leaveData.leave_types.used_sick_days || 0,
-          family_care_days: leaveData.leave_types.family_care_days || 0,
-          used_family_care_days: leaveData.leave_types.used_family_care_days || 0,
-          maternity_days: leaveData.leave_types.maternity_days || 0,
-          used_maternity_days: leaveData.leave_types.used_maternity_days || 0,
-          paternity_days: leaveData.leave_types.paternity_days || 0,
-          used_paternity_days: leaveData.leave_types.used_paternity_days || 0,
-          special_days: leaveData.leave_types.special_days || 0,
-          used_special_days: leaveData.leave_types.used_special_days || 0
+          family_care_days: 0,
+          used_family_care_days: 0,
+          maternity_days: 0,
+          used_maternity_days: 0,
+          paternity_days: 0,
+          used_paternity_days: 0,
+          special_days: 0,
+          used_special_days: 0
         })
       }
 
@@ -218,10 +268,17 @@ export default function AdminEmployeeManagement() {
     if (!selectedEmployeeLeave || !selectedEmployee) return
 
     try {
+      const updatedLeaveTypes = {
+        annual_days: leaveFormData.annual_days,
+        used_annual_days: leaveFormData.used_annual_days,
+        sick_days: leaveFormData.sick_days,
+        used_sick_days: leaveFormData.used_sick_days
+      }
+
       const { error } = await supabase
         .from('leave_days')
         .update({
-          leave_types: leaveFormData,
+          leave_types: updatedLeaveTypes,
           updated_at: new Date().toISOString()
         })
         .eq('id', selectedEmployeeLeave.id)
@@ -235,7 +292,9 @@ export default function AdminEmployeeManagement() {
       alert(`${selectedEmployee.name}님의 휴가 데이터가 수정되었습니다.`)
       setShowLeaveModal(false)
       setSelectedEmployeeLeave(null)
-      setSelectedEmployee(null)
+      
+      // 수정된 데이터를 다시 로드
+      loadEmployeeLeaveData(selectedEmployee)
     } catch (error) {
       console.error('Error in handleSaveLeaveAdjustment:', error)
       alert('휴가 데이터 수정 중 오류가 발생했습니다.')
@@ -614,6 +673,11 @@ export default function AdminEmployeeManagement() {
               onChange={(e) => {
                 const employee = displayEmployees.find(emp => emp.id === e.target.value)
                 setSelectedEmployee(employee || null)
+                if (employee) {
+                  loadEmployeeLeaveData(employee)
+                } else {
+                  setEmployeeLeaveData(null)
+                }
               }}
               className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             >
@@ -674,6 +738,31 @@ export default function AdminEmployeeManagement() {
                     <p className="text-gray-600"><strong>주소:</strong> {selectedEmployee.address || '미등록'}</p>
                   </div>
                 </div>
+                
+                {/* 휴가 정보 */}
+                {employeeLeaveData && (
+                  <div className="mt-4 p-4 bg-blue-50 rounded-md">
+                    <h5 className="text-sm font-medium text-blue-900 mb-2">휴가 현황</h5>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-blue-800">
+                          <strong>연차:</strong> {employeeLeaveData.leave_types.used_annual_days || 0}/{employeeLeaveData.leave_types.annual_days || 0}일 사용
+                          <span className="text-green-600 ml-2">
+                            (잔여 {(employeeLeaveData.leave_types.annual_days || 0) - (employeeLeaveData.leave_types.used_annual_days || 0)}일)
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-blue-800">
+                          <strong>병가:</strong> {employeeLeaveData.leave_types.used_sick_days || 0}/{employeeLeaveData.leave_types.sick_days || 0}일 사용
+                          <span className="text-green-600 ml-2">
+                            (잔여 {(employeeLeaveData.leave_types.sick_days || 0) - (employeeLeaveData.leave_types.used_sick_days || 0)}일)
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="flex flex-col space-y-2 ml-4">
@@ -979,97 +1068,6 @@ export default function AdminEmployeeManagement() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">가족돌봄휴가 총 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.family_care_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, family_care_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">가족돌봄휴가 사용 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.used_family_care_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, used_family_care_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">출산휴가 총 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.maternity_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, maternity_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">출산휴가 사용 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.used_maternity_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, used_maternity_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">배우자 출산휴가 총 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.paternity_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, paternity_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">배우자 출산휴가 사용 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.used_paternity_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, used_paternity_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">특별휴가 총 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.special_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, special_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">특별휴가 사용 일수</label>
-                    <input
-                      type="number"
-                      value={leaveFormData.used_special_days}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, used_special_days: parseInt(e.target.value) || 0})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                      min="0"
-                    />
-                  </div>
-                </div>
 
                 <div className="flex justify-end space-x-2 mt-6">
                   <button

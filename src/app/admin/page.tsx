@@ -11,6 +11,7 @@ import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
+import AdminLeavePromotion from '@/components/AdminLeavePromotion'
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null)
@@ -103,6 +104,7 @@ export default function AdminDashboard() {
             <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-gray-200">관리자 기능</h2>
             <div className="space-y-6">
                 <AdminEmployeeManagement />
+                <AdminLeavePromotion />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
                 <ServiceAccountCalendarManager />
