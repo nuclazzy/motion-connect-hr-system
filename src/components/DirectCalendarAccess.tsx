@@ -12,8 +12,14 @@ interface CalendarInfo {
 interface CalendarEvent {
   id: string
   summary: string
-  start: any
-  end: any
+  start: {
+    dateTime?: string
+    date?: string
+  }
+  end: {
+    dateTime?: string
+    date?: string
+  }
   description?: string
   location?: string
 }
@@ -269,7 +275,7 @@ export default function DirectCalendarAccess() {
                   <li>캘린더 ID를 사용하여 특정 캘린더에 직접 접근</li>
                   <li>Service Account가 해당 캘린더에 공유 권한이 있어야 함</li>
                   <li>이벤트 읽기, 쓰기, 수정, 삭제 권한 필요</li>
-                  <li>공유 권한: "변경 및 공유 관리" 또는 "이벤트 세부정보 보기 및 수정"</li>
+                  <li>공유 권한: &quot;변경 및 공유 관리&quot; 또는 &quot;이벤트 세부정보 보기 및 수정&quot;</li>
                 </ul>
               </div>
             </div>

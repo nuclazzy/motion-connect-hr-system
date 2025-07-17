@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
+// import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 
 interface Employee {
   id: string
