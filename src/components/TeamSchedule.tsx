@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
-import { getCalendarsForFeature } from '@/lib/calendarMappings'
 interface Meeting {
   id: string
   created_by: string
@@ -62,12 +61,16 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
 
   const fetchCalendarConfigs = async () => {
     try {
-      // 팀 일정 기능에 연결된 캘린더들만 가져오기 (사용자의 부서 기준)
-      const mappings = await getCalendarsForFeature('team-schedule', user.department)
-      const configs = mappings.map(mapping => 
-        'calendar_config' in mapping ? mapping.calendar_config : mapping
-      )
-      setCalendarConfigs(configs)
+      // Service Account 기반 캘린더 설정 조회 (사용자의 부서 기준)
+      const { data, error } = await supabase
+        .from('calendar_configs')
+        .select('*')
+        .eq('config_type', 'team')
+        .eq('target_name', user.department)
+        .eq('is_active', true)
+      
+      if (error) throw error
+      setCalendarConfigs(data || [])
     } catch (error) {
       console.error('팀 일정 캘린더 설정 조회 오류:', error)
     }

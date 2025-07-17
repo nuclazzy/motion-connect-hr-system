@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
-import { getCalendarsForFeature } from '@/lib/calendarMappings'
+import { supabase } from '@/lib/supabase'
 
 interface CalendarConfig {
   id: string
@@ -35,16 +35,20 @@ export default function InternalMeeting({ }: InternalMeetingProps) {
 
   const fetchCalendarConfigs = async () => {
     try {
-      // 내부 회의 기능에 연결된 캘린더들만 가져오기
-      const mappings = await getCalendarsForFeature('internal-meeting')
-      const configs = mappings.map(mapping => 
-        'calendar_config' in mapping ? mapping.calendar_config : mapping
-      )
-      console.log('내부 회의 연결된 캘린더 수:', configs.length)
-      if (configs.length === 0) {
+      // Service Account 기반 캘린더 설정 조회
+      const { data, error } = await supabase
+        .from('calendar_configs')
+        .select('*')
+        .eq('config_type', 'function')
+        .eq('target_name', 'internal-meeting')
+        .eq('is_active', true)
+      
+      if (error) throw error
+      console.log('내부 회의 연결된 캘린더 수:', data?.length || 0)
+      if ((data?.length || 0) === 0) {
         console.log('내부 회의에 연결된 캘린더가 없습니다. 관리자가 캘린더를 연결해주세요.')
       }
-      setCalendarConfigs(configs)
+      setCalendarConfigs(data || [])
     } catch (error) {
       console.error('내부 회의 캘린더 설정 조회 오류:', error)
     }
