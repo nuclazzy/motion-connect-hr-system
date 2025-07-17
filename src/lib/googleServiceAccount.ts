@@ -7,15 +7,14 @@ class GoogleServiceAccountClient {
 
   constructor() {
     // Service Account 인증 설정
-    this.auth = new google.auth.JWT(
-      process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-      undefined,
-      process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      [
+    this.auth = new google.auth.JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      scopes: [
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/calendar.events'
       ]
-    );
+    });
 
     this.calendar = google.calendar({ version: 'v3', auth: this.auth });
   }
