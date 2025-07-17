@@ -92,7 +92,10 @@ export default function AdminLeaveManagement() {
       const response = await fetch('/api/admin/leave-data')
       const result = await response.json()
 
+      console.log('API Response:', result)
+
       if (result.success) {
+        console.log('Leave data received:', result.data)
         setLeaveData(result.data || [])
       } else {
         console.error('휴가 데이터 조회 실패:', result.error)
@@ -451,11 +454,45 @@ export default function AdminLeaveManagement() {
     )
   }
 
+  // 휴가 데이터가 없으면 초기화 안내 표시
+  if (leaveData.length === 0) {
+    return (
+      <div className="bg-white overflow-hidden shadow rounded-lg">
+        <div className="p-5">
+          <div className="text-center">
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">휴가 데이터가 없습니다</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              직원들의 휴가 데이터를 초기화해주세요.
+            </p>
+            <div className="mt-6">
+              <button
+                onClick={handleInitializeLeaveData}
+                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+              >
+                휴가 데이터 초기화
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // 퇴사자와 재직자 구분
   const activeEmployees = leaveData.filter(emp => !emp.user?.termination_date || new Date(emp.user.termination_date) > new Date())
   const retiredEmployees = leaveData.filter(emp => emp.user?.termination_date && new Date(emp.user.termination_date) <= new Date())
   
   const displayEmployees = showActiveOnly ? activeEmployees : retiredEmployees
+  
+  // 디버그 로그
+  console.log('LeaveData:', leaveData)
+  console.log('ActiveEmployees:', activeEmployees)
+  console.log('RetiredEmployees:', retiredEmployees)
+  console.log('ShowActiveOnly:', showActiveOnly)
+  console.log('DisplayEmployees:', displayEmployees)
   
   const totalEmployees = activeEmployees.length
   const averageUsage = activeEmployees.length > 0 
