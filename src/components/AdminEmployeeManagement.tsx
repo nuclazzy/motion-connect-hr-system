@@ -38,7 +38,6 @@ interface LeaveData {
     special_days?: number
     used_special_days?: number
   }
-  year: number
 }
 
 export default function AdminEmployeeManagement() {
@@ -128,17 +127,16 @@ export default function AdminEmployeeManagement() {
 
   const handleLeaveAdjustment = async (employee: Employee) => {
     try {
-      // 직원의 휴가 데이터 조회
+      // 직원의 휴가 데이터 조회 (year 필드 제거)
       const { data: leaveData, error } = await supabase
         .from('leave_days')
         .select('*')
         .eq('user_id', employee.id)
-        .eq('year', new Date().getFullYear())
         .single()
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching leave data:', error)
-        alert('휴가 데이터를 불러오는 중 오류가 발생했습니다.')
+        alert(`휴가 데이터를 불러오는 중 오류가 발생했습니다: ${error.message}`)
         return
       }
 
@@ -160,8 +158,7 @@ export default function AdminEmployeeManagement() {
             used_paternity_days: 0,
             special_days: 5,
             used_special_days: 0
-          },
-          year: new Date().getFullYear()
+          }
         }
 
         const { data: insertedData, error: insertError } = await supabase
@@ -177,10 +174,36 @@ export default function AdminEmployeeManagement() {
         }
 
         setSelectedEmployeeLeave(insertedData)
-        setLeaveFormData(insertedData.leave_types)
+        setLeaveFormData({
+          annual_days: insertedData.leave_types.annual_days || 0,
+          used_annual_days: insertedData.leave_types.used_annual_days || 0,
+          sick_days: insertedData.leave_types.sick_days || 0,
+          used_sick_days: insertedData.leave_types.used_sick_days || 0,
+          family_care_days: insertedData.leave_types.family_care_days || 0,
+          used_family_care_days: insertedData.leave_types.used_family_care_days || 0,
+          maternity_days: insertedData.leave_types.maternity_days || 0,
+          used_maternity_days: insertedData.leave_types.used_maternity_days || 0,
+          paternity_days: insertedData.leave_types.paternity_days || 0,
+          used_paternity_days: insertedData.leave_types.used_paternity_days || 0,
+          special_days: insertedData.leave_types.special_days || 0,
+          used_special_days: insertedData.leave_types.used_special_days || 0
+        })
       } else {
         setSelectedEmployeeLeave(leaveData)
-        setLeaveFormData(leaveData.leave_types)
+        setLeaveFormData({
+          annual_days: leaveData.leave_types.annual_days || 0,
+          used_annual_days: leaveData.leave_types.used_annual_days || 0,
+          sick_days: leaveData.leave_types.sick_days || 0,
+          used_sick_days: leaveData.leave_types.used_sick_days || 0,
+          family_care_days: leaveData.leave_types.family_care_days || 0,
+          used_family_care_days: leaveData.leave_types.used_family_care_days || 0,
+          maternity_days: leaveData.leave_types.maternity_days || 0,
+          used_maternity_days: leaveData.leave_types.used_maternity_days || 0,
+          paternity_days: leaveData.leave_types.paternity_days || 0,
+          used_paternity_days: leaveData.leave_types.used_paternity_days || 0,
+          special_days: leaveData.leave_types.special_days || 0,
+          used_special_days: leaveData.leave_types.used_special_days || 0
+        })
       }
 
       setSelectedEmployee(employee)
