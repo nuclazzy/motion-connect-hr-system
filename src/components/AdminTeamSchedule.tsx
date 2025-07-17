@@ -61,7 +61,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
-  const [selectedMeetingType, setSelectedMeetingType] = useState<'external' | 'internal'>('external')
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [formData, setFormData] = useState<FormData>({
@@ -261,7 +260,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
       const { data: meetingData, error } = await supabase
         .from('meetings')
         .insert([{
-          meeting_type: selectedMeetingType,
+          meeting_type: 'external',
           title: formData.title,
           date: formData.date,
           time: formData.time || '00:00',
@@ -522,18 +521,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">일정 유형</label>
-                  <select
-                    value={selectedMeetingType}
-                    onChange={(e) => setSelectedMeetingType(e.target.value as 'external' | 'internal')}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  >
-                    <option value="external">외부 미팅/답사</option>
-                    <option value="internal">내부 회의/면담</option>
-                  </select>
-                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">등록할 캘린더</label>
@@ -585,14 +572,14 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    장소 {selectedMeetingType === 'internal' && <span className="text-gray-500">(선택사항)</span>}
+                    장소
                   </label>
                   <input
                     type="text"
                     value={formData.location}
                     onChange={(e) => setFormData({...formData, location: e.target.value})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder={selectedMeetingType === 'external' ? '미팅 장소를 입력하세요' : '회의실 또는 장소 (선택사항)'}
+                    placeholder="미팅 장소를 입력하세요"
                   />
                 </div>
 

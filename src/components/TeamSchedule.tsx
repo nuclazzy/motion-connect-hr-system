@@ -49,7 +49,6 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
-  const [selectedMeetingType, setSelectedMeetingType] = useState<'external' | 'internal'>('external')
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [formData, setFormData] = useState({
@@ -57,7 +56,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
     date: '',
     time: '',
     location: '',
-    description: ''
+    description: '',
+    targetCalendar: ''
   })
 
   const fetchCalendarConfigs = async () => {
@@ -295,7 +295,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
       const { data: meetingData, error } = await supabase
         .from('meetings')
         .insert([{
-          meeting_type: selectedMeetingType,
+          meeting_type: 'external',
           title: formData.title,
           date: formData.date,
           time: formData.time || '00:00',
@@ -315,9 +315,9 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
       // Google Calendar 동기화 (선택사항)
       if (calendarConfigs.length > 0 && confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')) {
         try {
-          // 사용자 부서의 첫 번째 캘린더 사용 (own 캘린더 우선)
+          // 선택된 캘린더 또는 사용자 부서의 첫 번째 캘린더 사용 (own 캘린더 우선)
           const departmentCalendars = getDepartmentCalendars(user.department)
-          const primaryCalendarId = departmentCalendars.own[0] || departmentCalendars.others[0]
+          const primaryCalendarId = formData.targetCalendar || departmentCalendars.own[0] || departmentCalendars.others[0]
           
           if (primaryCalendarId) {
             const eventData = {
@@ -375,7 +375,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
         date: '',
         time: '',
         location: '',
-        description: ''
+        description: '',
+        targetCalendar: ''
       })
       fetchMeetings() // 목록 새로고침
       if (calendarConfigs.length > 0) {
@@ -469,7 +470,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
               onClick={() => setShowAddForm(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
             >
-              팀 일정 추가
+{user.department} 일정 추가
             </button>
           </div>
         </div>
@@ -679,21 +680,32 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">팀 일정 추가</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">{user.department} 일정 추가</h3>
               
               <form onSubmit={handleSubmitMeeting} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">일정 유형</label>
-                  <select
-                    value={selectedMeetingType}
-                    onChange={(e) => setSelectedMeetingType(e.target.value as 'external' | 'internal')}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  >
-                    <option value="external">외부 미팅/답사</option>
-                    <option value="internal">내부 회의/면담</option>
-                  </select>
-                </div>
+
+                {(() => {
+                  const departmentCalendars = getDepartmentCalendars(user.department)
+                  const ownCalendars = departmentCalendars.own
+                  return ownCalendars.length > 1 && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">등록할 캘린더</label>
+                      <select
+                        value={formData.targetCalendar}
+                        onChange={(e) => setFormData({...formData, targetCalendar: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      >
+                        <option value="">캘린더를 선택하세요</option>
+                        {ownCalendars.map(calendarId => (
+                          <option key={calendarId} value={calendarId}>
+                            {CALENDAR_NAMES[calendarId as keyof typeof CALENDAR_NAMES]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )
+                })()}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">제목</label>
@@ -730,14 +742,14 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
-                    장소 {selectedMeetingType === 'internal' && <span className="text-gray-500">(선택사항)</span>}
+                    장소
                   </label>
                   <input
                     type="text"
                     value={formData.location}
                     onChange={(e) => setFormData({...formData, location: e.target.value})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder={selectedMeetingType === 'external' ? '미팅 장소를 입력하세요' : '회의실 또는 장소 (선택사항)'}
+                    placeholder="미팅 장소를 입력하세요"
                   />
                 </div>
 

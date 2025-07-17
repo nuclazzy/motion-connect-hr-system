@@ -334,7 +334,7 @@ export default function AdminWeeklySchedule({ user }: AdminWeeklyScheduleProps) 
               </svg>
             </div>
             <div className="ml-5">
-              <h3 className="text-lg font-medium text-gray-900">이번 주 일정</h3>
+              <h3 className="text-lg font-medium text-gray-900">이번주 미팅 및 답사일정</h3>
               <p className="text-sm text-gray-500">외부 미팅 및 내부 회의 관리</p>
             </div>
           </div>
@@ -421,14 +421,15 @@ export default function AdminWeeklySchedule({ user }: AdminWeeklyScheduleProps) 
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded truncate ${
+                          className={`text-xs p-1 rounded break-words ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                               : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                           }`}
                           title={`${meeting.title} (${meeting.user?.department})`}
                         >
-                          [{meeting.user?.department}] {meeting.title}
+                          <div className="font-medium">[{meeting.user?.department}]</div>
+                          <div>{meeting.title}</div>
                         </div>
                       ))}
                       
@@ -436,14 +437,15 @@ export default function AdminWeeklySchedule({ user }: AdminWeeklyScheduleProps) 
                       {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
                         <div 
                           key={`cal-${event.id}-${idx}`}
-                          className={`text-xs p-1 rounded truncate ${
+                          className={`text-xs p-1 rounded break-words ${
                             event.calendarName.includes('외부') 
                               ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500'
                               : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
                           }`}
                           title={`${event.title} (${event.calendarName})`}
                         >
-                          [{event.calendarName}] {event.title}
+                          <div className="font-medium">[{event.calendarName}]</div>
+                          <div>{event.title}</div>
                         </div>
                       ))}
                       

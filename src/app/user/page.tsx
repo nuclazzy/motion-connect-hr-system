@@ -454,7 +454,7 @@ export default function UserDashboard() {
                     <div className="ml-5 w-0 flex-1">
                       <dl>
                         <dt className="text-sm font-medium text-gray-500 truncate">
-                          주간 미팅/답사 일정
+                          이번주 미팅 및 답사일정
                         </dt>
                         <dd className="text-lg font-medium text-gray-900">
                           이번 주 일정

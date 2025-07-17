@@ -44,7 +44,9 @@ export default function AdminLeavePromotion() {
     startDate: '',
     endDate: '',
     description: '',
-    days: 1
+    days: 1,
+    isHalfDay: false,
+    halfDayType: 'morning'
   })
 
   useEffect(() => {
@@ -164,7 +166,7 @@ export default function AdminLeavePromotion() {
 
       const startDate = new Date(leaveFormData.startDate)
       const endDate = new Date(leaveFormData.endDate)
-      const daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+      const daysDifference = leaveFormData.isHalfDay ? 0.5 : Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
 
       // 휴가 유형 결정
       const finalLeaveType = leaveFormData.leaveType === 'custom' ? leaveFormData.customLeaveType : leaveFormData.leaveType
@@ -172,11 +174,14 @@ export default function AdminLeavePromotion() {
                               finalLeaveType === 'sick' ? '병가' :
                               finalLeaveType === 'personal' ? '개인사유' :
                               finalLeaveType === 'family' ? '경조사' : finalLeaveType
+      
+      // 반차 표시
+      const halfDayDisplay = leaveFormData.isHalfDay ? ` (${leaveFormData.halfDayType === 'morning' ? '오전' : '오후'} 반차)` : ''
 
       // 1. Google Calendar에 휴가 일정 추가
       const calendarEventData = {
-        summary: `${selectedEmployeeData.employee.name} - ${displayLeaveType}`,
-        description: leaveFormData.description || `${selectedEmployeeData.employee.name}님의 ${displayLeaveType} (${daysDifference}일)`,
+        summary: `${selectedEmployeeData.employee.name} - ${displayLeaveType}${halfDayDisplay}`,
+        description: leaveFormData.description || `${selectedEmployeeData.employee.name}님의 ${displayLeaveType}${halfDayDisplay} (${daysDifference}일)`,
         start: {
           date: leaveFormData.startDate,
           timeZone: 'Asia/Seoul'
@@ -243,7 +248,7 @@ export default function AdminLeavePromotion() {
         console.error('휴가 기록 저장 실패:', logError)
       }
 
-      alert(`${selectedEmployeeData.employee.name}님의 ${displayLeaveType} (${daysDifference}일)이 성공적으로 등록되었습니다.`)
+      alert(`${selectedEmployeeData.employee.name}님의 ${displayLeaveType}${halfDayDisplay} (${daysDifference}일)이 성공적으로 등록되었습니다.`)
       
       // 폼 초기화 및 모달 닫기
       setLeaveFormData({
@@ -253,7 +258,9 @@ export default function AdminLeavePromotion() {
         startDate: '',
         endDate: '',
         description: '',
-        days: 1
+        days: 1,
+        isHalfDay: false,
+        halfDayType: 'morning'
       })
       setShowLeaveEntryForm(false)
       
@@ -586,13 +593,40 @@ export default function AdminLeavePromotion() {
                   </div>
                 )}
 
+                <div>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={leaveFormData.isHalfDay}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, isHalfDay: e.target.checked, endDate: e.target.checked ? leaveFormData.startDate : leaveFormData.endDate})}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm text-gray-700">반차</span>
+                  </label>
+                </div>
+
+                {leaveFormData.isHalfDay && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">반차 유형</label>
+                    <select
+                      value={leaveFormData.halfDayType}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, halfDayType: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required
+                    >
+                      <option value="morning">오전 반차</option>
+                      <option value="afternoon">오후 반차</option>
+                    </select>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">시작일</label>
                     <input
                       type="date"
                       value={leaveFormData.startDate}
-                      onChange={(e) => setLeaveFormData({...leaveFormData, startDate: e.target.value})}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, startDate: e.target.value, endDate: leaveFormData.isHalfDay ? e.target.value : leaveFormData.endDate})}
                       className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       required
                     />
@@ -604,6 +638,7 @@ export default function AdminLeavePromotion() {
                       value={leaveFormData.endDate}
                       onChange={(e) => setLeaveFormData({...leaveFormData, endDate: e.target.value})}
                       className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      disabled={leaveFormData.isHalfDay}
                       required
                     />
                   </div>
@@ -641,7 +676,9 @@ export default function AdminLeavePromotion() {
                         startDate: '',
                         endDate: '',
                         description: '',
-                        days: 1
+                        days: 1,
+                        isHalfDay: false,
+                        halfDayType: 'morning'
                       })
                     }}
                     className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
