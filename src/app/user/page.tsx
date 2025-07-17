@@ -441,8 +441,8 @@ export default function UserDashboard() {
               </div>
             )}
 
-            {/* 주간 미팅/답사 일정 위젯 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
+            {/* 이번주 미팅 및 답사일정 */}
+            <div className="bg-white overflow-hidden shadow rounded-lg col-span-full">
               <div className="p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -451,51 +451,28 @@ export default function UserDashboard() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
                     </div>
-                    <div className="ml-5 w-0 flex-1">
-                      <dl>
-                        <dt className="text-sm font-medium text-gray-500 truncate">
-                          이번주 미팅 및 답사일정
-                        </dt>
-                        <dd className="text-lg font-medium text-gray-900">
-                          이번 주 일정
-                        </dd>
-                      </dl>
+                    <div className="ml-5">
+                      <h3 className="text-lg font-medium text-gray-900">이번주 미팅 및 답사일정</h3>
+                      <p className="text-sm text-gray-500">외부 미팅 및 내부 회의 관리</p>
                     </div>
                   </div>
-                  <div>
+                  <div className="flex space-x-2">
                     <button
                       onClick={() => setShowMeetingForm(true)}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm font-medium"
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
                     >
-                      일정 추가
+                      일정 등록
                     </button>
                   </div>
                 </div>
-                <div className="mt-3 space-y-2">
-                  <FieldTrip user={user} />
-                  <InternalMeeting user={user} />
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3 space-y-2">
-                <div className="text-sm">
-                  <a 
-                    href="https://script.google.com/a/motionsense.co.kr/s/AKfycbyoQOklsqQnQHSs2TFv5sjhsRtN3QrOV5h1T5gQXnK94j7S26H8qTb1qGCJHqJZlYv5/exec"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block"
-                  >
-                    외부 미팅/답사 등록
-                  </a>
-                </div>
-                <div className="text-sm">
-                  <a 
-                    href="https://script.google.com/a/motionsense.co.kr/s/AKfycbzpRJZMSwPqXTdxBuklrsGwSV4dRLKkyCaMLZR6sRZLEq4kSJFSFe1s0aJZD0U9IVLe/exec"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block"
-                  >
-                    내부 회의/면담 등록
-                  </a>
+
+                <div className="mt-6 space-y-6 p-4">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <div className="space-y-2">
+                      <FieldTrip user={user} />
+                      <InternalMeeting user={user} />
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

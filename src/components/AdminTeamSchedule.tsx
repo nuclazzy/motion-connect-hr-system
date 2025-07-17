@@ -462,14 +462,15 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded truncate ${
+                          className={`text-xs p-1 rounded break-words ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                               : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                           }`}
                           title={`${meeting.title} (${meeting.user?.department})`}
                         >
-                          [{meeting.user?.department}] {meeting.title}
+                          <div className="font-medium">[{meeting.user?.department}]</div>
+                          <div>{meeting.title}</div>
                         </div>
                       ))}
                       
@@ -477,10 +478,11 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                       {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
                         <div 
                           key={`cal-${event.id}-${idx}`}
-                          className="text-xs p-1 rounded truncate bg-green-100 text-green-800 border-l-2 border-green-500"
+                          className="text-xs p-1 rounded break-words bg-green-100 text-green-800 border-l-2 border-green-500"
                           title={`${event.title} (${event.calendarName})`}
                         >
-                          [{event.calendarName}] {event.title}
+                          <div className="font-medium">[{event.calendarName}]</div>
+                          <div>{event.title}</div>
                         </div>
                       ))}
                       

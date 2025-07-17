@@ -533,7 +533,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded truncate ${
+                          className={`text-xs p-1 rounded break-words ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                               : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
@@ -553,7 +553,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                         .map((event, idx) => (
                           <div 
                             key={`cal-${event.id}-${idx}`}
-                            className="text-xs p-1 rounded truncate bg-green-100 text-green-800 border-l-2 border-green-500"
+                            className="text-xs p-1 rounded break-words bg-green-100 text-green-800 border-l-2 border-green-500"
                             title={`${event.title} (${event.calendarName})`}
                           >
                             {event.title}
@@ -631,7 +631,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {otherTeamMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded truncate ${
+                          className={`text-xs p-1 rounded break-words ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500' 
                               : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
@@ -651,7 +651,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                         .map((event, idx) => (
                           <div 
                             key={`cal-other-${event.id}-${idx}`}
-                            className="text-xs p-1 rounded truncate bg-gray-100 text-gray-800 border-l-2 border-gray-500"
+                            className="text-xs p-1 rounded break-words bg-gray-100 text-gray-800 border-l-2 border-gray-500"
                             title={`${event.title} (${event.calendarName})`}
                           >
                             [{event.calendarName}] {event.title}
