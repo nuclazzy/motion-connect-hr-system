@@ -67,9 +67,16 @@ export const getCurrentYearRange = () => {
 };
 
 // 부서별 캘린더 가져오기
-export const getDepartmentCalendars = (department: string) => {
-  return DEPARTMENT_CALENDAR_MAPPING[department as keyof typeof DEPARTMENT_CALENDAR_MAPPING] || {
-    own: [],
-    others: []
+export const getDepartmentCalendars = (department: string): { own: string[]; others: string[] } => {
+  const mapping = DEPARTMENT_CALENDAR_MAPPING[department as keyof typeof DEPARTMENT_CALENDAR_MAPPING];
+  if (mapping) {
+    return {
+      own: [...mapping.own],
+      others: [...mapping.others]
+    };
+  }
+  return {
+    own: [] as string[],
+    others: [] as string[]
   };
 };

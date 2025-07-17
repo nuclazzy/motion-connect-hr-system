@@ -547,7 +547,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {showCalendarEvents && dayEvents.calendarEvents
                         .filter(event => {
                           const departmentCalendars = getDepartmentCalendars(user.department)
-                          return departmentCalendars.own.includes(event.calendarId || '')
+                          return departmentCalendars.own.includes(event.calendarId as string)
                         })
                         .map((event, idx) => (
                           <div 
@@ -561,7 +561,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       
                       {dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.filter(event => {
                         const departmentCalendars = getDepartmentCalendars(user.department)
-                        return departmentCalendars.own.includes(event.calendarId || '')
+                        return departmentCalendars.own.includes(event.calendarId as string)
                       }).length === 0) && (
                         <div className="text-xs text-gray-400 text-center pt-8">
                           일정 없음
@@ -645,7 +645,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {showCalendarEvents && dayEvents.calendarEvents
                         .filter(event => {
                           const departmentCalendars = getDepartmentCalendars(user.department)
-                          return departmentCalendars.others.includes(event.calendarId || '')
+                          return departmentCalendars.others.includes(event.calendarId as string)
                         })
                         .map((event, idx) => (
                           <div 

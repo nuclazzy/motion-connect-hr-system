@@ -44,6 +44,16 @@ interface AdminTeamScheduleProps {
   user: User
 }
 
+interface FormData {
+  title: string
+  date: string
+  time: string
+  location: string
+  description: string
+  created_by: string
+  targetCalendar: string
+}
+
 export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
@@ -54,14 +64,14 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [selectedMeetingType, setSelectedMeetingType] = useState<'external' | 'internal'>('external')
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     title: '',
     date: '',
     time: '',
     location: '',
     description: '',
     created_by: user.id, // 기본값은 관리자 자신
-    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' as string // 기본 캘린더 설정
+    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' // 기본 캘린더 설정
   })
 
   const fetchCalendarConfigs = useCallback(async () => {
@@ -323,7 +333,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
         location: '',
         description: '',
         created_by: user.id,
-        targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' as string
+        targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
       })
       fetchMeetings()
       fetchCalendarEvents()
@@ -529,7 +539,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                   <label className="block text-sm font-medium text-gray-700">등록할 캘린더</label>
                   <select
                     value={formData.targetCalendar}
-                    onChange={(e) => setFormData({...formData, targetCalendar: e.target.value as string})}
+                    onChange={(e) => setFormData({...formData, targetCalendar: e.target.value})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     required
                   >
