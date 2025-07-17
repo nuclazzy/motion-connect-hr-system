@@ -9,8 +9,7 @@ import LeaveManagement from '@/components/LeaveManagement'
 import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 import UserFormManagement from '@/components/UserFormManagement'
-import InternalMeeting from '@/components/InternalMeeting'
-import FieldTrip from '@/components/FieldTrip'
+import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import { ADMIN_WEEKLY_CALENDARS } from '@/lib/calendarMapping'
 
 interface ReviewLink {
@@ -466,14 +465,7 @@ export default function UserDashboard() {
                   </div>
                 </div>
 
-                <div className="mt-6 space-y-6 p-4">
-                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="space-y-2">
-                      <FieldTrip user={user} />
-                      <InternalMeeting user={user} />
-                    </div>
-                  </div>
-                </div>
+                <UserWeeklySchedule user={user} />
               </div>
             </div>
 
