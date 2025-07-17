@@ -1,37 +1,51 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
+import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave';
 
 export async function POST() {
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing environment variables'
-      });
+    const supabase = await createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, error: 'Not authenticated' },
+        { status: 401 }
+      );
     }
 
-    const supabase = createClient(supabaseUrl, serviceKey);
+    // 관리자 권한 확인
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
 
-    // 먼저 기존 사용자들 확인
+    if (!userData || userData.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, error: 'Admin access required' },
+        { status: 403 }
+      );
+    }
+
+    // 모든 사용자 가져오기
     const { data: users, error: usersError } = await supabase
       .from('users')
       .select('id, name, department, position, hire_date')
       .order('name');
 
     if (usersError) {
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to fetch users: ' + usersError.message
-      });
+      console.error('사용자 조회 실패:', usersError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to fetch users' },
+        { status: 500 }
+      );
     }
 
     if (!users || users.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'No users found in database'
+        error: 'No users found'
       });
     }
 
@@ -46,16 +60,7 @@ export async function POST() {
     const newLeaveData = users
       .filter(user => !existingUserIds.has(user.id))
       .map(user => {
-        // 입사일 기준으로 연차 계산
-        const hireDate = new Date(user.hire_date);
-        const currentDate = new Date();
-        const yearsWorked = Math.floor((currentDate.getTime() - hireDate.getTime()) / (365 * 24 * 60 * 60 * 1000));
-        
-        // 연차 계산 (1년차: 15일, 3년차부터 매년 1일씩 증가, 최대 25일)
-        let annualDays = 15;
-        if (yearsWorked >= 3) {
-          annualDays = Math.min(15 + (yearsWorked - 1), 25);
-        }
+        const annualDays = user.hire_date ? calculateAnnualLeave(user.hire_date) : 15;
 
         return {
           user_id: user.id,
@@ -73,7 +78,7 @@ export async function POST() {
             special_days: 5,
             used_special_days: 0
           },
-          year: currentDate.getFullYear(),
+          year: new Date().getFullYear(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
@@ -92,13 +97,17 @@ export async function POST() {
     const { data: insertedData, error: insertError } = await supabase
       .from('leave_days')
       .insert(newLeaveData)
-      .select();
+      .select(`
+        *,
+        user:users(name, department, position, termination_date)
+      `);
 
     if (insertError) {
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to insert leave data: ' + insertError.message
-      });
+      console.error('휴가 데이터 삽입 실패:', insertError);
+      return NextResponse.json(
+        { success: false, error: 'Failed to initialize leave data' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -113,7 +122,7 @@ export async function POST() {
   } catch (error) {
     console.error('Error initializing leave data:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error: ' + (error as Error).message },
+      { success: false, error: 'Internal server error' },
       { status: 500 }
     );
   }

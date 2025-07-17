@@ -213,20 +213,28 @@ export default function AdminLeaveManagement() {
     if (!editingLeave) return
     
     try {
-      const { error } = await supabase
-        .from('leave_days')
-        .update({ leave_types: editForm })
-        .eq('id', editingLeave.id)
-        
-      if (error) {
-        console.error('휴가 수정 실패:', error)
-        alert('휴가 수정에 실패했습니다.')
-      } else {
+      const response = await fetch('/api/admin/leave-data/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: editingLeave.user_id,
+          leave_types: editForm
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
         alert('휴가 정보가 수정되었습니다.')
         setEditingLeave(null)
         fetchLeaveData()
         fetchPromotionData() // 촉진 데이터도 업데이트
         setSelectedEmployee(null)
+      } else {
+        console.error('휴가 수정 실패:', result.error)
+        alert('휴가 수정에 실패했습니다.')
       }
     } catch (error) {
       console.error('휴가 수정 오류:', error)
@@ -294,6 +302,34 @@ export default function AdminLeaveManagement() {
     } catch (error) {
       console.error('연차 촉진 안내 발송 오류:', error)
       alert('안내 발송에 실패했습니다.')
+    }
+  }
+
+  const handleInitializeLeaveData = async () => {
+    try {
+      const confirmed = confirm('휴가 데이터가 없는 직원들을 위해 초기 휴가 데이터를 생성하시겠습니까?')
+      
+      if (confirmed) {
+        const response = await fetch('/api/admin/leave-data/initialize', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        const result = await response.json()
+        
+        if (result.success) {
+          alert(`휴가 데이터 초기화 완료: ${result.new_leave_count}명의 직원에게 휴가 데이터가 생성되었습니다.`)
+          fetchLeaveData()
+          fetchPromotionData()
+        } else {
+          alert('휴가 데이터 초기화에 실패했습니다: ' + result.error)
+        }
+      }
+    } catch (error) {
+      console.error('휴가 데이터 초기화 오류:', error)
+      alert('오류가 발생했습니다.')
     }
   }
   
@@ -475,6 +511,14 @@ export default function AdminLeaveManagement() {
                 className="font-medium text-red-600 hover:text-red-500"
               >
                 연차 촉진 {legalRequiredEmployees.length}건 {showPromotion ? '숨기기' : '보기'}
+              </button>
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleInitializeLeaveData}
+                className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-700"
+              >
+                휴가 데이터 초기화
               </button>
             </div>
           </div>
