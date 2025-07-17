@@ -332,49 +332,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
       alert('일정 등록 중 오류가 발생했습니다.')
     }
   }
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              meeting: {
-                ...meetingData,
-                time: formData.time || '00:00'
-              },
-              calendarId: primaryCalendar.calendar_id
-            }),
-          })
-
-          const result = await response.json()
-          if (result.success) {
-            alert('미팅이 성공적으로 등록되고 Google Calendar에도 추가되었습니다!')
-          } else {
-            alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
-          }
-        } catch (calError) {
-          console.error('Google Calendar 동기화 오류:', calError)
-          alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
-        }
-      } else {
-        alert('미팅이 성공적으로 등록되었습니다!')
-      }
-
-      setShowAddForm(false)
-      setFormData({
-        title: '',
-        date: '',
-        time: '',
-        location: '',
-        description: '',
-        created_by: user.id
-      })
-      fetchMeetings() // 목록 새로고침
-      if (calendarConfigs.length > 0) {
-        fetchCalendarEvents() // 캘린더 이벤트도 새로고침
-      }
-    } catch (error) {
-      console.error('미팅 등록 오류:', error)
-      alert('미팅 등록 중 오류가 발생했습니다.')
-    }
-  }
 
   const isToday = (date: Date) => {
     const today = new Date()
