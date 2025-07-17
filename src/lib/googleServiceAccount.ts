@@ -36,6 +36,25 @@ class GoogleServiceAccountClient {
     }
   }
 
+  // 특정 캘린더 정보 조회
+  async getCalendarInfo(calendarId: string) {
+    try {
+      const response = await this.calendar.calendars.get({
+        calendarId
+      });
+      return {
+        success: true,
+        calendar: response.data
+      };
+    } catch (error) {
+      console.error('캘린더 정보 조회 실패:', error);
+      return {
+        success: false,
+        error: (error as Error).message
+      };
+    }
+  }
+
   // 특정 캘린더의 이벤트 조회
   async getEvents(calendarId: string, timeMin?: string, timeMax?: string) {
     try {

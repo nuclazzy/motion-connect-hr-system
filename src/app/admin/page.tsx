@@ -12,6 +12,7 @@ import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 import AdminLeavePromotion from '@/components/AdminLeavePromotion'
+import DirectCalendarAccess from '@/components/DirectCalendarAccess'
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null)
@@ -108,6 +109,7 @@ export default function AdminDashboard() {
                 <AdminFormManagement />
                 <AdminDocumentManagement />
                 <ServiceAccountCalendarManager />
+                <DirectCalendarAccess />
             </div>
           </div>
         </div>
