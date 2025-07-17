@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
-import { ADMIN_TEAM_CALENDARS, ADMIN_WEEKLY_CALENDARS, getCurrentYearRange } from '@/lib/calendarMapping'
+import { ADMIN_TEAM_CALENDARS, getCurrentYearRange } from '@/lib/calendarMapping'
 
 interface Meeting {
   id: string

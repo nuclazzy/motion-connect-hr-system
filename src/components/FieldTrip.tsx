@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
-import { supabase } from '@/lib/supabase'
 import { ADMIN_WEEKLY_CALENDARS } from '@/lib/calendarMapping'
 
 interface CalendarConfig {
