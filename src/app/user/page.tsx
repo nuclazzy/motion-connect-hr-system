@@ -10,7 +10,6 @@ import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
-import { ADMIN_WEEKLY_CALENDARS } from '@/lib/calendarMapping'
 
 interface ReviewLink {
   id: string
@@ -26,15 +25,6 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true)
   const [isPromotionTarget, setIsPromotionTarget] = useState(false)
   const [reviewLink, setReviewLink] = useState<ReviewLink | null>(null)
-  const [showMeetingForm, setShowMeetingForm] = useState(false)
-  const [meetingFormData, setMeetingFormData] = useState({
-    type: 'external',
-    title: '',
-    date: '',
-    time: '',
-    location: '',
-    description: ''
-  })
   const router = useRouter()
 
   useEffect(() => {
@@ -145,103 +135,6 @@ export default function UserDashboard() {
     }
   }
 
-  const handleMeetingSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    try {
-      // 1. Supabase에 미팅 기록 저장
-      const { data: meetingData, error } = await supabase
-        .from('meetings')
-        .insert([{
-          meeting_type: meetingFormData.type,
-          title: meetingFormData.title,
-          date: meetingFormData.date,
-          time: meetingFormData.time || '00:00',
-          location: meetingFormData.location,
-          description: meetingFormData.description,
-          created_by: user.id
-        }])
-        .select()
-        .single()
-
-      if (error) {
-        console.error('미팅 등록 실패:', error)
-        alert('미팅 등록에 실패했습니다.')
-        return
-      }
-
-      // 2. Google Calendar 동기화
-      if (confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')) {
-        try {
-          // 미팅 타입에 따라 캘린더 선택
-          const targetCalendar = ADMIN_WEEKLY_CALENDARS.find(cal => 
-            cal.type === meetingFormData.type
-          )
-          
-          if (targetCalendar) {
-            const eventData = {
-              summary: meetingFormData.title,
-              description: meetingFormData.description || `${user.name}님이 등록한 ${meetingFormData.type === 'external' ? '외부 미팅/답사' : '내부 회의/면담'}`,
-              location: meetingFormData.location,
-              start: {
-                dateTime: `${meetingFormData.date}T${meetingFormData.time || '00:00'}:00`,
-                timeZone: 'Asia/Seoul'
-              },
-              end: {
-                dateTime: `${meetingFormData.date}T${meetingFormData.time || '00:00'}:00`,
-                timeZone: 'Asia/Seoul'
-              }
-            }
-            
-            const response = await fetch('/api/calendar/create-event-direct', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                calendarId: targetCalendar.id,
-                eventData
-              }),
-            })
-
-            const result = await response.json()
-            if (result.success) {
-              // 미팅 레코드에 Google 이벤트 ID 저장
-              await supabase
-                .from('meetings')
-                .update({ google_event_id: result.event.id })
-                .eq('id', meetingData.id)
-              
-              alert('미팅이 성공적으로 등록되고 Google Calendar에도 추가되었습니다!')
-            } else {
-              console.error('캘린더 이벤트 생성 실패:', result.error)
-              alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
-            }
-          }
-        } catch (calError) {
-          console.error('Google Calendar 동기화 오류:', calError)
-          alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
-        }
-      } else {
-        alert('미팅이 성공적으로 등록되었습니다!')
-      }
-
-      // 폼 초기화 및 모달 닫기
-      setMeetingFormData({
-        type: 'external',
-        title: '',
-        date: '',
-        time: '',
-        location: '',
-        description: ''
-      })
-      setShowMeetingForm(false)
-      
-    } catch (error) {
-      console.error('미팅 등록 오류:', error)
-      alert('미팅 등록 중 오류가 발생했습니다.')
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -455,14 +348,6 @@ export default function UserDashboard() {
                       <p className="text-sm text-gray-500">외부 미팅 및 내부 회의 관리</p>
                     </div>
                   </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => setShowMeetingForm(true)}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
-                    >
-                      일정 등록
-                    </button>
-                  </div>
                 </div>
 
                 <UserWeeklySchedule user={user} />
@@ -577,123 +462,6 @@ export default function UserDashboard() {
         </div>
       </main>
 
-      {/* 미팅 등록 모달 */}
-      {showMeetingForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">미팅/답사 일정 등록</h3>
-              
-              <form onSubmit={handleMeetingSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">일정 유형</label>
-                  <select
-                    value={meetingFormData.type}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, type: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  >
-                    <option value="external">외부 미팅/답사</option>
-                    <option value="internal">내부 회의/면담</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">제목</label>
-                  <input
-                    type="text"
-                    value={meetingFormData.title}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, title: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="미팅/답사 제목을 입력하세요"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">날짜</label>
-                  <input
-                    type="date"
-                    value={meetingFormData.date}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, date: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">시간 (선택사항)</label>
-                  <input
-                    type="time"
-                    value={meetingFormData.time}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, time: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">
-                    장소 {meetingFormData.type === 'internal' && <span className="text-gray-500">(선택사항)</span>}
-                  </label>
-                  <input
-                    type="text"
-                    value={meetingFormData.location}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, location: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder={meetingFormData.type === 'external' ? '미팅 장소를 입력하세요' : '회의실 또는 장소 (선택사항)'}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">설명 (선택사항)</label>
-                  <textarea
-                    rows={3}
-                    value={meetingFormData.description}
-                    onChange={(e) => setMeetingFormData({...meetingFormData, description: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="미팅 내용이나 추가 정보를 입력하세요"
-                  />
-                </div>
-
-                <div className="bg-indigo-50 border border-indigo-200 rounded-md p-3">
-                  <p className="text-sm text-indigo-700">
-                    ℹ️ 등록된 일정은 팀 전체가 볼 수 있습니다.
-                  </p>
-                  <p className="text-xs text-indigo-600 mt-1">
-                    Google Calendar 동기화를 선택하면 해당 캘린더에도 일정이 추가됩니다.
-                  </p>
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMeetingForm(false)
-                      setMeetingFormData({
-                        type: 'external',
-                        title: '',
-                        date: '',
-                        time: '',
-                        location: '',
-                        description: ''
-                      })
-                    }}
-                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
-                  >
-                    등록
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )

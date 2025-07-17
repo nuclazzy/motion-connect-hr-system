@@ -10,8 +10,10 @@ interface Meeting {
   title: string
   meeting_type: 'external' | 'internal'
   date: string
+  time?: string
   location?: string
   description?: string
+  google_event_id?: string
   user?: {
     name: string
     department: string
@@ -49,6 +51,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
+  const [showEditForm, setShowEditForm] = useState(false)
+  const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [formData, setFormData] = useState({
@@ -292,84 +296,158 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
     e.preventDefault()
     
     try {
-      const { data: meetingData, error } = await supabase
-        .from('meetings')
-        .insert([{
-          meeting_type: 'external',
-          title: formData.title,
-          date: formData.date,
-          time: formData.time || '00:00',
-          location: formData.location,
-          description: formData.description,
-          created_by: user.id
-        }])
-        .select()
-        .single()
+      let meetingData
+      let error
+      
+      if (editingMeeting) {
+        // 수정 모드
+        const { data, error: updateError } = await supabase
+          .from('meetings')
+          .update({
+            meeting_type: 'external',
+            title: formData.title,
+            date: formData.date,
+            time: formData.time || '00:00',
+            location: formData.location,
+            description: formData.description
+          })
+          .eq('id', editingMeeting.id)
+          .select()
+          .single()
+        
+        meetingData = data
+        error = updateError
+      } else {
+        // 새 등록 모드
+        const { data, error: insertError } = await supabase
+          .from('meetings')
+          .insert([{
+            meeting_type: 'external',
+            title: formData.title,
+            date: formData.date,
+            time: formData.time || '00:00',
+            location: formData.location,
+            description: formData.description,
+            created_by: user.id
+          }])
+          .select()
+          .single()
+        
+        meetingData = data
+        error = insertError
+      }
 
       if (error) {
-        console.error('미팅 등록 실패:', error)
-        alert('미팅 등록에 실패했습니다.')
+        console.error(editingMeeting ? '미팅 수정 실패:' : '미팅 등록 실패:', error)
+        alert(editingMeeting ? '미팅 수정에 실패했습니다.' : '미팅 등록에 실패했습니다.')
         return
       }
 
-      // Google Calendar 동기화 (선택사항)
-      if (calendarConfigs.length > 0 && confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')) {
-        try {
-          // 선택된 캘린더 또는 사용자 부서의 첫 번째 캘린더 사용 (own 캘린더 우선)
-          const departmentCalendars = getDepartmentCalendars(user.department)
-          const primaryCalendarId = formData.targetCalendar || departmentCalendars.own[0] || departmentCalendars.others[0]
+      // Google Calendar 동기화
+      if (calendarConfigs.length > 0) {
+        const shouldSync = editingMeeting ? 
+          (editingMeeting.google_event_id || confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')) :
+          confirm('Google Calendar에도 이 일정을 추가하시겠습니까?')
           
-          if (primaryCalendarId) {
-            const eventData = {
-              summary: formData.title,
-              description: formData.description,
-              location: formData.location,
-              start: {
-                dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
-                timeZone: 'Asia/Seoul'
-              },
-              end: {
-                dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
-                timeZone: 'Asia/Seoul'
+        if (shouldSync) {
+          try {
+            const departmentCalendars = getDepartmentCalendars(user.department)
+            const primaryCalendarId = formData.targetCalendar || departmentCalendars.own[0] || departmentCalendars.others[0]
+            
+            if (primaryCalendarId) {
+              if (editingMeeting && editingMeeting.google_event_id) {
+                // 기존 Google 이벤트 업데이트
+                const eventData = {
+                  summary: formData.title,
+                  description: formData.description,
+                  location: formData.location,
+                  start: {
+                    dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
+                    timeZone: 'Asia/Seoul'
+                  },
+                  end: {
+                    dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
+                    timeZone: 'Asia/Seoul'
+                  }
+                }
+                
+                const updateResponse = await fetch('/api/calendar/update-event', {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    calendarId: primaryCalendarId,
+                    eventId: editingMeeting.google_event_id,
+                    eventData
+                  })
+                })
+                
+                const updateResult = await updateResponse.json()
+                if (updateResult.success) {
+                  alert('미팅이 성공적으로 수정되고 Google Calendar도 업데이트되었습니다!')
+                } else {
+                  console.error('캘린더 이벤트 업데이트 실패:', updateResult.error)
+                  alert('미팅은 수정되었지만 Google Calendar 동기화에 실패했습니다.')
+                }
+              } else {
+                // 새 Google 이벤트 생성
+                const eventData = {
+                  summary: formData.title,
+                  description: formData.description,
+                  location: formData.location,
+                  start: {
+                    dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
+                    timeZone: 'Asia/Seoul'
+                  },
+                  end: {
+                    dateTime: `${formData.date}T${formData.time || '00:00'}:00`,
+                    timeZone: 'Asia/Seoul'
+                  }
+                }
+                
+                const response = await fetch('/api/calendar/create-event-direct', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    calendarId: primaryCalendarId,
+                    eventData
+                  }),
+                })
+
+                const result = await response.json()
+                if (result.success) {
+                  console.log('캘린더 이벤트 생성 성공:', result.event)
+                  
+                  // 미팅 레코드에 Google 이벤트 ID 저장
+                  await supabase
+                    .from('meetings')
+                    .update({ google_event_id: result.event.id })
+                    .eq('id', meetingData.id)
+                  
+                  alert(editingMeeting ? '미팅이 성공적으로 수정되었습니다!' : '미팅이 성공적으로 등록되고 Google Calendar에도 추가되었습니다!')
+                } else {
+                  console.error('캘린더 이벤트 생성 실패:', result.error)
+                  alert(editingMeeting ? '미팅은 수정되었지만 Google Calendar 동기화에 실패했습니다.' : '미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
+                }
               }
             }
-            
-            const response = await fetch('/api/calendar/create-event-direct', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                calendarId: primaryCalendarId,
-                eventData
-              }),
-            })
-
-            const result = await response.json()
-            if (result.success) {
-              console.log('캘린더 이벤트 생성 성공:', result.event)
-              
-              // 미팅 레코드에 Google 이벤트 ID 저장
-              await supabase
-                .from('meetings')
-                .update({ google_event_id: result.event.id })
-                .eq('id', meetingData.id)
-              
-              alert('미팅이 성공적으로 등록되고 Google Calendar에도 추가되었습니다!')
-            } else {
-              console.error('캘린더 이벤트 생성 실패:', result.error)
-              alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
-            }
+          } catch (calError) {
+            console.error('Google Calendar 동기화 오류:', calError)
+            alert(editingMeeting ? '미팅은 수정되었지만 Google Calendar 동기화에 실패했습니다.' : '미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
           }
-        } catch (calError) {
-          console.error('Google Calendar 동기화 오류:', calError)
-          alert('미팅은 등록되었지만 Google Calendar 동기화에 실패했습니다.')
+        } else {
+          alert(editingMeeting ? '미팅이 성공적으로 수정되었습니다!' : '미팅이 성공적으로 등록되었습니다!')
         }
       } else {
-        alert('미팅이 성공적으로 등록되었습니다!')
+        alert(editingMeeting ? '미팅이 성공적으로 수정되었습니다!' : '미팅이 성공적으로 등록되었습니다!')
       }
 
       setShowAddForm(false)
+      setShowEditForm(false)
+      setEditingMeeting(null)
       setFormData({
         title: '',
         date: '',
@@ -383,8 +461,84 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
         fetchCalendarEvents() // 캘린더 이벤트도 새로고침
       }
     } catch (error) {
-      console.error('미팅 등록 오류:', error)
-      alert('미팅 등록 중 오류가 발생했습니다.')
+      console.error(editingMeeting ? '미팅 수정 오류:' : '미팅 등록 오류:', error)
+      alert(editingMeeting ? '미팅 수정 중 오류가 발생했습니다.' : '미팅 등록 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleMeetingClick = (meeting: Meeting) => {
+    // 본인이 생성한 미팅만 수정/삭제 가능
+    if (meeting.created_by !== user.id) {
+      alert('본인이 등록한 일정만 수정/삭제할 수 있습니다.')
+      return
+    }
+
+    const action = confirm(`"${meeting.title}" 일정을 어떻게 하시겠습니까?\n\n확인: 수정하기\n취소: 삭제하기`)
+    
+    if (action) {
+      // 수정하기
+      setEditingMeeting(meeting)
+      setFormData({
+        title: meeting.title,
+        date: meeting.date,
+        time: meeting.time || '',
+        location: meeting.location || '',
+        description: meeting.description || '',
+        targetCalendar: ''
+      })
+      setShowEditForm(true)
+    } else {
+      // 삭제하기
+      handleDeleteMeeting(meeting)
+    }
+  }
+
+  const handleDeleteMeeting = async (meeting: Meeting) => {
+    if (!confirm(`"${meeting.title}" 일정을 정말 삭제하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      // Google Calendar에서 이벤트 삭제
+      if (meeting.google_event_id) {
+        const departmentCalendars = getDepartmentCalendars(user.department)
+        const primaryCalendarId = departmentCalendars.own[0] || departmentCalendars.others[0]
+        if (primaryCalendarId) {
+          try {
+            await fetch('/api/calendar/delete-event', {
+              method: 'DELETE',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                calendarId: primaryCalendarId,
+                eventId: meeting.google_event_id
+              })
+            })
+          } catch (calendarError) {
+            console.error('Google Calendar 이벤트 삭제 오류:', calendarError)
+          }
+        }
+      }
+
+      // DB에서 미팅 삭제
+      const { error } = await supabase
+        .from('meetings')
+        .delete()
+        .eq('id', meeting.id)
+
+      if (error) {
+        console.error('미팅 삭제 실패:', error)
+        alert('일정 삭제에 실패했습니다.')
+        return
+      }
+
+      alert('일정이 성공적으로 삭제되었습니다!')
+      fetchMeetings()
+      fetchCalendarEvents()
+    } catch (error) {
+      console.error('일정 삭제 오류:', error)
+      alert('일정 삭제 중 오류가 발생했습니다.')
     }
   }
 
@@ -533,14 +687,20 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded break-words ${
+                          className={`text-xs p-1 rounded break-words cursor-pointer transition-colors hover:opacity-80 ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                               : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
+                          } ${
+                            meeting.created_by === user.id ? 'hover:bg-opacity-80' : 'opacity-60'
                           }`}
-                          title={meeting.title}
+                          title={`${meeting.title}${meeting.created_by === user.id ? ' - 클릭하여 수정/삭제' : ''}`}
+                          onClick={() => handleMeetingClick(meeting)}
                         >
                           {meeting.title}
+                          {meeting.created_by === user.id && (
+                            <div className="text-xs opacity-70 mt-1">✏️</div>
+                          )}
                         </div>
                       ))}
                       
@@ -631,14 +791,20 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       {otherTeamMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded break-words ${
+                          className={`text-xs p-1 rounded break-words cursor-pointer transition-colors hover:opacity-80 ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500' 
                               : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
+                          } ${
+                            meeting.created_by === user.id ? 'hover:bg-opacity-80' : 'opacity-60'
                           }`}
-                          title={`${meeting.title} (${meeting.user?.department})`}
+                          title={`${meeting.title} (${meeting.user?.department})${meeting.created_by === user.id ? ' - 클릭하여 수정/삭제' : ''}`}
+                          onClick={() => handleMeetingClick(meeting)}
                         >
                           {meeting.user?.department}: {meeting.title}
+                          {meeting.created_by === user.id && (
+                            <div className="text-xs opacity-70 mt-1">✏️</div>
+                          )}
                         </div>
                       ))}
                       
@@ -675,12 +841,14 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
         </div>
       </div>
 
-      {/* 미팅 추가 모달 */}
-      {showAddForm && (
+      {/* 미팅 추가/수정 모달 */}
+      {(showAddForm || showEditForm) && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">{user.department} 일정 추가</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+                {editingMeeting ? `${user.department} 일정 수정` : `${user.department} 일정 추가`}
+              </h3>
               
               <form onSubmit={handleSubmitMeeting} className="space-y-4">
 
@@ -767,7 +935,19 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                 <div className="flex justify-end space-x-3 pt-4">
                   <button
                     type="button"
-                    onClick={() => setShowAddForm(false)}
+                    onClick={() => {
+                      setShowAddForm(false)
+                      setShowEditForm(false)
+                      setEditingMeeting(null)
+                      setFormData({
+                        title: '',
+                        date: '',
+                        time: '',
+                        location: '',
+                        description: '',
+                        targetCalendar: ''
+                      })
+                    }}
                     className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
                     취소
@@ -776,7 +956,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                     type="submit"
                     className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
                   >
-                    등록
+                    {editingMeeting ? '수정' : '등록'}
                   </button>
                 </div>
               </form>
