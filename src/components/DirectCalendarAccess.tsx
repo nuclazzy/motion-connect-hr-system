@@ -107,7 +107,7 @@ export default function DirectCalendarAccess() {
         location: '서울, 대한민국'
       }
 
-      const response = await fetch('/api/calendar/create-event', {
+      const response = await fetch('/api/calendar/create-event-direct', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
