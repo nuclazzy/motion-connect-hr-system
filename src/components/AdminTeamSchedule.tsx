@@ -61,7 +61,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     location: '',
     description: '',
     created_by: user.id, // 기본값은 관리자 자신
-    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' // 기본 캘린더 설정
+    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' as string // 기본 캘린더 설정
   })
 
   const fetchCalendarConfigs = useCallback(async () => {
@@ -323,7 +323,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
         location: '',
         description: '',
         created_by: user.id,
-        targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
+        targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' as string
       })
       fetchMeetings()
       fetchCalendarEvents()
