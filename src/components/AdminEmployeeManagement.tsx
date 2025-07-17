@@ -21,6 +21,26 @@ interface Employee {
   contract_end_date?: string | null
 }
 
+interface LeaveData {
+  id: string
+  user_id: string
+  leave_types: {
+    annual_days: number
+    used_annual_days: number
+    sick_days: number
+    used_sick_days: number
+    family_care_days?: number
+    used_family_care_days?: number
+    maternity_days?: number
+    used_maternity_days?: number
+    paternity_days?: number
+    used_paternity_days?: number
+    special_days?: number
+    used_special_days?: number
+  }
+  year: number
+}
+
 export default function AdminEmployeeManagement() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
@@ -29,6 +49,22 @@ export default function AdminEmployeeManagement() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null)
   const [formLoading, setFormLoading] = useState(false)
+  const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [selectedEmployeeLeave, setSelectedEmployeeLeave] = useState<LeaveData | null>(null)
+  const [leaveFormData, setLeaveFormData] = useState({
+    annual_days: 0,
+    used_annual_days: 0,
+    sick_days: 0,
+    used_sick_days: 0,
+    family_care_days: 0,
+    used_family_care_days: 0,
+    maternity_days: 0,
+    used_maternity_days: 0,
+    paternity_days: 0,
+    used_paternity_days: 0,
+    special_days: 0,
+    used_special_days: 0
+  })
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -88,6 +124,99 @@ export default function AdminEmployeeManagement() {
     })
     setEditingEmployee(null)
     setShowAddForm(true)
+  }
+
+  const handleLeaveAdjustment = async (employee: Employee) => {
+    try {
+      // 직원의 휴가 데이터 조회
+      const { data: leaveData, error } = await supabase
+        .from('leave_days')
+        .select('*')
+        .eq('user_id', employee.id)
+        .eq('year', new Date().getFullYear())
+        .single()
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching leave data:', error)
+        alert('휴가 데이터를 불러오는 중 오류가 발생했습니다.')
+        return
+      }
+
+      if (!leaveData) {
+        // 휴가 데이터가 없으면 초기값으로 생성
+        const annualDays = employee.hire_date ? calculateAnnualLeave(employee.hire_date) : 15
+        const newLeaveData = {
+          user_id: employee.id,
+          leave_types: {
+            annual_days: annualDays,
+            used_annual_days: 0,
+            sick_days: 30,
+            used_sick_days: 0,
+            family_care_days: 90,
+            used_family_care_days: 0,
+            maternity_days: 90,
+            used_maternity_days: 0,
+            paternity_days: 10,
+            used_paternity_days: 0,
+            special_days: 5,
+            used_special_days: 0
+          },
+          year: new Date().getFullYear()
+        }
+
+        const { data: insertedData, error: insertError } = await supabase
+          .from('leave_days')
+          .insert(newLeaveData)
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Error creating leave data:', insertError)
+          alert('휴가 데이터를 생성하는 중 오류가 발생했습니다.')
+          return
+        }
+
+        setSelectedEmployeeLeave(insertedData)
+        setLeaveFormData(insertedData.leave_types)
+      } else {
+        setSelectedEmployeeLeave(leaveData)
+        setLeaveFormData(leaveData.leave_types)
+      }
+
+      setSelectedEmployee(employee)
+      setShowLeaveModal(true)
+    } catch (error) {
+      console.error('Error in handleLeaveAdjustment:', error)
+      alert('휴가 조정 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleSaveLeaveAdjustment = async () => {
+    if (!selectedEmployeeLeave || !selectedEmployee) return
+
+    try {
+      const { error } = await supabase
+        .from('leave_days')
+        .update({
+          leave_types: leaveFormData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedEmployeeLeave.id)
+
+      if (error) {
+        console.error('Error updating leave data:', error)
+        alert('휴가 데이터 수정에 실패했습니다.')
+        return
+      }
+
+      alert(`${selectedEmployee.name}님의 휴가 데이터가 수정되었습니다.`)
+      setShowLeaveModal(false)
+      setSelectedEmployeeLeave(null)
+      setSelectedEmployee(null)
+    } catch (error) {
+      console.error('Error in handleSaveLeaveAdjustment:', error)
+      alert('휴가 데이터 수정 중 오류가 발생했습니다.')
+    }
   }
 
   const handleEditEmployee = async (employee: Employee) => {
@@ -531,6 +660,12 @@ export default function AdminEmployeeManagement() {
                 >
                   수정
                 </button>
+                <button
+                  onClick={() => handleLeaveAdjustment(selectedEmployee)}
+                  className="bg-green-600 text-white px-3 py-2 rounded-md text-sm font-medium hover:bg-green-700"
+                >
+                  휴가 조정
+                </button>
                 <a
                   href="https://docs.google.com/spreadsheets/d/1I4eH8V45PreS3QG8AVjz5kc09uavGTzqbOz8ODh6EBI/edit?gid=1461209875#gid=1461209875"
                   target="_blank"
@@ -760,6 +895,176 @@ export default function AdminEmployeeManagement() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 휴가 조정 모달 */}
+      {showLeaveModal && selectedEmployee && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+                {selectedEmployee.name}님의 휴가 조정
+              </h3>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">연차 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.annual_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, annual_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">연차 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_annual_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_annual_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">병가 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.sick_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, sick_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">병가 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_sick_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_sick_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">가족돌봄휴가 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.family_care_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, family_care_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">가족돌봄휴가 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_family_care_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_family_care_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">출산휴가 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.maternity_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, maternity_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">출산휴가 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_maternity_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_maternity_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">배우자 출산휴가 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.paternity_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, paternity_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">배우자 출산휴가 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_paternity_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_paternity_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">특별휴가 총 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.special_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, special_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">특별휴가 사용 일수</label>
+                    <input
+                      type="number"
+                      value={leaveFormData.used_special_days}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, used_special_days: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      min="0"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-2 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowLeaveModal(false)}
+                    className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-400"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveLeaveAdjustment}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

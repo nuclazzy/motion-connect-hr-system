@@ -92,10 +92,7 @@ export default function AdminLeaveManagement() {
       const response = await fetch('/api/admin/leave-data')
       const result = await response.json()
 
-      console.log('API Response:', result)
-
       if (result.success) {
-        console.log('Leave data received:', result.data)
         setLeaveData(result.data || [])
       } else {
         console.error('휴가 데이터 조회 실패:', result.error)
@@ -487,12 +484,6 @@ export default function AdminLeaveManagement() {
   
   const displayEmployees = showActiveOnly ? activeEmployees : retiredEmployees
   
-  // 디버그 로그
-  console.log('LeaveData:', leaveData)
-  console.log('ActiveEmployees:', activeEmployees)
-  console.log('RetiredEmployees:', retiredEmployees)
-  console.log('ShowActiveOnly:', showActiveOnly)
-  console.log('DisplayEmployees:', displayEmployees)
   
   const totalEmployees = activeEmployees.length
   const averageUsage = activeEmployees.length > 0 
