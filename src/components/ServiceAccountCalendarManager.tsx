@@ -26,7 +26,6 @@ export default function ServiceAccountCalendarManager() {
   const [calendars, setCalendars] = useState<Calendar[]>([])
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedCalendar, setSelectedCalendar] = useState<string>('')
   const [showEvents, setShowEvents] = useState(false)
 
   useEffect(() => {
@@ -174,11 +173,11 @@ export default function ServiceAccountCalendarManager() {
             </p>
             <div className="bg-gray-50 p-3 rounded-md">
               <code className="text-sm text-gray-800">
-                hr-calendar-service@ecstatic-device-288303.iam.gserviceaccount.com
+                hr-calendar-service@motion-connect-hr-system.iam.gserviceaccount.com
               </code>
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              권한: "이벤트 세부정보 보기 및 수정" 또는 "변경 및 공유 관리"
+              권한: &quot;이벤트 세부정보 보기 및 수정&quot; 또는 &quot;변경 및 공유 관리&quot;
             </p>
           </div>
         ) : (

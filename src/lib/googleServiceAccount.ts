@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import { JWT } from 'google-auth-library';
 
 class GoogleServiceAccountClient {
-  private calendar: any;
+  private calendar: ReturnType<typeof google.calendar>;
   private auth: JWT;
 
   constructor() {
@@ -62,7 +62,7 @@ class GoogleServiceAccountClient {
   }
 
   // 새 이벤트 생성
-  async createEvent(calendarId: string, eventData: any) {
+  async createEvent(calendarId: string, eventData: object) {
     try {
       const response = await this.calendar.events.insert({
         calendarId,
@@ -83,7 +83,7 @@ class GoogleServiceAccountClient {
   }
 
   // 이벤트 업데이트
-  async updateEvent(calendarId: string, eventId: string, eventData: any) {
+  async updateEvent(calendarId: string, eventId: string, eventData: object) {
     try {
       const response = await this.calendar.events.update({
         calendarId,
@@ -157,8 +157,8 @@ class GoogleServiceAccountClient {
     };
 
     const missing = Object.entries(requiredVars)
-      .filter(([_, value]) => !value)
-      .map(([key, _]) => key);
+      .filter(([, value]) => !value)
+      .map(([key]) => key);
 
     return {
       isConfigured: missing.length === 0,
