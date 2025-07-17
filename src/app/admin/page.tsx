@@ -7,9 +7,6 @@ import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
-import CalendarSettings from '@/components/CalendarSettings'
-import CalendarPermissionManager from '@/components/CalendarPermissionManager'
-import CalendarEventCreator from '@/components/CalendarEventCreator'
 import ServiceAccountCalendarManager from '@/components/ServiceAccountCalendarManager'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
@@ -111,9 +108,6 @@ export default function AdminDashboard() {
                 <AdminFormManagement />
                 <AdminDocumentManagement />
                 <ServiceAccountCalendarManager />
-                <CalendarSettings user={user} />
-                <CalendarPermissionManager user={user} />
-                <CalendarEventCreator />
             </div>
           </div>
         </div>
