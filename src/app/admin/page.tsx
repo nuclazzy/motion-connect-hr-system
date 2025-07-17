@@ -6,13 +6,11 @@ import { getCurrentUser, logoutUser, checkPermission, type User, saveUserSession
 import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
-import ServiceAccountCalendarManager from '@/components/ServiceAccountCalendarManager'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import AdminWeeklySchedule from '@/components/AdminWeeklySchedule'
 import AdminLeavePromotion from '@/components/AdminLeavePromotion'
-import DirectCalendarAccess from '@/components/DirectCalendarAccess'
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null)
@@ -94,9 +92,13 @@ export default function AdminDashboard() {
             <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-gray-200">개인 업무</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
-                <LeaveManagement user={user} />
                 <AdminTeamSchedule user={user} />
                 <AdminWeeklySchedule user={user} />
+            </div>
+            
+            {/* 휴가 관리 - 전체 너비 사용 */}
+            <div className="mt-6">
+                <LeaveManagement user={user} />
             </div>
           </div>
 
@@ -108,8 +110,6 @@ export default function AdminDashboard() {
                 <AdminLeavePromotion />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
-                <ServiceAccountCalendarManager />
-                <DirectCalendarAccess />
             </div>
           </div>
         </div>

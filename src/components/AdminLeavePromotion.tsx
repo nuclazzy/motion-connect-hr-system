@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-// import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
 interface Employee {
   id: string
@@ -36,6 +36,16 @@ export default function AdminLeavePromotion() {
   const [promotionData, setPromotionData] = useState<LeavePromotionData[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedEmployee, setSelectedEmployee] = useState<LeavePromotionData | null>(null)
+  const [showLeaveEntryForm, setShowLeaveEntryForm] = useState(false)
+  const [leaveFormData, setLeaveFormData] = useState({
+    employeeId: '',
+    leaveType: 'annual',
+    customLeaveType: '',
+    startDate: '',
+    endDate: '',
+    description: '',
+    days: 1
+  })
 
   useEffect(() => {
     fetchPromotionData()
@@ -142,6 +152,120 @@ export default function AdminLeavePromotion() {
     }
   }
 
+  const handleManualLeaveEntry = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      const selectedEmployeeData = promotionData.find(data => data.employee.id === leaveFormData.employeeId)
+      if (!selectedEmployeeData) {
+        alert('선택된 직원 정보를 찾을 수 없습니다.')
+        return
+      }
+
+      const startDate = new Date(leaveFormData.startDate)
+      const endDate = new Date(leaveFormData.endDate)
+      const daysDifference = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1
+
+      // 휴가 유형 결정
+      const finalLeaveType = leaveFormData.leaveType === 'custom' ? leaveFormData.customLeaveType : leaveFormData.leaveType
+      const displayLeaveType = finalLeaveType === 'annual' ? '연차' : 
+                              finalLeaveType === 'sick' ? '병가' :
+                              finalLeaveType === 'personal' ? '개인사유' :
+                              finalLeaveType === 'family' ? '경조사' : finalLeaveType
+
+      // 1. Google Calendar에 휴가 일정 추가
+      const calendarEventData = {
+        summary: `${selectedEmployeeData.employee.name} - ${displayLeaveType}`,
+        description: leaveFormData.description || `${selectedEmployeeData.employee.name}님의 ${displayLeaveType} (${daysDifference}일)`,
+        start: {
+          date: leaveFormData.startDate,
+          timeZone: 'Asia/Seoul'
+        },
+        end: {
+          date: new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 종료일 다음날
+          timeZone: 'Asia/Seoul'
+        }
+      }
+
+      const calendarResponse = await fetch('/api/calendar/create-event-direct', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+          eventData: calendarEventData
+        }),
+      })
+
+      let googleEventId = null
+      if (calendarResponse.ok) {
+        const calendarResult = await calendarResponse.json()
+        if (calendarResult.success) {
+          googleEventId = calendarResult.event.id
+        }
+      }
+
+      // 2. 휴가 사용 기록 업데이트
+      if (finalLeaveType === 'annual' && selectedEmployeeData.leaveData) {
+        const newUsedAnnualDays = selectedEmployeeData.leaveData.leave_types.used_annual_days + daysDifference
+        
+        const { error: updateError } = await supabase
+          .from('leave_days')
+          .update({
+            leave_types: {
+              ...selectedEmployeeData.leaveData.leave_types,
+              used_annual_days: newUsedAnnualDays
+            }
+          })
+          .eq('user_id', leaveFormData.employeeId)
+
+        if (updateError) {
+          console.error('휴가 데이터 업데이트 실패:', updateError)
+        }
+      }
+
+      // 3. 휴가 기록 로그 저장
+      const { error: logError } = await supabase
+        .from('leave_records')
+        .insert([{
+          user_id: leaveFormData.employeeId,
+          leave_type: finalLeaveType,
+          start_date: leaveFormData.startDate,
+          end_date: leaveFormData.endDate,
+          days: daysDifference,
+          description: leaveFormData.description,
+          google_event_id: googleEventId,
+          created_at: new Date().toISOString()
+        }])
+
+      if (logError) {
+        console.error('휴가 기록 저장 실패:', logError)
+      }
+
+      alert(`${selectedEmployeeData.employee.name}님의 ${displayLeaveType} (${daysDifference}일)이 성공적으로 등록되었습니다.`)
+      
+      // 폼 초기화 및 모달 닫기
+      setLeaveFormData({
+        employeeId: '',
+        leaveType: 'annual',
+        customLeaveType: '',
+        startDate: '',
+        endDate: '',
+        description: '',
+        days: 1
+      })
+      setShowLeaveEntryForm(false)
+      
+      // 데이터 새로고침
+      fetchPromotionData()
+      
+    } catch (error) {
+      console.error('휴가 등록 오류:', error)
+      alert('휴가 등록 중 오류가 발생했습니다.')
+    }
+  }
+
   const legalRequiredEmployees = promotionData.filter(data => data.isLegalRequired)
   const recommendedEmployees = promotionData.filter(data => !data.isLegalRequired && data.remainingDays >= 3)
 
@@ -163,21 +287,31 @@ export default function AdminLeavePromotion() {
       {/* 요약 정보 */}
       <div className="bg-white overflow-hidden shadow rounded-lg">
         <div className="p-5">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg className="h-6 w-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg className="h-6 w-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">
+                    연차 촉진 관리
+                  </dt>
+                  <dd className="text-lg font-medium text-gray-900">
+                    총 {promotionData.length}명 중 {legalRequiredEmployees.length}명 법적 촉진 대상
+                  </dd>
+                </dl>
+              </div>
             </div>
-            <div className="ml-5 w-0 flex-1">
-              <dl>
-                <dt className="text-sm font-medium text-gray-500 truncate">
-                  연차 촉진 관리
-                </dt>
-                <dd className="text-lg font-medium text-gray-900">
-                  총 {promotionData.length}명 중 {legalRequiredEmployees.length}명 법적 촉진 대상
-                </dd>
-              </dl>
+            <div>
+              <button
+                onClick={() => setShowLeaveEntryForm(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                휴가 수동 입력
+              </button>
             </div>
           </div>
           <div className="mt-3">
@@ -390,6 +524,138 @@ export default function AdminLeavePromotion() {
                   촉진 안내 발송
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 휴가 수동 입력 모달 */}
+      {showLeaveEntryForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-10 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+                휴가 수동 입력
+              </h3>
+              
+              <form onSubmit={handleManualLeaveEntry} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">직원 선택</label>
+                  <select
+                    value={leaveFormData.employeeId}
+                    onChange={(e) => setLeaveFormData({...leaveFormData, employeeId: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    required
+                  >
+                    <option value="">직원을 선택하세요</option>
+                    {promotionData.map((data) => (
+                      <option key={data.employee.id} value={data.employee.id}>
+                        {data.employee.name} ({data.employee.department} {data.employee.position})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">휴가 유형</label>
+                  <select
+                    value={leaveFormData.leaveType}
+                    onChange={(e) => setLeaveFormData({...leaveFormData, leaveType: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    required
+                  >
+                    <option value="annual">연차</option>
+                    <option value="sick">병가</option>
+                    <option value="personal">개인사유</option>
+                    <option value="family">경조사</option>
+                    <option value="custom">기타 (직접입력)</option>
+                  </select>
+                </div>
+
+                {leaveFormData.leaveType === 'custom' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">기타 휴가 유형</label>
+                    <input
+                      type="text"
+                      value={leaveFormData.customLeaveType}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, customLeaveType: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="휴가 유형을 입력하세요"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">시작일</label>
+                    <input
+                      type="date"
+                      value={leaveFormData.startDate}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, startDate: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">종료일</label>
+                    <input
+                      type="date"
+                      value={leaveFormData.endDate}
+                      onChange={(e) => setLeaveFormData({...leaveFormData, endDate: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">설명 (선택사항)</label>
+                  <textarea
+                    rows={3}
+                    value={leaveFormData.description}
+                    onChange={(e) => setLeaveFormData({...leaveFormData, description: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    placeholder="휴가 사유나 추가 정보를 입력하세요"
+                  />
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                  <p className="text-sm text-blue-700">
+                    ℹ️ 외부 웹앱에서 신청받은 휴가를 수동으로 등록하는 기능입니다.
+                  </p>
+                  <p className="text-xs text-blue-600 mt-1">
+                    등록하면 Google Calendar에 일정이 추가되고 직원의 휴가 사용 기록이 업데이트됩니다.
+                  </p>
+                </div>
+
+                <div className="flex justify-end space-x-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLeaveEntryForm(false)
+                      setLeaveFormData({
+                        employeeId: '',
+                        leaveType: 'annual',
+                        customLeaveType: '',
+                        startDate: '',
+                        endDate: '',
+                        description: '',
+                        days: 1
+                      })
+                    }}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-blue-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-blue-700"
+                  >
+                    휴가 등록
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
