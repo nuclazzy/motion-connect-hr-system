@@ -266,19 +266,27 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
       if (targetCalendar) {
         try {
           if (editingMeeting && editingMeeting.google_event_id) {
-            // 기존 Google 이벤트 업데이트
-            const eventData = {
-              summary: formData.title,
-              description: formData.description,
-              location: formData.location,
-              start: {
-                dateTime: `${formData.date}T${formData.time}:00`,
-                timeZone: 'Asia/Seoul'
-              },
-              end: {
-                dateTime: `${formData.date}T${formData.time}:00`,
-                timeZone: 'Asia/Seoul'
-              }
+            // 기존 Google 이벤트 업데이트 - 종료 시간 올바르게 설정
+            let eventData;
+            if (formData.time) {
+              const startDateTime = new Date(`${formData.date}T${formData.time}:00`);
+              const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+              eventData = {
+                summary: formData.title,
+                description: formData.description,
+                location: formData.location,
+                start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
+                end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+              };
+            } else {
+              const endDate = new Date(new Date(formData.date).getTime() + 24 * 60 * 60 * 1000);
+              eventData = {
+                summary: formData.title,
+                description: formData.description,
+                location: formData.location,
+                start: { date: formData.date, timeZone: 'Asia/Seoul' },
+                end: { date: endDate.toISOString().split('T')[0], timeZone: 'Asia/Seoul' }
+              };
             }
             
             const updateResponse = await fetch('/api/calendar/update-event', {
@@ -298,19 +306,27 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
               console.error('캘린더 이벤트 업데이트 실패:', updateResult.error)
             }
           } else {
-            // 새 Google 이벤트 생성
-            const eventData = {
-              summary: formData.title,
-              description: formData.description,
-              location: formData.location,
-              start: {
-                dateTime: `${formData.date}T${formData.time}:00`,
-                timeZone: 'Asia/Seoul'
-              },
-              end: {
-                dateTime: `${formData.date}T${formData.time}:00`,
-                timeZone: 'Asia/Seoul'
-              }
+            // 새 Google 이벤트 생성 - 종료 시간 올바르게 설정
+            let eventData;
+            if (formData.time) {
+              const startDateTime = new Date(`${formData.date}T${formData.time}:00`);
+              const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+              eventData = {
+                summary: formData.title,
+                description: formData.description,
+                location: formData.location,
+                start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
+                end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+              };
+            } else {
+              const endDate = new Date(new Date(formData.date).getTime() + 24 * 60 * 60 * 1000);
+              eventData = {
+                summary: formData.title,
+                description: formData.description,
+                location: formData.location,
+                start: { date: formData.date, timeZone: 'Asia/Seoul' },
+                end: { date: endDate.toISOString().split('T')[0], timeZone: 'Asia/Seoul' }
+              };
             }
             
             const response = await fetch('/api/calendar/create-event-direct', {

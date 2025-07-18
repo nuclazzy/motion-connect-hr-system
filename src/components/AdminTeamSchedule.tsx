@@ -387,18 +387,28 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
       // 선택된 캘린더에 이벤트 생성
       if (formData.targetCalendar) {
         try {
-          const eventData = {
-            summary: formData.title,
-            description: formData.description,
-            location: formData.location,
-            start: {
-              dateTime: `${formData.date}T${formData.time}:00`,
-              timeZone: 'Asia/Seoul'
-            },
-            end: {
-              dateTime: `${formData.date}T${formData.time}:00`,
-              timeZone: 'Asia/Seoul'
-            }
+          let eventData;
+          if (formData.time) {
+            // 시간이 있으면, 시간 지정 이벤트 생성 (1시간 지속)
+            const startDateTime = new Date(`${formData.date}T${formData.time}:00`);
+            const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000);
+            eventData = {
+              summary: formData.title,
+              description: formData.description,
+              location: formData.location,
+              start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
+              end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+            };
+          } else {
+            // 시간이 없으면, 종일 이벤트 생성
+            const endDate = new Date(new Date(formData.date).getTime() + 24 * 60 * 60 * 1000);
+            eventData = {
+              summary: formData.title,
+              description: formData.description,
+              location: formData.location,
+              start: { date: formData.date, timeZone: 'Asia/Seoul' },
+              end: { date: endDate.toISOString().split('T')[0], timeZone: 'Asia/Seoul' }
+            };
           }
           
           const response = await fetch('/api/calendar/create-event-direct', {
