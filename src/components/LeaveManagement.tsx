@@ -53,6 +53,11 @@ interface LeaveData {
     sick_days: number
     used_sick_days: number
   }
+  user?: {
+    name: string
+    department: string
+    position: string
+  }
 }
 
 interface LeaveEvent {
@@ -90,6 +95,7 @@ interface LeaveManagementProps {
 
 export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [leaveData, setLeaveData] = useState<LeaveData | null>(null)
+  const [allEmployeesLeaveData, setAllEmployeesLeaveData] = useState<LeaveData[]>([])
   const [leaveEvents, setLeaveEvents] = useState<LeaveEvent[]>([])
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
@@ -100,6 +106,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [calendarView, setCalendarView] = useState<'calendar' | 'list'>('calendar')
+  const [viewMode, setViewMode] = useState<'personal' | 'all'>('all')
 
   const fetchLeaveData = async () => {
     try {
@@ -137,6 +144,26 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       console.error('Error in fetchLeaveData:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllEmployeesLeaveData = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('leave_days')
+        .select(`
+          *,
+          user:users(name, department, position)
+        `)
+        .order('user.name', { ascending: true })
+
+      if (error) {
+        console.error('Error fetching all employees leave data:', error)
+      } else {
+        setAllEmployeesLeaveData(data || [])
+      }
+    } catch (error) {
+      console.error('Error in fetchAllEmployeesLeaveData:', error)
     }
   }
 
@@ -301,6 +328,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
   useEffect(() => {
     fetchLeaveData()
+    fetchAllEmployeesLeaveData()
     fetchLeaveEvents()
     fetchCalendarConfigs()
   }, [user.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -548,6 +576,74 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     )
   }
 
+  const renderAllEmployeesLeaveStatus = () => {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {allEmployeesLeaveData.map(employeeData => (
+            <div key={employeeData.id} className="bg-white border border-gray-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-medium text-gray-900">{employeeData.user?.name}</h3>
+                  <p className="text-sm text-gray-600">{employeeData.user?.department} {employeeData.user?.position}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-gray-700">연차</span>
+                    <span className="text-sm text-gray-600">
+                      {employeeData.leave_types.used_annual_days}일 / {employeeData.leave_types.annual_days}일
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                      style={{
+                        width: `${Math.min((employeeData.leave_types.used_annual_days / employeeData.leave_types.annual_days) * 100, 100)}%`
+                      }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    잔여: {employeeData.leave_types.annual_days - employeeData.leave_types.used_annual_days}일
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-medium text-gray-700">병가</span>
+                    <span className="text-sm text-gray-600">
+                      {employeeData.leave_types.used_sick_days}일 / {employeeData.leave_types.sick_days}일
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-red-600 h-2 rounded-full transition-all duration-300" 
+                      style={{
+                        width: `${Math.min((employeeData.leave_types.used_sick_days / employeeData.leave_types.sick_days) * 100, 100)}%`
+                      }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    잔여: {employeeData.leave_types.sick_days - employeeData.leave_types.used_sick_days}일
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {allEmployeesLeaveData.length === 0 && (
+          <div className="text-center py-8">
+            <div className="text-gray-400 text-4xl mb-2">👥</div>
+            <p className="text-gray-500">직원 휴가 정보가 없습니다.</p>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -579,25 +675,49 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
           </div>
           <div className="flex space-x-2">
             <button
-              onClick={() => setCalendarView('calendar')}
+              onClick={() => setViewMode('personal')}
               className={`px-3 py-1 text-sm rounded-md ${
-                calendarView === 'calendar' 
-                  ? 'bg-blue-100 text-blue-800' 
+                viewMode === 'personal' 
+                  ? 'bg-indigo-100 text-indigo-800' 
                   : 'bg-gray-100 text-gray-600'
               }`}
             >
-              캘린더
+              👤 내 휴가
             </button>
             <button
-              onClick={() => setCalendarView('list')}
+              onClick={() => setViewMode('all')}
               className={`px-3 py-1 text-sm rounded-md ${
-                calendarView === 'list' 
-                  ? 'bg-blue-100 text-blue-800' 
+                viewMode === 'all' 
+                  ? 'bg-indigo-100 text-indigo-800' 
                   : 'bg-gray-100 text-gray-600'
               }`}
             >
-              목록
+              👥 전체 현황
             </button>
+            {viewMode === 'personal' && (
+              <>
+                <button
+                  onClick={() => setCalendarView('calendar')}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    calendarView === 'calendar' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  캘린더
+                </button>
+                <button
+                  onClick={() => setCalendarView('list')}
+                  className={`px-3 py-1 text-sm rounded-md ${
+                    calendarView === 'list' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  목록
+                </button>
+              </>
+            )}
             {calendarConfigs.length > 0 && (
               <button
                 onClick={() => setShowCalendarEvents(!showCalendarEvents)}
@@ -621,83 +741,131 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
         </div>
 
         {/* 휴가 현황 요약 */}
-        <div className="mt-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600">연차: {leaveData?.leave_types.used_annual_days || 0}일 / {leaveData?.leave_types.annual_days || 0}일</p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full" 
-                  style={{
-                    width: `${leaveData ? Math.min((leaveData.leave_types.used_annual_days / leaveData.leave_types.annual_days) * 100, 100) : 0}%`
-                  }}
-                ></div>
+        {viewMode === 'personal' && (
+          <div className="mt-4">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-600">연차: {leaveData?.leave_types.used_annual_days || 0}일 / {leaveData?.leave_types.annual_days || 0}일</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full" 
+                    style={{
+                      width: `${leaveData ? Math.min((leaveData.leave_types.used_annual_days / leaveData.leave_types.annual_days) * 100, 100) : 0}%`
+                    }}
+                  ></div>
+                </div>
               </div>
-            </div>
-            <div>
-              <p className="text-gray-600">병가: {leaveData?.leave_types.used_sick_days || 0}일 / {leaveData?.leave_types.sick_days || 0}일</p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                <div 
-                  className="bg-red-600 h-2 rounded-full" 
-                  style={{
-                    width: `${leaveData ? Math.min((leaveData.leave_types.used_sick_days / leaveData.leave_types.sick_days) * 100, 100) : 0}%`
-                  }}
-                ></div>
+              <div>
+                <p className="text-gray-600">병가: {leaveData?.leave_types.used_sick_days || 0}일 / {leaveData?.leave_types.sick_days || 0}일</p>
+                <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
+                  <div 
+                    className="bg-red-600 h-2 rounded-full" 
+                    style={{
+                      width: `${leaveData ? Math.min((leaveData.leave_types.used_sick_days / leaveData.leave_types.sick_days) * 100, 100) : 0}%`
+                    }}
+                  ></div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
+        
+        {/* 전체 현황 요약 */}
+        {viewMode === 'all' && (
+          <div className="mt-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="bg-blue-50 p-3 rounded-lg">
+                <p className="text-blue-600 font-medium">총 직원 수</p>
+                <p className="text-2xl font-bold text-blue-900">{allEmployeesLeaveData.length}명</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-lg">
+                <p className="text-green-600 font-medium">평균 연차 사용률</p>
+                <p className="text-2xl font-bold text-green-900">
+                  {allEmployeesLeaveData.length > 0 ? 
+                    Math.round(allEmployeesLeaveData.reduce((sum, emp) => 
+                      sum + (emp.leave_types.used_annual_days / emp.leave_types.annual_days * 100), 0) / allEmployeesLeaveData.length) 
+                    : 0}%
+                </p>
+              </div>
+              <div className="bg-yellow-50 p-3 rounded-lg">
+                <p className="text-yellow-600 font-medium">연차 촉진 대상</p>
+                <p className="text-2xl font-bold text-yellow-900">
+                  {allEmployeesLeaveData.filter(emp => 
+                    (emp.leave_types.annual_days - emp.leave_types.used_annual_days) >= 5
+                  ).length}명
+                </p>
+              </div>
+              <div className="bg-red-50 p-3 rounded-lg">
+                <p className="text-red-600 font-medium">평균 병가 사용률</p>
+                <p className="text-2xl font-bold text-red-900">
+                  {allEmployeesLeaveData.length > 0 ? 
+                    Math.round(allEmployeesLeaveData.reduce((sum, emp) => 
+                      sum + (emp.leave_types.used_sick_days / emp.leave_types.sick_days * 100), 0) / allEmployeesLeaveData.length) 
+                    : 0}%
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 캘린더 네비게이션 */}
-      <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
-        <div className="flex justify-between items-center">
-          <button
-            onClick={() => navigateMonth('prev')}
-            className="p-1 hover:bg-gray-200 rounded"
-          >
-            <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <h4 className="text-lg font-semibold text-gray-900">
-            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
-          </h4>
-          <button
-            onClick={() => navigateMonth('next')}
-            className="p-1 hover:bg-gray-200 rounded"
-          >
-            <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* 캘린더/목록 뷰 */}
-      <div className="p-5">
-        {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
-      </div>
-
-      {/* 액션 버튼들 */}
-      <div className="bg-gray-50 px-5 py-3">
-        <div className="text-sm">
+      {/* 캘린더 네비게이션 - 개인 휴가 모드에서만 표시 */}
+      {viewMode === 'personal' && (
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <button 
-              onClick={() => openFormModal('휴가 신청', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=vacation')}
-              className="font-medium text-indigo-600 hover:text-indigo-500 text-left flex-1"
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-1 hover:bg-gray-200 rounded"
             >
-              📝 휴가 신청하기
+              <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
-            <button 
-              onClick={() => handleFormComplete('휴가 신청')}
-              className="ml-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-2 py-1 rounded text-xs font-medium"
+            <h4 className="text-lg font-semibold text-gray-900">
+              {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+            </h4>
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-1 hover:bg-gray-200 rounded"
             >
-              신청 완료
+              <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
+      )}
+
+      {/* 메인 콘텐츠 */}
+      <div className="p-5">
+        {viewMode === 'personal' ? (
+          calendarView === 'calendar' ? renderCalendar() : renderLeaveList()
+        ) : (
+          renderAllEmployeesLeaveStatus()
+        )}
       </div>
+
+      {/* 액션 버튼들 - 개인 휴가 모드에서만 표시 */}
+      {viewMode === 'personal' && (
+        <div className="bg-gray-50 px-5 py-3">
+          <div className="text-sm">
+            <div className="flex justify-between items-center">
+              <button 
+                onClick={() => openFormModal('휴가 신청', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=vacation')}
+                className="font-medium text-indigo-600 hover:text-indigo-500 text-left flex-1"
+              >
+                📝 휴가 신청하기
+              </button>
+              <button 
+                onClick={() => handleFormComplete('휴가 신청')}
+                className="ml-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-2 py-1 rounded text-xs font-medium"
+              >
+                신청 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 휴가 신청 모달 */}
       {showLeaveForm && (
