@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
 import { ADMIN_WEEKLY_CALENDARS, getCurrentYearRange } from '@/lib/calendarMapping'
+import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 
 interface Meeting {
   id: string
@@ -151,6 +152,11 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
   useEffect(() => {
     fetchCalendarEvents()
   }, [fetchCalendarEvents])
+
+  useEffect(() => {
+    // 공휴일 캐시 초기화
+    initializeHolidayCache()
+  }, [])
 
   const getWeekDays = () => {
     const startOfWeek = new Date(currentDate)
@@ -515,12 +521,13 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
               const dayMeetings = getMeetingsForDate(day)
               const dayEvents = getAllEventsForDate(day)
               const isTodayDay = isToday(day)
-              const isWeekend = index === 0 || index === 6
+              const isWeekendDay = isWeekend(day)
+              const holidayInfo = getHolidayInfoSync(day)
               
               return (
                 <div key={index} className="flex flex-col">
                   <div className={`text-center py-2 text-sm font-medium ${
-                    isTodayDay ? 'text-indigo-600' : isWeekend ? 'text-red-600' : 'text-gray-700'
+                    isTodayDay ? 'text-indigo-600' : (holidayInfo.isHoliday || isWeekendDay) ? 'text-red-600' : 'text-gray-700'
                   }`}>
                     <div>{dayName}</div>
                     <div className="h-8 flex items-center justify-center">
@@ -528,6 +535,11 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                         {day.getDate()}
                       </div>
                     </div>
+                    {holidayInfo.isHoliday && (
+                      <div className="text-xs text-red-600 mt-1 truncate" title={holidayInfo.name}>
+                        {holidayInfo.name}
+                      </div>
+                    )}
                   </div>
                   
                   <div className="min-h-[140px] bg-white rounded border p-2 space-y-1">
@@ -581,7 +593,8 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
             const dayMeetings = getMeetingsForDate(day)
             const dayEvents = getAllEventsForDate(day)
             const isTodayDay = isToday(day)
-            const isWeekend = index === 0 || index === 6
+            const isWeekendDay = isWeekend(day)
+            const holidayInfo = getHolidayInfoSync(day)
             const dayName = ['일', '월', '화', '수', '목', '금', '토'][index]
             const totalEvents = dayMeetings.length + (showCalendarEvents ? dayEvents.calendarEvents.length : 0)
             
@@ -590,7 +603,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
             return (
               <div key={index} className="bg-white rounded-lg border p-3">
                 <div className={`flex items-center justify-between mb-2 ${
-                  isTodayDay ? 'text-indigo-600' : isWeekend ? 'text-red-600' : 'text-gray-700'
+                  isTodayDay ? 'text-indigo-600' : (holidayInfo.isHoliday || isWeekendDay) ? 'text-red-600' : 'text-gray-700'
                 }`}>
                   <div className="flex items-center space-x-2">
                     <div className={`text-sm font-medium ${isTodayDay ? 'bg-indigo-600 text-white px-2 py-1 rounded-full' : ''}`}>
@@ -599,6 +612,11 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                     <div className="text-lg font-medium">
                       {day.getDate()}일
                     </div>
+                    {holidayInfo.isHoliday && (
+                      <div className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded" title={holidayInfo.name}>
+                        {holidayInfo.name}
+                      </div>
+                    )}
                   </div>
                   <div className="text-xs text-gray-500">
                     {totalEvents}개 일정

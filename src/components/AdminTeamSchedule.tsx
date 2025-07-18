@@ -194,7 +194,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
         const { data, error } = await supabase
             .from('users')
             .select('id, name, department, email, role, employee_id, position')
-            .order('name', { ascending: true });
+            .order('employee_id', { ascending: true });
         if (error) throw error;
         setAllUsers((data as User[]) || []);
     } catch (error) {

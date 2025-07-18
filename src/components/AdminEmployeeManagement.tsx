@@ -91,7 +91,7 @@ export default function AdminEmployeeManagement() {
       const { data, error } = await supabase
         .from('users')
         .select('id, email, name, role, employee_id, department, position, phone, hire_date, dob, address, work_type, termination_date, contract_end_date')
-        .order('name', { ascending: true })
+        .order('employee_id', { ascending: true })
 
       if (error) {
         console.error('Error fetching employees:', error)
@@ -424,10 +424,14 @@ export default function AdminEmployeeManagement() {
         const bcrypt = await import('bcryptjs')
         const passwordHash = await bcrypt.hash('0000', 10) // 기본 비밀번호
 
+        // 데이터베이스에 저장할 필드만 선택
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { newPassword, reviewUrl, ...userDataToInsert } = dataToSubmit
+        
         const { data: newUserData, error: userError } = await supabase
           .from('users')
           .insert([{
-            ...dataToSubmit,
+            ...userDataToInsert,
             password_hash: passwordHash
           }])
           .select()
@@ -456,13 +460,13 @@ export default function AdminEmployeeManagement() {
         }
 
         // 리뷰 링크 저장 (새 직원 추가 시)
-        if (formData.reviewUrl.trim()) {
+        if (reviewUrl.trim()) {
           const { error: reviewError } = await supabase
             .from('review_links')
             .insert([{
               user_id: newUserData.id,
               employee_name: newUserData.name,
-              review_url: formData.reviewUrl.trim(),
+              review_url: reviewUrl.trim(),
               season: 'both',
               is_active: true
             }])
