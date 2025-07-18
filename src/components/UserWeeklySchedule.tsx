@@ -364,12 +364,6 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
   }
 
   const handleMeetingClick = (meeting: Meeting) => {
-    // 본인이 생성한 미팅만 수정/삭제 가능
-    if (meeting.created_by !== user.id) {
-      alert('본인이 등록한 일정만 수정/삭제할 수 있습니다.')
-      return
-    }
-
     const action = confirm(`"${meeting.title}" 일정을 어떻게 하시겠습니까?\n\n확인: 수정하기\n취소: 삭제하기`)
     
     if (action) {
@@ -547,15 +541,17 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                     {dayMeetings.map((meeting, idx) => (
                       <div 
                         key={`meeting-${idx}`}
-                        className={`text-xs p-1 rounded break-words ${
+                        className={`text-xs p-1 rounded break-words cursor-pointer transition-colors hover:opacity-80 ${
                           meeting.meeting_type === 'external' 
                             ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                             : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                         }`}
-                        title={`${meeting.title} (${meeting.user?.department})`}
+                        title={`${meeting.title} (${meeting.user?.department}) - 클릭하여 수정/삭제`}
+                        onClick={() => handleMeetingClick(meeting)}
                       >
                         <div className="font-medium">[{meeting.user?.department}]</div>
                         <div>{meeting.title}</div>
+                        <div className="text-xs opacity-70 mt-1">✏️ 편집 가능</div>
                       </div>
                     ))}
                     
@@ -632,10 +628,8 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                         meeting.meeting_type === 'external' 
                           ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                           : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
-                      } ${
-                        meeting.created_by === user.id ? 'hover:bg-opacity-80' : 'opacity-60'
                       }`}
-                      title={`${meeting.title}${meeting.created_by === user.id ? ' - 클릭하여 수정/삭제' : ''}`}
+                      title={`${meeting.title} - 클릭하여 수정/삭제`}
                       onClick={() => handleMeetingClick(meeting)}
                     >
                       <div className="font-medium text-xs text-gray-600 mb-1">[{meeting.user?.department}]</div>
@@ -643,9 +637,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                       {meeting.location && (
                         <div className="text-xs text-gray-600 mt-1">📍 {meeting.location}</div>
                       )}
-                      {meeting.created_by === user.id && (
-                        <div className="text-xs opacity-70 mt-1">✏️ 편집 가능</div>
-                      )}
+                      <div className="text-xs opacity-70 mt-1">✏️ 편집 가능</div>
                     </div>
                   ))}
                   

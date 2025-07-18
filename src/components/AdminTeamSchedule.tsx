@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
 import { ADMIN_TEAM_CALENDARS, getCurrentYearRange } from '@/lib/calendarMapping'
+import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 
 interface Meeting {
   id: string
@@ -188,6 +189,11 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   useEffect(() => {
     fetchCalendarEvents()
   }, [fetchCalendarEvents])
+
+  useEffect(() => {
+    // 공휴일 캐시 초기화
+    initializeHolidayCache()
+  }, [])
 
   const fetchAllUsers = async () => {
     try {
@@ -442,12 +448,13 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                 const dayMeetings = getMeetingsForDate(day)
                 const dayEvents = getAllEventsForDate(day)
                 const isTodayDay = isToday(day)
-                const isWeekend = index === 0 || index === 6
+                const isWeekendDay = isWeekend(day)
+                const holidayInfo = getHolidayInfoSync(day)
                 
                 return (
                   <div key={index} className="flex flex-col">
                     <div className={`text-center py-2 text-sm font-medium ${
-                      isTodayDay ? 'text-indigo-600' : isWeekend ? 'text-red-600' : 'text-gray-700'
+                      isTodayDay ? 'text-indigo-600' : (holidayInfo.isHoliday || isWeekendDay) ? 'text-red-600' : 'text-gray-700'
                     }`}>
                       <div>{dayName}</div>
                       <div className="h-8 flex items-center justify-center">
@@ -455,6 +462,11 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                           {day.getDate()}
                         </div>
                       </div>
+                      {holidayInfo.isHoliday && (
+                        <div className="text-xs text-red-600 mt-1 truncate text-center" title={holidayInfo.name}>
+                          {holidayInfo.name}
+                        </div>
+                      )}
                     </div>
                     
                     <div className="min-h-[140px] bg-white rounded border p-2 space-y-1">

@@ -77,10 +77,12 @@ export default function AdminEmployeeManagement() {
     address: '',
     work_type: '정규직',
     hire_date: '',
-    contract_end_date: null as string | null,
-    newPassword: '',
-    reviewUrl: ''
+    contract_end_date: null as string | null
   })
+  
+  // 별도 상태로 관리
+  const [newPassword, setNewPassword] = useState('')
+  const [reviewUrl, setReviewUrl] = useState('')
 
   useEffect(() => {
     fetchEmployees()
@@ -175,10 +177,10 @@ export default function AdminEmployeeManagement() {
       address: '',
       work_type: '정규직',
       hire_date: new Date().toISOString().split('T')[0],
-      contract_end_date: null,
-      newPassword: '',
-      reviewUrl: ''
+      contract_end_date: null
     })
+    setNewPassword('')
+    setReviewUrl('')
     setEditingEmployee(null)
     setShowAddForm(true)
   }
@@ -330,10 +332,10 @@ export default function AdminEmployeeManagement() {
       address: employee.address || '',
       work_type: employee.work_type || '정규직',
       hire_date: employee.hire_date || '',
-      contract_end_date: employee.contract_end_date || null,
-      newPassword: '',
-      reviewUrl: existingReviewUrl
+      contract_end_date: employee.contract_end_date || null
     })
+    setNewPassword('')
+    setReviewUrl(existingReviewUrl)
     setEditingEmployee(employee)
     setShowAddForm(true)
   }
@@ -364,7 +366,7 @@ export default function AdminEmployeeManagement() {
           body: JSON.stringify({
             adminId: currentUser.id,
             ...dataToSubmit,
-            newPassword: formData.newPassword || undefined
+            newPassword: newPassword || undefined
           }),
         })
 
@@ -391,13 +393,13 @@ export default function AdminEmployeeManagement() {
         if (leaveError) throw leaveError;
 
         // 리뷰 링크 저장/업데이트
-        if (formData.reviewUrl.trim()) {
+        if (reviewUrl.trim()) {
           const { error: reviewError } = await supabase
             .from('review_links')
             .upsert([{
               user_id: result.user.id,
               employee_name: result.user.name,
-              review_url: formData.reviewUrl.trim(),
+              review_url: reviewUrl.trim(),
               season: 'both',
               is_active: true
             }], {
@@ -424,14 +426,10 @@ export default function AdminEmployeeManagement() {
         const bcrypt = await import('bcryptjs')
         const passwordHash = await bcrypt.hash('0000', 10) // 기본 비밀번호
 
-        // 데이터베이스에 저장할 필드만 선택
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { newPassword, reviewUrl, ...userDataToInsert } = dataToSubmit
-        
         const { data: newUserData, error: userError } = await supabase
           .from('users')
           .insert([{
-            ...userDataToInsert,
+            ...dataToSubmit,
             password_hash: passwordHash
           }])
           .select()
@@ -501,10 +499,10 @@ export default function AdminEmployeeManagement() {
       address: '',
       work_type: '정규직',
       hire_date: '',
-      contract_end_date: null as string | null,
-      newPassword: '',
-      reviewUrl: ''
+      contract_end_date: null as string | null
     })
+    setNewPassword('')
+    setReviewUrl('')
     setShowAddForm(false)
     setEditingEmployee(null)
   }
@@ -973,8 +971,8 @@ export default function AdminEmployeeManagement() {
                   <label className="block text-sm font-medium text-gray-700">반기 리뷰 링크 (선택사항)</label>
                   <input
                     type="url"
-                    value={formData.reviewUrl}
-                    onChange={(e) => setFormData({...formData, reviewUrl: e.target.value})}
+                    value={reviewUrl}
+                    onChange={(e) => setReviewUrl(e.target.value)}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     placeholder="https://docs.google.com/spreadsheets/..."
                   />
@@ -986,8 +984,8 @@ export default function AdminEmployeeManagement() {
                     <label className="block text-sm font-medium text-gray-700">새 비밀번호 (선택사항)</label>
                     <input
                       type="password"
-                      value={formData.newPassword}
-                      onChange={(e) => setFormData({...formData, newPassword: e.target.value})}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                       className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                       placeholder="새 비밀번호를 입력하세요 (입력하지 않으면 기존 비밀번호 유지)"
                     />
