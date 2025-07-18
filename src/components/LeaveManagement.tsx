@@ -562,35 +562,52 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     allEvents.sort((a, b) => new Date(a.date.split(' ~ ')[0]).getTime() - new Date(b.date.split(' ~ ')[0]).getTime())
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         {allEvents.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">이번 달 휴가 일정이 없습니다.</p>
+          <div className="text-center py-8">
+            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="text-gray-500 mt-2">이번 달 휴가 일정이 없습니다.</p>
+          </div>
         ) : (
           allEvents.map((event, index) => (
-            <div key={`event-${index}`} className="bg-gray-50 p-3 rounded-lg">
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <h4 className="font-medium text-gray-900">{event.employee}</h4>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+            <div key={`event-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-2 sm:space-y-0">
+                <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
+                    <h4 className="font-semibold text-gray-900 text-lg">{event.employee}</h4>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 self-start">
                       {event.title}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {event.date}
-                  </p>
-                  {event.reason && (
-                    <p className="text-xs text-gray-500 mt-1">{event.reason}</p>
-                  )}
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      {event.date}
+                    </p>
+                    {event.reason && (
+                      <p className="text-sm text-gray-500 flex items-start">
+                        <svg className="w-4 h-4 mr-2 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        {event.reason}
+                      </p>
+                    )}
+                  </div>
                 </div>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  event.status === 'approved' ? 'bg-green-100 text-green-800' :
-                  event.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {event.status === 'approved' ? '승인' : 
-                   event.status === 'pending' ? '대기' : '거절'}
-                </span>
+                <div className="flex justify-end sm:justify-start">
+                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                    event.status === 'approved' ? 'bg-green-100 text-green-800' :
+                    event.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-red-100 text-red-800'
+                  }`}>
+                    {event.status === 'approved' ? '승인' : 
+                     event.status === 'pending' ? '대기' : '거절'}
+                  </span>
+                </div>
               </div>
             </div>
           ))
@@ -629,7 +646,9 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               <p className="text-sm text-gray-500">휴가 현황 및 신청</p>
             </div>
           </div>
-          <div className="flex space-x-2">
+          
+          {/* 데스크톱 버튼들 */}
+          <div className="hidden md:flex space-x-2">
             <button
               onClick={() => setCalendarView('calendar')}
               className={`px-3 py-1 text-sm rounded-md ${
@@ -670,11 +689,35 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               </button>
             )}
           </div>
+          
+          {/* 모바일 메뉴 버튼 */}
+          <div className="md:hidden">
+            <button
+              onClick={() => setCalendarView(calendarView === 'calendar' ? 'list' : 'calendar')}
+              className="flex items-center space-x-1 px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+              {calendarView === 'calendar' ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  </svg>
+                  <span>목록</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
+                  </svg>
+                  <span>캘린더</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* 휴가 현황 요약 */}
         <div className="mt-4">
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-gray-600">연차: {leaveData?.leave_types.used_annual_days || 0}일 / {leaveData?.leave_types.annual_days || 0}일</p>
               <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
@@ -698,6 +741,29 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               </div>
             </div>
           </div>
+        </div>
+        
+        {/* 모바일 구글 캘린더 토글 */}
+        <div className="md:hidden mt-4">
+          {calendarConfigs.length > 0 && (
+            <button
+              onClick={() => setShowCalendarEvents(!showCalendarEvents)}
+              className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center space-x-2 ${
+                showCalendarEvents 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-gray-100 text-gray-600'
+              }`}
+              disabled={calendarLoading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span>Google 캘린더 {showCalendarEvents ? '숨기기' : '보기'}</span>
+              {calendarLoading && (
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -728,7 +794,15 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
       {/* 메인 콘텐츠 */}
       <div className="p-5">
-        {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
+        {/* 데스크톱에서는 선택된 뷰를 표시 */}
+        <div className="hidden md:block">
+          {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
+        </div>
+        
+        {/* 모바일에서는 항상 리스트뷰를 표시 */}
+        <div className="md:hidden">
+          {renderLeaveList()}
+        </div>
       </div>
 
       {/* 액션 버튼들 */}

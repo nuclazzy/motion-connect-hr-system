@@ -64,6 +64,8 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [showAddForm, setShowAddForm] = useState(false)
   const [calendarLoading, setCalendarLoading] = useState(false)
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
+  const [showEditForm, setShowEditForm] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     title: '',
     date: '',
@@ -179,6 +181,105 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
       console.error('Error in fetchMeetings:', error)
     }
   }, [currentDate])
+
+  // 이벤트 수정 핸들러
+  const handleEditEvent = (event: CalendarEvent) => {
+    setEditingEvent(event)
+    // 이벤트 데이터로 폼 채우기
+    const eventDate = new Date(event.start)
+    const timeStr = eventDate.toTimeString().slice(0, 5)
+    setFormData({
+      title: event.title,
+      date: eventDate.toISOString().split('T')[0],
+      time: timeStr,
+      location: event.location || '',
+      description: event.description || '',
+      created_by: user.id,
+      targetCalendar: event.calendarId || ADMIN_TEAM_CALENDARS[0]?.id || ''
+    })
+    setShowEditForm(true)
+  }
+
+  // 이벤트 삭제 핸들러
+  const handleDeleteEvent = async (event: CalendarEvent) => {
+    if (!confirm(`"${event.title}" 일정을 삭제하시겠습니까?`)) {
+      return
+    }
+
+    try {
+      const response = await fetch('/api/calendar/delete-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId: event.id,
+          calendarId: event.calendarId
+        })
+      })
+
+      if (response.ok) {
+        alert('일정이 삭제되었습니다.')
+        fetchCalendarEvents() // 캘린더 이벤트 새로고침
+      } else {
+        const error = await response.json()
+        alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`)
+      }
+    } catch (error) {
+      console.error('일정 삭제 오류:', error)
+      alert('일정 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 이벤트 수정 저장 핸들러
+  const handleUpdateEvent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingEvent) return
+
+    try {
+      const startDateTime = new Date(`${formData.date}T${formData.time}`)
+      const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 후
+
+      const response = await fetch('/api/calendar/update-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventId: editingEvent.id,
+          calendarId: editingEvent.calendarId,
+          title: formData.title,
+          description: formData.description,
+          location: formData.location,
+          start: startDateTime.toISOString(),
+          end: endDateTime.toISOString()
+        })
+      })
+
+      if (response.ok) {
+        alert('일정이 수정되었습니다.')
+        setShowEditForm(false)
+        setEditingEvent(null)
+        fetchCalendarEvents() // 캘린더 이벤트 새로고침
+        // 폼 초기화
+        setFormData({
+          title: '',
+          date: '',
+          time: '',
+          location: '',
+          description: '',
+          created_by: user.id,
+          targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
+        })
+      } else {
+        const error = await response.json()
+        alert(`수정 실패: ${error.message || '알 수 없는 오류'}`)
+      }
+    } catch (error) {
+      console.error('일정 수정 오류:', error)
+      alert('일정 수정 중 오류가 발생했습니다.')
+    }
+  }
 
   useEffect(() => {
     fetchMeetings()
@@ -492,11 +593,31 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                       {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
                         <div 
                           key={`cal-${event.id}-${idx}`}
-                          className="text-xs p-1 rounded break-words bg-green-100 text-green-800 border-l-2 border-green-500"
+                          className="text-xs p-1 rounded break-words bg-green-100 text-green-800 border-l-2 border-green-500 group hover:bg-green-200 relative"
                           title={`${event.title} (${event.calendarName})`}
                         >
                           <div className="font-medium">[{event.calendarName}]</div>
-                          <div>{event.title}</div>
+                          <div className="pr-12">{event.title}</div>
+                          <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
+                            <button
+                              onClick={() => handleEditEvent(event)}
+                              className="text-blue-600 hover:text-blue-800 p-1"
+                              title="수정"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEvent(event)}
+                              className="text-red-600 hover:text-red-800 p-1"
+                              title="삭제"
+                            >
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ))}
                       
@@ -606,6 +727,85 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
           </div>
         </div>
       </div>
+
+      {/* 팀 일정 수정 폼 */}
+      {showEditForm && editingEvent && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">일정 수정</h3>
+              <form onSubmit={handleUpdateEvent} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.title}
+                    onChange={(e) => setFormData({...formData, title: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">날짜</label>
+                  <input
+                    type="date"
+                    required
+                    value={formData.date}
+                    onChange={(e) => setFormData({...formData, date: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">시간</label>
+                  <input
+                    type="time"
+                    required
+                    value={formData.time}
+                    onChange={(e) => setFormData({...formData, time: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">장소</label>
+                  <input
+                    type="text"
+                    value={formData.location}
+                    onChange={(e) => setFormData({...formData, location: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    rows={3}
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditForm(false)
+                      setEditingEvent(null)
+                    }}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium"
+                  >
+                    수정
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 미팅 추가 모달 */}
       {showAddForm && (
