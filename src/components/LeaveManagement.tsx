@@ -106,7 +106,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [showStatusModal, setShowStatusModal] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [calendarView, setCalendarView] = useState<'calendar' | 'list'>('calendar')
-  const [viewMode, setViewMode] = useState<'personal' | 'all'>('all')
+  const [viewMode, setViewMode] = useState<'personal' | 'all'>('personal')
 
   const fetchLeaveData = async () => {
     try {
@@ -259,7 +259,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
             calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
             timeMin,
             timeMax,
-            q: user.name, // 사용자 이름으로 검색
+            // q: user.name, // 모든 직원의 휴가 정보를 보기 위해 검색 필터 제거
             maxResults: 250
           }),
         })
@@ -506,15 +506,23 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               휴가
             </div>
           )}
-          {showCalendarEvents && dayEvents.calendarEvents.map((event, index) => (
-            <div 
-              key={`cal-${event.id}-${index}`}
-              className="text-xs bg-blue-100 text-blue-800 rounded px-1 mt-1 truncate"
-              title={`${event.title} (${event.calendarName})`}
-            >
-              {event.title}
-            </div>
-          ))}
+          {showCalendarEvents && dayEvents.calendarEvents.map((event, index) => {
+            // 이벤트 제목에서 직원 이름 추출 (예: "홍길동 - 연차")
+            const titleParts = event.title.split(' - ')
+            const employeeName = titleParts[0]
+            const leaveType = titleParts[1] || event.title
+            
+            return (
+              <div 
+                key={`cal-${event.id}-${index}`}
+                className="text-xs bg-green-100 text-green-800 rounded px-1 mt-1 truncate border-l-2 border-green-500"
+                title={`${event.title} (${event.calendarName})`}
+              >
+                <div className="font-medium">{employeeName}</div>
+                <div className="text-xs opacity-75">{leaveType}</div>
+              </div>
+            )
+          })}
         </div>
       )
     }
@@ -535,26 +543,63 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     const currentMonth = currentDate.getMonth()
     const currentYear = currentDate.getFullYear()
     
+    // 개인 휴가 이벤트
     const filteredEvents = leaveEvents.filter(event => {
       const eventDate = new Date(event.start_date)
       return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
     })
 
+    // 구글 캘린더에서 가져온 모든 직원 휴가 이벤트
+    const filteredCalendarEvents = calendarEvents.filter(event => {
+      const eventDate = new Date(event.start)
+      return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
+    })
+
+    const allEvents = [
+      ...filteredEvents.map(event => ({
+        type: 'personal',
+        title: event.leave_type,
+        employee: user.name,
+        date: event.start_date === event.end_date ? event.start_date : `${event.start_date} ~ ${event.end_date}`,
+        reason: event.reason,
+        status: event.status
+      })),
+      ...filteredCalendarEvents.map(event => {
+        const titleParts = event.title.split(' - ')
+        const employeeName = titleParts[0]
+        const leaveType = titleParts[1] || event.title
+        
+        return {
+          type: 'calendar',
+          title: leaveType,
+          employee: employeeName,
+          date: new Date(event.start).toLocaleDateString('ko-KR'),
+          reason: event.description || '',
+          status: 'approved'
+        }
+      })
+    ]
+
+    // 날짜순으로 정렬
+    allEvents.sort((a, b) => new Date(a.date.split(' ~ ')[0]).getTime() - new Date(b.date.split(' ~ ')[0]).getTime())
+
     return (
       <div className="space-y-2">
-        {filteredEvents.length === 0 ? (
+        {allEvents.length === 0 ? (
           <p className="text-gray-500 text-center py-4">이번 달 휴가 일정이 없습니다.</p>
         ) : (
-          filteredEvents.map(event => (
-            <div key={event.id} className="bg-gray-50 p-3 rounded-lg">
+          allEvents.map((event, index) => (
+            <div key={`event-${index}`} className="bg-gray-50 p-3 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
-                  <h4 className="font-medium text-gray-900">{event.leave_type}</h4>
-                  <p className="text-sm text-gray-600">
-                    {event.start_date === event.end_date 
-                      ? event.start_date 
-                      : `${event.start_date} ~ ${event.end_date}`
-                    }
+                  <div className="flex items-center space-x-2">
+                    <h4 className="font-medium text-gray-900">{event.employee}</h4>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      {event.title}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {event.date}
                   </p>
                   {event.reason && (
                     <p className="text-xs text-gray-500 mt-1">{event.reason}</p>
