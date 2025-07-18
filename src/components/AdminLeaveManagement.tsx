@@ -78,6 +78,8 @@ export default function AdminLeaveManagement() {
     start_date: '',
     end_date: '',
     days: 1,
+    is_half_day: false,
+    half_day_type: 'morning' as 'morning' | 'afternoon',
     reason: ''
   })
 
@@ -341,6 +343,8 @@ export default function AdminLeaveManagement() {
       start_date: '',
       end_date: '',
       days: 1,
+      is_half_day: false,
+      half_day_type: 'morning',
       reason: ''
     })
     setShowAddLeave(true)
@@ -357,7 +361,7 @@ export default function AdminLeaveManagement() {
       const userLeave = leaveData.find(leave => leave.user_id === addLeaveForm.employee_id)
       if (userLeave) {
         const updatedLeaveTypes = { ...userLeave.leave_types }
-        const daysToUse = parseFloat(addLeaveForm.days.toString());
+        const daysToUse = addLeaveForm.is_half_day ? 0.5 : parseFloat(addLeaveForm.days.toString());
 
         if (addLeaveForm.leave_type === 'annual') {
           if ((updatedLeaveTypes.used_annual_days || 0) + daysToUse > updatedLeaveTypes.annual_days) {
@@ -396,7 +400,9 @@ export default function AdminLeaveManagement() {
             leave_type: addLeaveForm.leave_type,
             start_date: addLeaveForm.start_date,
             end_date: addLeaveForm.end_date,
-            days: addLeaveForm.days,
+            days: addLeaveForm.is_half_day ? 0.5 : parseFloat(addLeaveForm.days.toString()),
+            is_half_day: addLeaveForm.is_half_day,
+            half_day_type: addLeaveForm.half_day_type,
             reason: addLeaveForm.reason,
             manual_entry: true
           },
@@ -427,6 +433,8 @@ export default function AdminLeaveManagement() {
         start_date: '',
         end_date: '',
         days: 1,
+        is_half_day: false,
+        half_day_type: 'morning',
         reason: ''
       })
       fetchLeaveData()
@@ -951,7 +959,41 @@ export default function AdminLeaveManagement() {
                     onChange={(e) => setAddLeaveForm({...addLeaveForm, days: parseFloat(e.target.value) || 0})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"
                     required
+                    disabled={addLeaveForm.is_half_day}
                   />
+                </div>
+                
+                <div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="is_half_day"
+                      checked={addLeaveForm.is_half_day}
+                      onChange={(e) => setAddLeaveForm({
+                        ...addLeaveForm, 
+                        is_half_day: e.target.checked,
+                        days: e.target.checked ? 0.5 : 1
+                      })}
+                      className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="is_half_day" className="ml-2 block text-sm text-gray-900">
+                      반차
+                    </label>
+                  </div>
+                  
+                  {addLeaveForm.is_half_day && (
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700">반차 종류</label>
+                      <select
+                        value={addLeaveForm.half_day_type}
+                        onChange={(e) => setAddLeaveForm({...addLeaveForm, half_day_type: e.target.value as 'morning' | 'afternoon'})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"
+                      >
+                        <option value="morning">오전 반차</option>
+                        <option value="afternoon">오후 반차</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
                 
                 <div>

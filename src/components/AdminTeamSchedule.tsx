@@ -442,7 +442,8 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
               </div>
             </div>
             
-            <div className="grid grid-cols-7 gap-2">
+            {/* 데스크톱 그리드뷰 */}
+            <div className="hidden md:grid grid-cols-7 gap-2">
               {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
                 const day = weekDays[index]
                 const dayMeetings = getMeetingsForDate(day)
@@ -462,14 +463,15 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                           {day.getDate()}
                         </div>
                       </div>
-                      {holidayInfo.isHoliday && (
-                        <div className="text-xs text-red-600 mt-1 truncate text-center" title={holidayInfo.name}>
-                          {holidayInfo.name}
-                        </div>
-                      )}
                     </div>
                     
                     <div className="min-h-[140px] bg-white rounded border p-2 space-y-1">
+                      {/* 공휴일 표시 */}
+                      {holidayInfo.isHoliday && (
+                        <div className="text-xs text-red-600 mb-1 p-1 bg-red-50 rounded truncate text-center" title={holidayInfo.name}>
+                          🎌 {holidayInfo.name}
+                        </div>
+                      )}
                       {/* 팀 미팅 표시 */}
                       {dayMeetings.map((meeting, idx) => (
                         <div 
@@ -507,6 +509,99 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                   </div>
                 )
               })}
+            </div>
+
+            {/* 모바일 리스트뷰 */}
+            <div className="md:hidden space-y-2 mt-4">
+              {weekDays.map((day, index) => {
+                const dayMeetings = getMeetingsForDate(day)
+                const dayEvents = getAllEventsForDate(day)
+                const isTodayDay = isToday(day)
+                const isWeekendDay = isWeekend(day)
+                const holidayInfo = getHolidayInfoSync(day)
+                const dayName = ['일', '월', '화', '수', '목', '금', '토'][index]
+                const totalEvents = dayMeetings.length + (showCalendarEvents ? dayEvents.calendarEvents.length : 0)
+                
+                if (totalEvents === 0 && !holidayInfo.isHoliday) return null
+                
+                return (
+                  <div key={index} className="bg-white rounded-lg border p-3">
+                    <div className={`flex items-center justify-between mb-2 ${
+                      isTodayDay ? 'text-indigo-600' : (holidayInfo.isHoliday || isWeekendDay) ? 'text-red-600' : 'text-gray-700'
+                    }`}>
+                      <div className="flex items-center space-x-2">
+                        <div className={`text-sm font-medium ${isTodayDay ? 'bg-indigo-600 text-white px-2 py-1 rounded-full' : ''}`}>
+                          {dayName}
+                        </div>
+                        <div className="text-lg font-medium">
+                          {day.getDate()}일
+                        </div>
+                        {holidayInfo.isHoliday && (
+                          <div className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded" title={holidayInfo.name}>
+                            🎌 {holidayInfo.name}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {totalEvents}개 일정
+                      </div>
+                    </div>
+                    
+                    {totalEvents > 0 && (
+                      <div className="space-y-2">
+                        {/* 팀 미팅 표시 */}
+                        {dayMeetings.map((meeting, idx) => (
+                          <div 
+                            key={`meeting-${idx}`}
+                            className={`text-sm p-2 rounded break-words ${
+                              meeting.meeting_type === 'external' 
+                                ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
+                                : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
+                            }`}
+                            title={`${meeting.title} (${meeting.user?.department})`}
+                          >
+                            <div className="font-medium text-xs text-gray-600 mb-1">[{meeting.user?.department}]</div>
+                            <div className="font-medium">{meeting.title}</div>
+                            {meeting.location && (
+                              <div className="text-xs text-gray-600 mt-1">📍 {meeting.location}</div>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {/* Google Calendar 이벤트 표시 */}
+                        {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
+                          <div 
+                            key={`cal-${event.id}-${idx}`}
+                            className={`text-sm p-2 rounded break-words ${
+                              event.calendarName.includes('외부') 
+                                ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500'
+                                : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
+                            }`}
+                          >
+                            <div className="font-medium text-xs text-gray-600 mb-1">[{event.calendarName}]</div>
+                            <div className="font-medium">{event.title}</div>
+                            {event.location && (
+                              <div className="text-xs text-gray-600 mt-1">📍 {event.location}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+              
+              {weekDays.every(day => {
+                const dayMeetings = getMeetingsForDate(day)
+                const dayEvents = getAllEventsForDate(day)
+                const holidayInfo = getHolidayInfoSync(day)
+                return dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0) && !holidayInfo.isHoliday
+              }) && (
+                <div className="text-center py-8 text-gray-400">
+                  <div className="text-4xl mb-2">📅</div>
+                  <div>이번 주에 등록된 팀 일정이 없습니다</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

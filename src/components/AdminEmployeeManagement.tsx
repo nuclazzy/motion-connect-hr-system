@@ -377,7 +377,7 @@ export default function AdminEmployeeManagement() {
         }
 
         // 입사일이 변경되었을 수 있으므로 연차 정보도 업데이트
-        const annual_days = calculateAnnualLeave(result.user.hire_date);
+        const annual_days = result.user.hire_date ? calculateAnnualLeave(result.user.hire_date) : 15;
         const { error: leaveError } = await supabase
             .from('leave_days')
             .update({ 
@@ -438,7 +438,7 @@ export default function AdminEmployeeManagement() {
         if (userError) throw userError;
 
         // 새 직원의 연차 정보 생성
-        const annual_days = calculateAnnualLeave(newUserData.hire_date);
+        const annual_days = newUserData.hire_date ? calculateAnnualLeave(newUserData.hire_date) : 15;
         const { error: leaveError } = await supabase
             .from('leave_days')
             .insert([{

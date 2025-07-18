@@ -563,13 +563,14 @@ export default function AdminWeeklySchedule({ user }: AdminWeeklyScheduleProps) 
                           </div>
                         </div>
                       </div>
-                      {holidayInfo.isHoliday && (
-                        <div className="text-xs text-red-600 mt-1 truncate text-center" title={holidayInfo.name}>
-                          {holidayInfo.name}
-                        </div>
-                      )}
                       
                       <div className="min-h-[140px] bg-white rounded border p-2 space-y-1">
+                        {/* 공휴일 표시 */}
+                        {holidayInfo.isHoliday && (
+                          <div className="text-xs text-red-600 mb-1 p-1 bg-red-50 rounded truncate text-center" title={holidayInfo.name}>
+                            🎌 {holidayInfo.name}
+                          </div>
+                        )}
                         {/* 미팅 표시 */}
                         {dayMeetings.map((meeting, idx) => (
                           <div 
