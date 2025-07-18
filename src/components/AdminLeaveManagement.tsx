@@ -307,33 +307,6 @@ export default function AdminLeaveManagement() {
     }
   }
 
-  const handleInitializeLeaveData = async () => {
-    try {
-      const confirmed = confirm('휴가 데이터가 없는 직원들을 위해 초기 휴가 데이터를 생성하시겠습니까?')
-      
-      if (confirmed) {
-        const response = await fetch('/api/admin/leave-data/initialize', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        })
-        
-        const result = await response.json()
-        
-        if (result.success) {
-          alert(`휴가 데이터 초기화 완료: ${result.new_leave_count}명의 직원에게 휴가 데이터가 생성되었습니다.`)
-          fetchLeaveData()
-          fetchPromotionData()
-        } else {
-          alert('휴가 데이터 초기화에 실패했습니다: ' + result.error)
-        }
-      }
-    } catch (error) {
-      console.error('휴가 데이터 초기화 오류:', error)
-      alert('오류가 발생했습니다.')
-    }
-  }
   
   const handleAddLeave = (employee: LeaveData) => {
     setAddLeaveForm({
@@ -459,7 +432,7 @@ export default function AdminLeaveManagement() {
     )
   }
 
-  // 휴가 데이터가 없으면 초기화 안내 표시
+  // 휴가 데이터가 없으면 안내 표시
   if (leaveData.length === 0) {
     return (
       <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -470,16 +443,8 @@ export default function AdminLeaveManagement() {
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900">휴가 데이터가 없습니다</h3>
             <p className="mt-1 text-sm text-gray-500">
-              직원들의 휴가 데이터를 초기화해주세요.
+              직원들의 휴가 데이터가 자동으로 생성됩니다.
             </p>
-            <div className="mt-6">
-              <button
-                onClick={handleInitializeLeaveData}
-                className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-              >
-                휴가 데이터 초기화
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -547,14 +512,6 @@ export default function AdminLeaveManagement() {
                 className="font-medium text-red-600 hover:text-red-500"
               >
                 연차 촉진 {legalRequiredEmployees.length}건 {showPromotion ? '숨기기' : '보기'}
-              </button>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={handleInitializeLeaveData}
-                className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm font-medium hover:bg-blue-700"
-              >
-                휴가 데이터 초기화
               </button>
             </div>
           </div>
