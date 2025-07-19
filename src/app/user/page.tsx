@@ -50,20 +50,24 @@ export default function UserDashboard() {
         console.error("Failed to check promotion status:", error)
       }
 
-      // 개별 리뷰 링크 가져오기
+      // 개별 리뷰 링크 가져오기 (선택적 기능)
       try {
-        const { data: reviewData } = await supabase
+        const { data: reviewData, error: reviewError } = await supabase
           .from('review_links')
           .select('*')
           .eq('user_id', currentUser.id)
           .eq('is_active', true)
           .single()
         
-        if (reviewData) {
+        if (!reviewError && reviewData) {
           setReviewLink(reviewData)
+        } else if (reviewError && reviewError.code !== 'PGRST116') {
+          // PGRST116은 "no rows returned" 오류로, 정상적인 경우
+          // 다른 오류는 테이블이 존재하지 않거나 권한 문제일 수 있음
+          console.log("Review links feature not available:", reviewError.message)
         }
       } catch (error) {
-        console.error("Failed to fetch review link:", error)
+        console.log("Review links feature not available:", error)
       }
     }
 
