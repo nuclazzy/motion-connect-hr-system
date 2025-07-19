@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
-import { getCurrentYearRange } from '@/lib/calendarMapping'
+import { CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
 
 interface CalendarEvent {
   id: string
@@ -16,12 +16,23 @@ interface CalendarEvent {
   color?: string
 }
 
+interface CalendarConfig {
+  id: string
+  config_type: 'meeting'
+  target_name: string
+  calendar_id: string
+  calendar_alias: string | null
+  is_active: boolean
+}
+
 interface UserWeeklyScheduleProps {
   user: User
 }
 
 export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
+  const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
+  const [currentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
   const [isManualView, setIsManualView] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -38,13 +49,117 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     targetCalendar: ''
   })
 
-  // 미팅 캘린더 ID 정의
-  const MEETING_CALENDARS = {
-    external: 'motionsense.co.kr_vdbr1eu5ectsbsnod67gdohj00@group.calendar.google.com', // 외부 미팅 및 답사
-    internal: 'dingastory.com_aatf30n7ad8e3mq7kfilhvu6rk@group.calendar.google.com'  // 내부 회의 및 면담
-  }
+  // 미팅 캘린더 설정 - TeamSchedule과 동일한 구조
+  const fetchCalendarConfigs = useCallback(async () => {
+    try {
+      console.log('📅 [DEBUG] 미팅 캘린더 설정 시작')
+      
+      // 미팅 캘린더 직접 정의
+      const meetingCalendars = [
+        'motionsense.co.kr_vdbr1eu5ectsbsnod67gdohj00@group.calendar.google.com', // 외부 미팅 및 답사
+        'dingastory.com_aatf30n7ad8e3mq7kfilhvu6rk@group.calendar.google.com'  // 내부 회의 및 면담
+      ]
+      
+      console.log('📅 [DEBUG] 미팅 캘린더 목록:', meetingCalendars)
+      
+      const configs = meetingCalendars.map(calendarId => ({
+        id: calendarId,
+        config_type: 'meeting' as const,
+        target_name: 'meetings',
+        calendar_id: calendarId,
+        calendar_alias: (CALENDAR_NAMES as Record<string, string>)[calendarId] || calendarId,
+        is_active: true
+      }))
+      
+      console.log('📅 [DEBUG] 생성된 미팅 캘린더 설정:', configs)
+      setCalendarConfigs(configs)
+    } catch (error) {
+      console.error('미팅 캘린더 설정 조회 오류:', error)
+    }
+  }, [])
 
-  // 화면 크기에 따른 자동 뷰 변경
+  // TeamSchedule과 동일한 이벤트 조회 로직
+  const fetchCalendarEvents = useCallback(async () => {
+    if (calendarConfigs.length === 0) {
+      console.log('🔄 [DEBUG] 미팅 캘린더 설정이 비어있음 - 이벤트 조회 생략')
+      setCalendarEvents([])
+      return
+    }
+
+    setCalendarLoading(true)
+    try {
+      const allEvents: CalendarEvent[] = []
+      const { timeMin, timeMax } = getCurrentYearRange()
+      console.log('🔄 [DEBUG] 시간 범위:', { timeMin, timeMax })
+
+      // Google Calendar에서 이벤트 가져오기 - TeamSchedule과 동일한 방식
+      for (const config of calendarConfigs) {
+        console.log(`🔄 [DEBUG] 미팅 캘린더 이벤트 조회 시도: ${config.calendar_alias} (${config.calendar_id})`)
+        try {
+          const response = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              calendarId: config.calendar_id,
+              timeMin,
+              timeMax,
+              maxResults: 250
+            }),
+          })
+
+          console.log(`🔄 [DEBUG] 미팅 캘린더 API 응답 상태: ${response.status}`)
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log(`🔄 [DEBUG] 가져온 미팅 이벤트 수: ${data.events?.length || 0}`)
+            if (data.events) {
+              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
+                ...event,
+                calendarName: config.calendar_alias,
+                calendarId: config.calendar_id,
+                color: config.calendar_id.includes('motionsense') ? '#3B82F6' : '#10B981' // blue for external, green for internal
+              }))
+              allEvents.push(...eventsWithCalendarInfo)
+            }
+          } else {
+            const errorText = await response.text()
+            console.error(`🔄 [ERROR] 미팅 캘린더 API 오류: ${response.status} - ${errorText}`)
+          }
+        } catch (error) {
+          console.error(`미팅 캘린더 ${config.calendar_alias} 이벤트 조회 오류:`, error)
+        }
+      }
+
+      // 현재 주의 이벤트만 필터링 - TeamSchedule과 동일한 방식
+      const startOfWeek = new Date(currentDate)
+      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+
+      const weeklyEvents = allEvents.filter(event => {
+        const eventDate = new Date(event.start || '')
+        return eventDate >= startOfWeek && eventDate <= endOfWeek
+      })
+      
+      console.log(`🔄 [DEBUG] 이번 주 미팅 이벤트 수: ${weeklyEvents.length}`)
+      setCalendarEvents(weeklyEvents)
+    } catch (error) {
+      console.error('미팅 캘린더 이벤트 조회 오류:', error)
+      setCalendarEvents([])
+    } finally {
+      setCalendarLoading(false)
+    }
+  }, [currentDate, calendarConfigs])
+
+  useEffect(() => {
+    fetchCalendarConfigs()
+  }, [fetchCalendarConfigs])
+
+  useEffect(() => {
+    fetchCalendarEvents()
+  }, [fetchCalendarEvents])
+
+  // 화면 크기에 따른 자동 뷰 변경 - TeamSchedule과 동일
   useEffect(() => {
     const handleResize = () => {
       if (!isManualView) {
@@ -58,95 +173,6 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     return () => window.removeEventListener('resize', handleResize)
   }, [isManualView])
 
-  const fetchCalendarEvents = useCallback(async () => {
-    setCalendarLoading(true)
-    try {
-      const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
-      console.log('🔄 [DEBUG] 미팅 캘린더 이벤트 조회 시작')
-
-      // 외부 미팅 및 답사 일정
-      try {
-        console.log(`🔄 [DEBUG] 외부 미팅 및 답사 캘린더 조회: ${MEETING_CALENDARS.external}`)
-        const externalResponse = await fetch('/api/calendar/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            calendarId: MEETING_CALENDARS.external,
-            timeMin,
-            timeMax,
-            maxResults: 250
-          })
-        })
-
-        if (externalResponse.ok) {
-          const externalData = await externalResponse.json()
-          console.log(`✅ [DEBUG] 외부 미팅 이벤트 조회 성공:`, externalData.events?.length || 0)
-          
-          if (externalData.events) {
-            const externalEvents = externalData.events.map((event: unknown) => ({
-              ...event as CalendarEvent,
-              calendarName: '외부 미팅 및 답사',
-              calendarId: MEETING_CALENDARS.external,
-              color: '#3B82F6' // blue
-            }))
-            allEvents.push(...externalEvents)
-          }
-        } else {
-          console.error('❌ [DEBUG] 외부 미팅 캘린더 조회 실패:', externalResponse.status)
-        }
-      } catch (error) {
-        console.error('❌ [DEBUG] 외부 미팅 캘린더 조회 오류:', error)
-      }
-
-      // 내부 회의 및 면담 일정
-      try {
-        console.log(`🔄 [DEBUG] 내부 회의 및 면담 캘린더 조회: ${MEETING_CALENDARS.internal}`)
-        const internalResponse = await fetch('/api/calendar/events', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            calendarId: MEETING_CALENDARS.internal,
-            timeMin,
-            timeMax,
-            maxResults: 250
-          })
-        })
-
-        if (internalResponse.ok) {
-          const internalData = await internalResponse.json()
-          console.log(`✅ [DEBUG] 내부 회의 이벤트 조회 성공:`, internalData.events?.length || 0)
-          
-          if (internalData.events) {
-            const internalEvents = internalData.events.map((event: unknown) => ({
-              ...event as CalendarEvent,
-              calendarName: '내부 회의 및 면담',
-              calendarId: MEETING_CALENDARS.internal,
-              color: '#10B981' // green
-            }))
-            allEvents.push(...internalEvents)
-          }
-        } else {
-          console.error('❌ [DEBUG] 내부 회의 캘린더 조회 실패:', internalResponse.status)
-        }
-      } catch (error) {
-        console.error('❌ [DEBUG] 내부 회의 캘린더 조회 오류:', error)
-      }
-
-      console.log(`✅ [DEBUG] 전체 미팅 이벤트 조회 완료: ${allEvents.length}개`)
-      setCalendarEvents(allEvents)
-    } catch (error) {
-      console.error('❌ [DEBUG] 미팅 캘린더 이벤트 조회 총 오류:', error)
-    } finally {
-      setCalendarLoading(false)
-    }
-  }, [MEETING_CALENDARS.external, MEETING_CALENDARS.internal])
-
-  useEffect(() => {
-    fetchCalendarEvents()
-  }, [fetchCalendarEvents])
-
-
   const resetFormData = () => {
     setFormData({
       title: '',
@@ -155,13 +181,13 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
       is_all_day: false,
       location: '',
       description: '',
-      targetCalendar: MEETING_CALENDARS.external
+      targetCalendar: calendarConfigs[0]?.calendar_id || ''
     })
   }
 
   const handleAddEvent = () => {
     resetFormData()
-    setFormData(prev => ({ ...prev, targetCalendar: MEETING_CALENDARS.external }))
+    setFormData(prev => ({ ...prev, targetCalendar: calendarConfigs[0]?.calendar_id || '' }))
     setShowAddForm(true)
   }
 
@@ -176,7 +202,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
       is_all_day: isAllDay,
       location: event.location || '',
       description: event.description || '',
-      targetCalendar: event.calendarId || MEETING_CALENDARS.external
+      targetCalendar: event.calendarId || calendarConfigs[0]?.calendar_id || ''
     })
     setEditingEvent(event)
     setShowEditForm(true)
@@ -309,9 +335,14 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     }
   }
 
+  // TeamSchedule과 동일한 리스트 뷰 구조
   const renderListView = () => {
-    const externalEvents = calendarEvents.filter(event => event.calendarId === MEETING_CALENDARS.external)
-    const internalEvents = calendarEvents.filter(event => event.calendarId === MEETING_CALENDARS.internal)
+    const externalEvents = calendarEvents.filter(event => 
+      event.calendarId?.includes('motionsense')
+    )
+    const internalEvents = calendarEvents.filter(event => 
+      event.calendarId?.includes('dingastory')
+    )
 
     const sortedExternalEvents = externalEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
     const sortedInternalEvents = internalEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
@@ -419,6 +450,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     )
   }
 
+  // TeamSchedule과 동일한 캘린더 뷰 구조
   const renderCalendarView = () => {
     const weekDays = getWeekDays()
     const startDate = weekDays[0]
@@ -482,7 +514,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
 
   return (
     <div className="space-y-4">
-      {/* 헤더 */}
+      {/* 헤더 - TeamSchedule과 동일한 구조 */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">이번주 미팅 및 답사 일정</h2>
@@ -490,7 +522,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
         </div>
         
         <div className="flex items-center space-x-3">
-          {/* 뷰 전환 버튼 */}
+          {/* 뷰 전환 버튼 - TeamSchedule과 동일 */}
           <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => {
@@ -548,7 +580,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
         viewType === 'calendar' ? renderCalendarView() : renderListView()
       )}
 
-      {/* 일정 추가/수정 모달 */}
+      {/* 일정 추가/수정 모달 - TeamSchedule과 동일한 구조 */}
       {(showAddForm || showEditForm) && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
@@ -566,8 +598,11 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     required
                   >
-                    <option value={MEETING_CALENDARS.external}>외부 미팅 및 답사</option>
-                    <option value={MEETING_CALENDARS.internal}>내부 회의 및 면담</option>
+                    {calendarConfigs.map((config) => (
+                      <option key={config.calendar_id} value={config.calendar_id}>
+                        {config.calendar_alias}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
