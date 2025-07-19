@@ -4,7 +4,7 @@ import { google } from 'googleapis'
 const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL
 const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
 
-export async function DELETE(request: NextRequest) {
+async function deleteEventHandler(request: NextRequest) {
   try {
     const { calendarId, eventId } = await request.json()
 
@@ -45,4 +45,13 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+// DELETE와 POST 둘 다 지원
+export async function DELETE(request: NextRequest) {
+  return deleteEventHandler(request)
+}
+
+export async function POST(request: NextRequest) {
+  return deleteEventHandler(request)
 }
