@@ -183,6 +183,25 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
           </div>
         </div>
 
+        {/* 공통 안내 문구 */}
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">서식 신청 안내</h3>
+              <div className="mt-2 text-sm text-blue-700">
+                <p>• 모든 서식은 기존 웹앱을 통해 작성됩니다.</p>
+                <p>• 신청 후 웹앱에서 인쇄하여 서명 후 제출해주세요.</p>
+                <p>• 관리자 승인을 거쳐 처리되며, 처리 상태는 이 페이지에서 확인 가능합니다.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-6">
           {formRequests.length === 0 ? (
             <div className="text-center py-8">

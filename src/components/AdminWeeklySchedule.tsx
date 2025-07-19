@@ -40,6 +40,7 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
+  const [isManualView, setIsManualView] = useState(false) // 사용자가 수동으로 뷰를 변경했는지 추적
   const [showAddForm, setShowAddForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
@@ -73,10 +74,6 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
     try {
       const { start: timeMin, end: timeMax } = getWeekRange(currentDate)
       
-      console.log('📅 [DEBUG] 주간 일정 조회 시작:', { 
-        timeMin: timeMin.toISOString(), 
-        timeMax: timeMax.toISOString() 
-      })
       
       const allEvents: CalendarEvent[] = []
       
@@ -109,10 +106,12 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
             }))
             allEvents.push(...events)
           }
+        } else {
+          const errorText = await response.text()
+          console.error(`캘린더 ${calendar.name} 조회 실패:`, response.status, errorText)
         }
       }
 
-      console.log('📅 [DEBUG] 가져온 전체 이벤트 수:', allEvents.length)
       setCalendarEvents(allEvents)
     } catch (error) {
       console.error('주간 일정 조회 오류:', error)
@@ -121,6 +120,26 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
       setLoading(false)
     }
   }, [currentDate])
+
+  // 화면 크기에 따른 자동 뷰 변경
+  useEffect(() => {
+    const handleResize = () => {
+      if (!isManualView) {
+        // 768px (md breakpoint) 미만이면 리스트 뷰, 이상이면 캘린더 뷰
+        const isMobile = window.innerWidth < 768
+        setViewType(isMobile ? 'list' : 'calendar')
+      }
+    }
+
+    // 초기 설정
+    handleResize()
+
+    // 리사이즈 이벤트 리스너 추가
+    window.addEventListener('resize', handleResize)
+    
+    // 클린업
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isManualView])
 
   useEffect(() => {
     initializeHolidayCache()
@@ -275,21 +294,26 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
       days.push(
         <div
           key={i}
-          className={`p-3 min-h-[120px] border border-gray-200 ${
+          className={`p-2 md:p-3 min-h-[100px] md:min-h-[120px] border border-gray-200 ${
             isToday ? 'bg-blue-50 border-blue-300' : ''
           } ${isWeekendDay || holiday ? 'bg-red-50' : ''}`}
         >
-          <div className={`text-sm font-medium ${
+          <div className={`text-xs md:text-sm font-medium ${
             isToday ? 'text-blue-600' : 
             isWeekendDay || holiday ? 'text-red-600' : 'text-gray-900'
           }`}>
-            {['일', '월', '화', '수', '목', '금', '토'][i]} {date.getDate()}일
+            <span className="md:hidden">{['일', '월', '화', '수', '목', '금', '토'][i]}</span>
+            <span className="hidden md:inline">{['일', '월', '화', '수', '목', '금', '토'][i]} {date.getDate()}일</span>
+            <span className="md:hidden ml-1">{date.getDate()}</span>
           </div>
           {holiday && (
-            <div className="text-xs text-red-600 mt-1">{holiday}</div>
+            <div className="text-xs text-red-600 mt-1 truncate" title={holiday}>
+              <span className="md:hidden">{holiday.substring(0, 4)}...</span>
+              <span className="hidden md:inline">{holiday}</span>
+            </div>
           )}
-          <div className="mt-2 space-y-1">
-            {dayEvents.map((event, index) => (
+          <div className="mt-1 md:mt-2 space-y-1">
+            {dayEvents.slice(0, 3).map((event, index) => (
               <div
                 key={index}
                 className={`text-xs p-1 rounded cursor-pointer hover:opacity-80 ${
@@ -298,15 +322,21 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
                     : 'bg-green-100 text-green-800'
                 }`}
                 onClick={() => handleEditEvent(event)}
+                title={event.title}
               >
                 <div className="font-medium truncate">{event.title}</div>
                 {event.start.includes('T') && (
-                  <div className="text-gray-600">
+                  <div className="text-gray-600 hidden md:block">
                     {new Date(event.start).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 )}
               </div>
             ))}
+            {dayEvents.length > 3 && (
+              <div className="text-xs text-gray-500 text-center">
+                +{dayEvents.length - 3}개 더
+              </div>
+            )}
           </div>
         </div>
       )
@@ -314,6 +344,12 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
 
     return (
       <div className="grid grid-cols-7 gap-0 border border-gray-200">
+        {/* 요일 헤더 */}
+        {['일', '월', '화', '수', '목', '금', '토'].map(day => (
+          <div key={day} className="p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium text-gray-700 border-b border-gray-200">
+            {day}
+          </div>
+        ))}
         {days}
       </div>
     )
@@ -338,14 +374,14 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
             const isToday = new Date().toDateString() === startDate.toDateString()
             
             return (
-              <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div className="flex justify-between items-start">
+              <div key={index} className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 shadow-sm">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-2 md:space-y-0">
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-wrap">
                       <span className={`inline-block w-3 h-3 rounded-full ${
                         event.calendarId === CALENDAR_IDS.INTERNAL_MEETING ? 'bg-blue-500' : 'bg-green-500'
                       }`}></span>
-                      <h4 className="font-semibold text-gray-900">{event.title}</h4>
+                      <h4 className="font-semibold text-gray-900 text-sm md:text-base">{event.title}</h4>
                       {isToday && (
                         <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">오늘</span>
                       )}
@@ -375,10 +411,11 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
                       )}
                     </div>
                   </div>
-                  <div className="flex space-x-2 ml-4">
+                  <div className="flex space-x-2 md:ml-4 mt-2 md:mt-0">
                     <button
                       onClick={() => handleEditEvent(event)}
-                      className="p-1 text-gray-400 hover:text-blue-600"
+                      className="p-2 md:p-1 text-gray-400 hover:text-blue-600 md:bg-transparent bg-gray-50 rounded"
+                      title="수정"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -386,7 +423,8 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
                     </button>
                     <button
                       onClick={() => handleDeleteEvent(event)}
-                      className="p-1 text-gray-400 hover:text-red-600"
+                      className="p-2 md:p-1 text-gray-400 hover:text-red-600 md:bg-transparent bg-gray-50 rounded"
+                      title="삭제"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -433,51 +471,98 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
               </div>
             </div>
             <div className="flex items-center space-x-4">
+              {/* 반응형 상태 표시 */}
+              <div className="hidden md:flex items-center text-xs text-gray-500">
+                {!isManualView && (
+                  <span className="flex items-center">
+                    <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                    자동 전환
+                  </span>
+                )}
+              </div>
+              
               {/* 뷰 토글 */}
               <div className="flex bg-gray-100 p-1 rounded-lg">
                 <button
-                  onClick={() => setViewType('calendar')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  onClick={() => {
+                    setViewType('calendar')
+                    setIsManualView(true)
+                  }}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center ${
                     viewType === 'calendar' 
                       ? 'bg-white text-gray-900 shadow-sm' 
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  캘린더
+                  <svg className="w-4 h-4 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span className="hidden md:inline">캘린더</span>
                 </button>
                 <button
-                  onClick={() => setViewType('list')}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                  onClick={() => {
+                    setViewType('list')
+                    setIsManualView(true)
+                  }}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center ${
                     viewType === 'list' 
                       ? 'bg-white text-gray-900 shadow-sm' 
                       : 'text-gray-500 hover:text-gray-900'
                   }`}
                 >
-                  목록
+                  <svg className="w-4 h-4 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                  <span className="hidden md:inline">목록</span>
                 </button>
               </div>
+              
+              {/* 자동 전환 재활성화 버튼 */}
+              {isManualView && (
+                <button
+                  onClick={() => setIsManualView(false)}
+                  className="hidden md:flex items-center px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
+                  title="자동 반응형 전환 재활성화"
+                >
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  자동
+                </button>
+              )}
               <button
                 onClick={() => setShowAddForm(true)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
+                className="bg-indigo-600 text-white px-3 md:px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center"
               >
-                일정 등록
+                <svg className="w-4 h-4 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span className="hidden md:inline">일정 등록</span>
+                <span className="md:hidden">등록</span>
               </button>
             </div>
           </div>
         </div>
 
         {/* 주간 네비게이션 */}
-        <div className="p-5 border-b border-gray-200">
+        <div className="p-3 md:p-5 border-b border-gray-200">
           <div className="flex justify-between items-center">
-            <button onClick={() => navigateWeek('prev')} className="p-1 hover:bg-gray-200 rounded-full">
+            <button onClick={() => navigateWeek('prev')} className="p-2 md:p-1 hover:bg-gray-200 rounded-full">
               <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {getWeekRange(currentDate).start.toLocaleDateString('ko-KR')} - {getWeekRange(currentDate).end.toLocaleDateString('ko-KR')}
+            <h3 className="text-sm md:text-lg font-semibold text-gray-900 text-center">
+              <span className="hidden md:inline">
+                {getWeekRange(currentDate).start.toLocaleDateString('ko-KR')} - {getWeekRange(currentDate).end.toLocaleDateString('ko-KR')}
+              </span>
+              <span className="md:hidden">
+                {getWeekRange(currentDate).start.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} - {getWeekRange(currentDate).end.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+              </span>
             </h3>
-            <button onClick={() => navigateWeek('next')} className="p-1 hover:bg-gray-200 rounded-full">
+            <button onClick={() => navigateWeek('next')} className="p-2 md:p-1 hover:bg-gray-200 rounded-full">
               <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
@@ -486,7 +571,7 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
         </div>
 
         {/* 캘린더/목록 뷰 */}
-        <div className="p-5">
+        <div className="p-3 md:p-5">
           {viewType === 'calendar' ? renderWeeklyCalendar() : renderListView()}
         </div>
       </div>

@@ -25,6 +25,7 @@ export default function UserDashboard() {
   const [loading, setLoading] = useState(true)
   const [isPromotionTarget, setIsPromotionTarget] = useState(false)
   const [reviewLink, setReviewLink] = useState<ReviewLink | null>(null)
+  const [showPromotionDetails, setShowPromotionDetails] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -139,6 +140,12 @@ export default function UserDashboard() {
     }
   }
 
+  const handleLeaveApplication = () => {
+    // 휴가 신청서 웹앱 URL (예시)
+    const leaveFormUrl = 'https://forms.google.com/your-leave-form-url'
+    window.open(leaveFormUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
+  }
+
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -172,9 +179,45 @@ export default function UserDashboard() {
           
           {/* 연차 촉진 알림 배너 */}
           {isPromotionTarget && (
-            <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6" role="alert">
-              <p className="font-bold">📢 연차 사용 촉진 안내</p>
-              <p>잔여 연차가 5일 이상 남았습니다. 연차 소멸 전 모두 사용하시기 바랍니다.</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-6 w-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h3 className="text-lg font-medium text-red-800">
+                    📢 연차 사용 촉진 안내
+                  </h3>
+                  <div className="mt-2 text-sm text-red-700">
+                    <p className="font-semibold">잔여 연차가 5일 이상 남았습니다.</p>
+                    <p className="mt-1">
+                      <span className="font-medium text-red-900">연차 촉진 시즌에 할당된 연차를 모두 사용하지 않으면 자동 소멸됩니다.</span>
+                    </p>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      onClick={handleLeaveApplication}
+                      className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      지금 연차 신청하기
+                    </button>
+                    <button
+                      onClick={() => setShowPromotionDetails(true)}
+                      className="bg-white border border-red-300 text-red-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-red-50 flex items-center"
+                    >
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      상세 안내 보기
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -466,6 +509,103 @@ export default function UserDashboard() {
         </div>
       </main>
 
+      {/* 연차 촉진 상세 안내 모달 */}
+      {showPromotionDetails && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                  <svg className="w-5 h-5 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.314 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                  연차 촉진 관련 법적 안내
+                </h3>
+                <button
+                  onClick={() => setShowPromotionDetails(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                  <h4 className="font-semibold text-red-800 mb-2">⚠️ 중요 안내</h4>
+                  <p className="text-red-700 text-sm">
+                    연차 촉진 시즌에 할당된 연차를 모두 사용하지 않으면 <strong>자동 소멸</strong>됩니다.
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-4">
+                  <h4 className="font-semibold text-gray-800 mb-3">📋 법적 근거</h4>
+                  <div className="space-y-3 text-sm text-gray-700">
+                    <div>
+                      <h5 className="font-medium text-gray-800">근로기준법 제61조 (연차유급휴가의 사용촉진)</h5>
+                      <p className="mt-1">
+                        ① 사용자는 제60조제1항에 따른 연차유급휴가를 근로자가 사용하지 아니하여 소멸될 우려가 있는 경우에는 
+                        그 사용을 촉진하여야 한다.
+                      </p>
+                    </div>
+                    
+                    <div>
+                      <h5 className="font-medium text-gray-800">근로기준법 시행령 제30조 (연차유급휴가 사용촉진)</h5>
+                      <p className="mt-1">
+                        ① 사용자는 매년 하반기에 해당 연도에 발생한 연차유급휴가 중 사용하지 않은 휴가일수가 
+                        11일 이상인 근로자에 대하여 다음 각 호의 사항을 서면으로 통지하여야 한다.
+                      </p>
+                      <ul className="mt-2 ml-4 list-disc space-y-1">
+                        <li>미사용 연차유급휴가 일수</li>
+                        <li>연차유급휴가 사용을 촉진한다는 뜻</li>
+                        <li>이를 사용하지 않으면 소멸된다는 뜻</li>
+                      </ul>
+                    </div>
+
+                    <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                      <h5 className="font-medium text-blue-800">📅 촉진 기간</h5>
+                      <p className="text-blue-700 mt-1">
+                        매년 <strong>10월 1일부터 12월 31일</strong>까지가 연차 사용 촉진 기간입니다.
+                        이 기간에 사용하지 않은 연차는 다음 해 1월 1일에 자동 소멸됩니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 border border-green-200 rounded-md p-4">
+                  <h4 className="font-semibold text-green-800 mb-2">💡 권장사항</h4>
+                  <ul className="text-green-700 text-sm space-y-1">
+                    <li>• 미사용 연차는 가급적 12월 31일 이전에 모두 사용하시기 바랍니다.</li>
+                    <li>• 연차 사용 계획을 미리 세워서 업무에 차질이 없도록 조정하세요.</li>
+                    <li>• 연차 신청은 최소 3일 전에 미리 신청해주세요.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowPromotionDetails(false)}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  닫기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPromotionDetails(false)
+                    handleLeaveApplication()
+                  }}
+                  className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700"
+                >
+                  연차 신청하기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

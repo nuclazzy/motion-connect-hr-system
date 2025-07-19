@@ -59,7 +59,8 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   const [leaveEvents, setLeaveEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [calendarView, setCalendarView] = useState<'calendar' | 'list'>('calendar')
+  const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
+  const [isManualView, setIsManualView] = useState(false)
 
   // Google Calendar에서 직접 휴가 이벤트 조회 (보기 전용)
   const fetchLeaveEvents = useCallback(async () => {
@@ -130,6 +131,26 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     }
   }, [currentDate])
 
+  // 화면 크기에 따른 자동 뷰 변경
+  useEffect(() => {
+    const handleResize = () => {
+      if (!isManualView) {
+        // 768px (md breakpoint) 미만이면 리스트 뷰, 이상이면 캘린더 뷰
+        const isMobile = window.innerWidth < 768
+        setViewType(isMobile ? 'list' : 'calendar')
+      }
+    }
+
+    // 초기 설정
+    handleResize()
+
+    // 리사이즈 이벤트 리스너 추가
+    window.addEventListener('resize', handleResize)
+    
+    // 클린업
+    return () => window.removeEventListener('resize', handleResize)
+  }, [isManualView])
+
   useEffect(() => {
     fetchLeaveEvents()
   }, [fetchLeaveEvents])
@@ -189,7 +210,7 @@ export default function LeaveManagement({}: LeaveManagementProps) {
 
     // 빈 셀들 (이전 달의 마지막 날들)
     for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="p-2"></div>)
+      days.push(<div key={`empty-${i}`} className="p-2 md:p-3 border border-gray-200"></div>)
     }
 
     // 현재 달의 날들
@@ -203,24 +224,37 @@ export default function LeaveManagement({}: LeaveManagementProps) {
       days.push(
         <div
           key={day}
-          className={`p-2 min-h-[80px] border border-gray-200 ${
+          className={`p-2 md:p-3 min-h-[80px] md:min-h-[100px] border border-gray-200 ${
             isCurrentDay ? 'bg-blue-100 border-blue-300' : ''
           } ${isWeekend || holiday ? 'bg-red-50' : ''}`}
         >
-          <div className={`text-sm ${
+          <div className={`text-xs md:text-sm ${
             isCurrentDay ? 'text-blue-600 font-bold' : 
             isWeekend || holiday ? 'text-red-600' : 'text-gray-900'
           }`}>
             {day}
           </div>
           {holiday && (
-            <div className="text-xs text-red-600 mt-1">{holiday}</div>
-          )}
-          {dayEvents.map((event, index) => (
-            <div key={index} className="text-xs bg-green-100 text-green-800 rounded px-1 mt-1 truncate">
-              {event.title}
+            <div className="text-xs text-red-600 mt-1 truncate" title={holiday}>
+              <span className="md:hidden">{holiday.substring(0, 4)}...</span>
+              <span className="hidden md:inline">{holiday}</span>
             </div>
-          ))}
+          )}
+          <div className="mt-1 md:mt-2 space-y-1">
+            {dayEvents.slice(0, 2).map((event, index) => (
+              <div key={index} className="text-xs p-1 rounded bg-green-100 text-green-800 cursor-pointer hover:opacity-80" title={event.title}>
+                <div className="font-medium leading-tight break-words overflow-hidden">
+                  <span className="md:hidden">{event.title.length > 8 ? event.title.substring(0, 8) + '...' : event.title}</span>
+                  <span className="hidden md:block">{event.title.length > 15 ? event.title.substring(0, 15) + '...' : event.title}</span>
+                </div>
+              </div>
+            ))}
+            {dayEvents.length > 2 && (
+              <div className="text-xs text-gray-500 text-center font-medium">
+                +{dayEvents.length - 2}개 더
+              </div>
+            )}
+          </div>
         </div>
       )
     }
@@ -228,7 +262,7 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     return (
       <div className="grid grid-cols-7 gap-0 border border-gray-200">
         {['일', '월', '화', '수', '목', '금', '토'].map(day => (
-          <div key={day} className="p-2 bg-gray-50 text-center text-sm font-medium text-gray-700 border-b border-gray-200">
+          <div key={day} className="p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium text-gray-700 border-b border-gray-200">
             {day}
           </div>
         ))}
@@ -263,35 +297,41 @@ export default function LeaveManagement({}: LeaveManagementProps) {
             const startDate = new Date(event.start)
             const endDate = new Date(event.end)
             const isSameDay = startDate.toDateString() === endDate.toDateString()
+            const isToday = new Date().toDateString() === startDate.toDateString()
             
             return (
-              <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                <div className="flex justify-between items-start">
+              <div key={index} className="bg-white border border-gray-200 rounded-lg p-3 md:p-4 shadow-sm">
+                <div className="flex flex-col md:flex-row md:justify-between md:items-start space-y-2 md:space-y-0">
                   <div className="flex-1">
-                    <h4 className="font-semibold text-gray-900 text-lg">{event.title}</h4>
+                    <div className="flex items-center space-x-2 flex-wrap">
+                      <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+                      <h4 className="font-semibold text-gray-900 text-sm md:text-base">{event.title}</h4>
+                      {isToday && (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">오늘</span>
+                      )}
+                    </div>
                     <div className="mt-2 space-y-1">
                       <p className="text-sm text-gray-600 flex items-center">
                         <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {isSameDay 
-                          ? startDate.toLocaleDateString('ko-KR')
-                          : `${startDate.toLocaleDateString('ko-KR')} - ${endDate.toLocaleDateString('ko-KR')}`
+                        {event.start.includes('T') 
+                          ? `${startDate.toLocaleDateString('ko-KR')} ${startDate.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}`
+                          : isSameDay 
+                            ? `${startDate.toLocaleDateString('ko-KR')} (종일)`
+                            : `${startDate.toLocaleDateString('ko-KR')} - ${endDate.toLocaleDateString('ko-KR')} (종일)`
                         }
                       </p>
                       {event.description && (
-                        <p className="text-sm text-gray-500 flex items-start">
-                          <svg className="w-4 h-4 mr-2 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                          </svg>
-                          {event.description}
-                        </p>
+                        <p className="text-sm text-gray-500 mt-2">{event.description}</p>
                       )}
                     </div>
                   </div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                    휴가
-                  </span>
+                  <div className="flex items-center md:ml-4 mt-2 md:mt-0">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                      휴가
+                    </span>
+                  </div>
                 </div>
               </div>
             )
@@ -317,8 +357,8 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       {/* 헤더 */}
-      <div className="p-5 border-b border-gray-200">
-        <div className="flex items-center justify-between">
+      <div className="p-3 md:p-5 border-b border-gray-200">
+        <div className="flex flex-col md:flex-row md:items-center justify-between space-y-4 md:space-y-0">
           <div className="flex items-center">
             <div className="flex-shrink-0">
               <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -331,8 +371,69 @@ export default function LeaveManagement({}: LeaveManagementProps) {
             </div>
           </div>
           
-          {/* 새로고침 및 뷰 토글 버튼 */}
-          <div className="flex space-x-2">
+          <div className="flex items-center space-x-4">
+            {/* 반응형 상태 표시 */}
+            <div className="hidden md:flex items-center text-xs text-gray-500">
+              {!isManualView && (
+                <span className="flex items-center">
+                  <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                  자동 전환
+                </span>
+              )}
+            </div>
+            
+            {/* 뷰 토글 */}
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => {
+                  setViewType('calendar')
+                  setIsManualView(true)
+                }}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center ${
+                  viewType === 'calendar' 
+                    ? 'bg-white text-gray-900 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="hidden md:inline">캘린더</span>
+              </button>
+              <button
+                onClick={() => {
+                  setViewType('list')
+                  setIsManualView(true)
+                }}
+                className={`px-3 py-1 text-sm font-medium rounded-md transition-colors flex items-center ${
+                  viewType === 'list' 
+                    ? 'bg-white text-gray-900 shadow-sm' 
+                    : 'text-gray-500 hover:text-gray-900'
+                }`}
+              >
+                <svg className="w-4 h-4 mr-1 md:mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+                <span className="hidden md:inline">목록</span>
+              </button>
+            </div>
+            
+            {/* 자동 전환 재활성화 버튼 */}
+            {isManualView && (
+              <button
+                onClick={() => setIsManualView(false)}
+                className="hidden md:flex items-center px-2 py-1 text-xs text-gray-500 hover:text-gray-700 border border-gray-300 rounded"
+                title="자동 반응형 전환 재활성화"
+              >
+                <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                자동
+              </button>
+            )}
+
             <button
               onClick={fetchLeaveEvents}
               className="px-3 py-1 text-sm rounded-md flex items-center space-x-1 bg-blue-100 text-blue-800"
@@ -341,52 +442,37 @@ export default function LeaveManagement({}: LeaveManagementProps) {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span>새로고침</span>
+              <span className="hidden md:inline">새로고침</span>
               {loading && (
                 <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
               )}
-            </button>
-            <button
-              onClick={() => setCalendarView('calendar')}
-              className={`px-3 py-1 text-sm rounded-md ${
-                calendarView === 'calendar' 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              캘린더
-            </button>
-            <button
-              onClick={() => setCalendarView('list')}
-              className={`px-3 py-1 text-sm rounded-md ${
-                calendarView === 'list' 
-                  ? 'bg-blue-100 text-blue-800' 
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-            >
-              목록
             </button>
           </div>
         </div>
       </div>
 
       {/* 캘린더 네비게이션 */}
-      <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
+      <div className="px-3 md:px-5 py-3 bg-gray-50 border-b border-gray-200">
         <div className="flex justify-between items-center">
           <button
             onClick={() => navigateMonth('prev')}
-            className="p-1 hover:bg-gray-200 rounded"
+            className="p-2 md:p-1 hover:bg-gray-200 rounded"
           >
             <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h4 className="text-lg font-semibold text-gray-900">
-            {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+          <h4 className="text-sm md:text-lg font-semibold text-gray-900 text-center">
+            <span className="hidden md:inline">
+              {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
+            </span>
+            <span className="md:hidden">
+              {currentDate.getFullYear()}.{String(currentDate.getMonth() + 1).padStart(2, '0')}
+            </span>
           </h4>
           <button
             onClick={() => navigateMonth('next')}
-            className="p-1 hover:bg-gray-200 rounded"
+            className="p-2 md:p-1 hover:bg-gray-200 rounded"
           >
             <svg className="h-5 w-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -396,8 +482,8 @@ export default function LeaveManagement({}: LeaveManagementProps) {
       </div>
 
       {/* 메인 콘텐츠 */}
-      <div className="p-5">
-        {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
+      <div className="p-3 md:p-5">
+        {viewType === 'calendar' ? renderCalendar() : renderLeaveList()}
       </div>
     </div>
   )

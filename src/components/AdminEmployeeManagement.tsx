@@ -833,140 +833,152 @@ export default function AdminEmployeeManagement() {
       {/* 직원 추가/수정 모달 */}
       {(showAddForm || editingEmployee) && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
                 {editingEmployee ? '직원 정보 수정' : '새 직원 추가'}
               </h3>
               
-              <form onSubmit={handleSubmitForm} className="space-y-4">
+              <form onSubmit={handleSubmitForm} className="space-y-6">
+                {/* 기본 정보 섹션 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">이름</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
+                  <h4 className="text-md font-medium text-gray-900 mb-4 pb-2 border-b border-gray-200">기본 정보</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">이름</label>
+                      <input
+                        type="text"
+                        value={formData.name}
+                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">이메일</label>
+                      <input
+                        type="email"
+                        value={formData.email}
+                        onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">사번</label>
+                      <input
+                        type="text"
+                        value={formData.employee_id}
+                        onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">전화번호</label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="010-0000-0000"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">생년월일</label>
+                      <input
+                        type="date"
+                        value={formData.dob}
+                        onChange={(e) => setFormData({...formData, dob: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">주소</label>
+                      <input
+                        type="text"
+                        value={formData.address}
+                        onChange={(e) => setFormData({...formData, address: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        placeholder="주소를 입력하세요"
+                      />
+                    </div>
+                  </div>
                 </div>
 
+                {/* 근무 정보 섹션 */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">이메일</label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
+                  <h4 className="text-md font-medium text-gray-900 mb-4 pb-2 border-b border-gray-200">근무 정보</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">부서</label>
+                      <select 
+                        value={formData.department}
+                        onChange={(e) => setFormData({...formData, department: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      >
+                        <option value="">부서 선택</option>
+                        <option value="경영팀">경영팀</option>
+                        <option value="편집팀">편집팀</option>
+                        <option value="촬영팀">촬영팀</option>
+                        <option value="행사기획팀">행사기획팀</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">사번</label>
-                  <input
-                    type="text"
-                    value={formData.employee_id}
-                    onChange={(e) => setFormData({...formData, employee_id: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">직책</label>
+                      <input
+                        type="text"
+                        value={formData.position}
+                        onChange={(e) => setFormData({...formData, position: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">부서</label>
-                  <select 
-                    value={formData.department}
-                    onChange={(e) => setFormData({...formData, department: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  >
-                    <option value="">부서 선택</option>
-                    <option value="경영팀">경영팀</option>
-                    <option value="편집팀">편집팀</option>
-                    <option value="촬영팀">촬영팀</option>
-                    <option value="행사기획팀">행사기획팀</option>
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">권한</label>
+                      <select 
+                        value={formData.role}
+                        onChange={(e) => setFormData({...formData, role: e.target.value as 'admin' | 'user'})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      >
+                        <option value="user">사용자</option>
+                        <option value="admin">관리자</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">직책</label>
-                  <input
-                    type="text"
-                    value={formData.position}
-                    onChange={(e) => setFormData({...formData, position: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">근무형태</label>
+                      <select 
+                        value={formData.work_type}
+                        onChange={(e) => setFormData({...formData, work_type: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      >
+                        <option value="정규직">정규직</option>
+                        <option value="계약직">계약직</option>
+                        <option value="인턴">인턴</option>
+                        <option value="프리랜서">프리랜서</option>
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">권한</label>
-                  <select 
-                    value={formData.role}
-                    onChange={(e) => setFormData({...formData, role: e.target.value as 'admin' | 'user'})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  >
-                    <option value="user">사용자</option>
-                    <option value="admin">관리자</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">전화번호</label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="010-0000-0000"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">생년월일</label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => setFormData({...formData, dob: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">주소</label>
-                  <input
-                    type="text"
-                    value={formData.address}
-                    onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="주소를 입력하세요"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">입사일</label>
-                  <input
-                    type="date"
-                    value={formData.hire_date}
-                    onChange={(e) => setFormData({...formData, hire_date: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">근무형태</label>
-                  <select 
-                    value={formData.work_type}
-                    onChange={(e) => setFormData({...formData, work_type: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  >
-                    <option value="정규직">정규직</option>
-                    <option value="계약직">계약직</option>
-                    <option value="인턴">인턴</option>
-                    <option value="프리랜서">프리랜서</option>
-                  </select>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">입사일</label>
+                      <input
+                        type="date"
+                        value={formData.hire_date}
+                        onChange={(e) => setFormData({...formData, hire_date: e.target.value})}
+                        className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                        required
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {(formData.work_type === '계약직' || formData.work_type === '인턴') && (
