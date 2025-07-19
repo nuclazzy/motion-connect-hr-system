@@ -10,7 +10,7 @@ export default function InternalMeeting({}: InternalMeetingProps) {
   return (
     <MeetingListWidget
       title="내부 회의/면담"
-      targetName="internal-meeting"
+      calendarType="internal"
       noEventsMessage="이번 주에는 예정된 내부 회의/면담 일정이 없습니다."
     />
   )

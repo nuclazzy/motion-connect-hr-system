@@ -10,7 +10,7 @@ export default function FieldTrip({}: FieldTripProps) {
   return (
     <MeetingListWidget
       title="외부 미팅/답사"
-      targetName="external-meeting"
+      calendarType="external"
       noEventsMessage="이번 주에는 예정된 외부 미팅/답사 일정이 없습니다."
     />
   )

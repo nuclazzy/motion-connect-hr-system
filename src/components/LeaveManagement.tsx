@@ -1,13 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
-import LeaveStatusModal from './LeaveStatusModal'
-import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
-// import { CALENDAR_IDS, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping' // 더 이상 사용하지 않음
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
-// 한국 공휴일 데이터 (2024년)
+// 한국 공휴일 데이터 (2024-2025년)
 const koreanHolidays = {
   '2024-01-01': '신정',
   '2024-02-09': '설날 연휴',
@@ -45,374 +42,97 @@ const koreanHolidays = {
   '2025-12-25': '성탄절'
 }
 
-interface LeaveData {
+interface CalendarEvent {
   id: string
-  user_id: string
-  leave_types: {
-    annual_days: number
-    used_annual_days: number
-    sick_days: number
-    used_sick_days: number
-  }
-  user?: {
-    name: string
-    department: string
-    position: string
-  }
+  title: string
+  start: string
+  end: string
+  description?: string
+  location?: string
 }
-
-interface LeaveEvent {
-  id: string
-  user_id: string
-  leave_type: string
-  start_date: string
-  end_date: string
-  status: 'approved' | 'pending' | 'rejected'
-  reason?: string
-}
-
-interface CalendarConfig {
-  id: string
-  config_type: 'team' | 'function'
-  target_name: string
-  calendar_id: string
-  calendar_alias: string | null
-  is_active: boolean
-}
-
-// CalendarEvent interface 더 이상 사용되지 않음 - 대신 meetings DB에서 통합 관리
-// interface CalendarEvent {
-//   id: string
-//   title: string
-//   start: string
-//   end: string
-//   description?: string
-//   calendarId?: string
-//   calendarName: string
-// }
 
 interface LeaveManagementProps {
-  user: User
+  user?: User
 }
 
-export default function LeaveManagement({ user }: LeaveManagementProps) {
-  const [leaveData, setLeaveData] = useState<LeaveData | null>(null)
-  const [leaveEvents, setLeaveEvents] = useState<LeaveEvent[]>([])
-  const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
-  const [showCalendarEvents, setShowCalendarEvents] = useState(true)
+export default function LeaveManagement({}: LeaveManagementProps) {
+  const [leaveEvents, setLeaveEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [calendarLoading, setCalendarLoading] = useState(false)
-  const [showLeaveForm, setShowLeaveForm] = useState(false)
-  const [showStatusModal, setShowStatusModal] = useState(false)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [calendarView, setCalendarView] = useState<'calendar' | 'list'>('calendar')
 
-  const fetchLeaveData = async () => {
-    if (!user.hire_date) {
-      console.error('사용자의 입사일 정보가 없어 연차를 계산할 수 없습니다.');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const correctAnnualDays = calculateAnnualLeave(user.hire_date);
-
-      const { data: storedLeaveData, error } = await supabase
-        .from('leave_days')
-        .select('*')
-        .eq('user_id', user.id)
-        .single()
-
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        throw error;
-      }
-
-      if (storedLeaveData) {
-        // DB에 데이터가 있지만, 계산된 연차 일수가 현재와 다르면 업데이트
-        if (storedLeaveData.leave_types.annual_days !== correctAnnualDays) {
-          const { data: updatedLeaveData, error: updateError } = await supabase
-            .from('leave_days')
-            .update({ leave_types: { ...storedLeaveData.leave_types, annual_days: correctAnnualDays } })
-            .eq('user_id', user.id)
-            .select()
-            .single();
-          
-          if (updateError) throw updateError;
-          setLeaveData(updatedLeaveData);
-        } else {
-          setLeaveData(storedLeaveData);
-        }
-      } else {
-        // DB에 데이터가 없으면 새로 생성
-        const { data: newLeaveData, error: insertError } = await supabase
-          .from('leave_days')
-          .insert([{
-            user_id: user.id,
-            leave_types: {
-              annual_days: correctAnnualDays,
-              used_annual_days: 0,
-              sick_days: 30, // 기본 병가일수 (정책에 맞게 조정)
-              used_sick_days: 0
-            }
-          }])
-          .select()
-          .single()
-
-        if (insertError) throw insertError;
-        setLeaveData(newLeaveData)
-      }
-    } catch (error) {
-      console.error('Error in fetchLeaveData:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  const fetchCalendarConfigs = useCallback(async () => {
-    try {
-      // Service Account 기반 캘린더 설정 조회
-      const { data, error } = await supabase
-        .from('calendar_configs')
-        .select('*')
-        .eq('config_type', 'function')
-        .eq('target_name', 'leave-management')
-        .eq('is_active', true)
-      
-      if (error) throw error
-      console.log('휴가 관리 연결된 캘린더 수:', data?.length || 0)
-      if ((data?.length || 0) === 0) {
-        console.log('휴가 관리에 연결된 캘린더가 없습니다. 관리자가 캘린더를 연결해주세요.')
-      }
-      setCalendarConfigs(data || [])
-    } catch (error) {
-      console.error('휴가 관리 캘린더 설정 조회 오류:', error)
-    }
-  }, [])
-
-  // 휴가 캘린더에 이벤트 생성하는 함수
-  const createLeaveCalendarEvent = async (leaveType: string, startDate: string, endDate: string, reason?: string) => {
-    try {
-      const eventData = {
-        summary: `${user.name} - ${leaveType}`,
-        description: reason ? `사유: ${reason}` : `${user.name}님의 ${leaveType}`,
-        start: {
-          date: startDate, // 종일 이벤트로 설정
-          timeZone: 'Asia/Seoul'
-        },
-        end: {
-          date: endDate === startDate ? 
-            new Date(new Date(endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0] : // 하루 더 추가
-            new Date(new Date(endDate).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          timeZone: 'Asia/Seoul'
-        },
-        attendees: [
-          {
-            email: user.email,
-            displayName: user.name
-          }
-        ]
-      }
-
-      // DB에서 가져온 캘린더 설정 사용
-      const leaveCalendar = calendarConfigs.find(c => c.target_name === 'leave-management')
-      if (!leaveCalendar) {
-        console.error('휴가 캘린더 설정을 찾을 수 없습니다.')
-        return
-      }
-
-      const response = await fetch('/api/calendar/create-event-direct', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          calendarId: leaveCalendar.calendar_id,
-          eventData
-        })
-      })
-
-      const result = await response.json()
-      if (result.success) {
-        console.log('휴가 캘린더 이벤트 생성 성공:', result.event)
-        // 캘린더 이벤트 새로고침
-        syncCalendarAndFetchLeaveEvents()
-        return result.event
-      } else {
-        console.error('휴가 캘린더 이벤트 생성 실패:', result.error)
-      }
-    } catch (error) {
-      console.error('휴가 캘린더 이벤트 생성 오류:', error)
-    }
-  }
-
+  // Google Calendar에서 직접 휴가 이벤트 조회 (보기 전용)
   const fetchLeaveEvents = useCallback(async () => {
+    setLoading(true)
     try {
-      // 실제로는 form_requests 테이블에서 승인된 휴가 신청을 가져와야 하지만,
-      // 현재는 샘플 데이터로 대체
-      const sampleEvents: LeaveEvent[] = [
-        {
-          id: '1',
-          user_id: user.id,
-          leave_type: '연차',
-          start_date: '2024-12-25',
-          end_date: '2024-12-25',
-          status: 'approved',
-          reason: '개인사유'
-        },
-        {
-          id: '2',
-          user_id: user.id,
-          leave_type: '연차',
-          start_date: '2024-12-31',
-          end_date: '2025-01-02',
-          status: 'approved',
-          reason: '연말연시 휴가'
-        }
-      ]
-      setLeaveEvents(sampleEvents)
-    } catch (error) {
-      console.error('Error fetching leave events:', error)
-    }
-  }, [user.id])
-
-  const syncCalendarAndFetchLeaveEvents = useCallback(async () => {
-    if (!showCalendarEvents || calendarConfigs.length === 0) {
-      return
-    }
-
-    setCalendarLoading(true)
-    try {
-      // 월별 데이터를 가져오도록 수정 (성능 개선)
+      // 현재 월의 데이터만 가져오기
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth()
       const timeMin = new Date(year, month, 1).toISOString()
       const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-      
-      // DB에서 가져온 캘린더 설정 사용
-      const leaveCalendar = calendarConfigs.find(c => c.target_name === 'leave-management')
-      if (!leaveCalendar) {
-        console.error('휴가 캘린더 설정을 찾을 수 없습니다.')
-        return
-      }
 
-      const allGoogleEvents: unknown[] = []
-      try {
-        const response = await fetch('/api/calendar/events', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            calendarId: leaveCalendar.calendar_id,
-            timeMin,
-            timeMax,
-            maxResults: 250
-          }),
-        })
+      console.log('📅 [DEBUG] 휴가 캘린더 이벤트 조회 시작:', { 
+        calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT, 
+        timeMin, 
+        timeMax 
+      })
 
-        if (response.ok) {
-          const data = await response.json()
-          if (data.events && data.events.length > 0) {
-            allGoogleEvents.push(...data.events)
-          }
-        }
-      } catch (error) {
-        console.error('휴가 캘린더 이벤트 조회 오류:', error)
-      }
+      const response = await fetch('/api/calendar/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+          timeMin,
+          timeMax,
+          maxResults: 250
+        }),
+      })
 
-      // Google Calendar 이벤트를 우리 DB와 동기화
-      if (allGoogleEvents.length > 0) {
-        try {
-          await fetch('/api/calendar/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              events: allGoogleEvents, 
-              userId: user.id 
-            })
-          })
-        } catch (error) {
-          console.error('휴가 캘린더 동기화 오류:', error)
-        }
-      }
+      console.log('📅 [DEBUG] 휴가 캘린더 API 응답 상태:', response.status)
 
-      // 동기화 후 시스템 DB에서 휴가 이벤트 조회
-      await fetchLeaveEvents()
-    } catch (error) {
-      console.error('캘린더 동기화 및 휴가 이벤트 조회 오류:', error)
-    } finally {
-      setCalendarLoading(false)
-    }
-  }, [currentDate, showCalendarEvents, calendarConfigs, user.id, fetchLeaveEvents])
-
-  useEffect(() => {
-    fetchLeaveData()
-    fetchLeaveEvents()
-    fetchCalendarConfigs()
-  }, [user.id, fetchCalendarConfigs]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    syncCalendarAndFetchLeaveEvents()
-  }, [syncCalendarAndFetchLeaveEvents])
-
-  const openFormModal = (formType: string, formUrl: string) => {
-    // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
-    const popup = window.open(formUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
-    
-    if (!popup) {
-      alert('팝업이 차단되었습니다. 브라우저의 팝업 차단을 해제해주세요.')
-    }
-  }
-
-  const handleFormComplete = async (formType: string) => {
-    if (confirm(`${formType} 서식을 작성하고 제출하셨나요?\n\n작성 완료 후 서식을 인쇄하여 대표에게 제출해주세요.`)) {
-      try {
-        const { error } = await supabase
-          .from('form_requests')
-          .insert([{
-            user_id: user.id,
-            form_type: formType,
-            status: 'pending',
-            submitted_at: new Date().toISOString(),
-            request_data: {
-              form_name: formType,
-              submitted_via: 'web_form'
+      let fetchedEvents: CalendarEvent[] = []
+      if (response.ok) {
+        const data = await response.json()
+        console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', data.events?.length || 0)
+        if (data.events) {
+          // API 응답을 우리 인터페이스에 맞게 변환
+          fetchedEvents = data.events.map((event: unknown) => {
+            const googleEvent = event as { id: string; summary?: string; title?: string; start?: { date?: string; dateTime?: string } | string; end?: { date?: string; dateTime?: string } | string; description?: string; location?: string }
+            const getEventTime = (timeObj: { date?: string; dateTime?: string } | string | undefined) => {
+              if (typeof timeObj === 'string') return timeObj
+              if (timeObj && typeof timeObj === 'object') {
+                return timeObj.date || timeObj.dateTime || ''
+              }
+              return ''
             }
-          }])
-
-        if (error) {
-          console.error('서식 신청 저장 실패:', error)
-          alert('❌ 신청 저장에 실패했습니다. 다시 시도해주세요.')
-        } else {
-          // 휴가 관련 서식인 경우 캘린더에 임시 이벤트 생성
-          if (formType.includes('휴가') || formType.includes('연차')) {
-            const today = new Date()
-            const dateString = today.toISOString().split('T')[0]
             
-            try {
-              await createLeaveCalendarEvent(
-                `${formType} 신청`, 
-                dateString, 
-                dateString, 
-                `${user.name}님이 ${formType}를 신청했습니다. 승인 대기 중입니다.`
-              )
-              console.log('휴가 캘린더에 임시 이벤트 생성 완료')
-            } catch (calendarError) {
-              console.error('캘린더 이벤트 생성 실패:', calendarError)
-              // 캘린더 이벤트 생성 실패는 전체 프로세스를 중단하지 않음
+            return {
+              id: googleEvent.id,
+              title: googleEvent.summary || googleEvent.title || '',
+              start: getEventTime(googleEvent.start),
+              end: getEventTime(googleEvent.end),
+              description: googleEvent.description,
+              location: googleEvent.location
             }
-          }
-          
-          alert('✅ 신청이 완료되었습니다!\n\n📄 작성한 서식을 인쇄하여 대표에게 제출해주세요.\n관리자가 확인 후 최종 승인 처리됩니다.')
+          })
         }
-      } catch (error) {
-        console.error('서식 신청 오류:', error)
-        alert('❌ 신청 처리 중 오류가 발생했습니다.')
+      } else {
+        const errorText = await response.text()
+        console.error('휴가 캘린더 이벤트 조회 실패:', response.status, errorText)
       }
-    }
-  }
 
+      setLeaveEvents(fetchedEvents)
+    } catch (error) {
+      console.error('휴가 캘린더 이벤트 조회 오류:', error)
+      setLeaveEvents([])
+    } finally {
+      setLoading(false)
+    }
+  }, [currentDate])
+
+  useEffect(() => {
+    fetchLeaveEvents()
+  }, [fetchLeaveEvents])
 
   // 캘린더 헬퍼 함수들
   const getDaysInMonth = (date: Date) => {
@@ -434,29 +154,13 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
   }
 
-  const hasLeaveEvent = (dateString: string) => {
-    return leaveEvents.some(event => {
-      const startDate = new Date(event.start_date)
-      const endDate = new Date(event.end_date)
-      const checkDate = new Date(dateString)
-      return checkDate >= startDate && checkDate <= endDate
+  const getEventsForDate = (dateString: string) => {
+    return leaveEvents.filter(event => {
+      const eventStartDate = event.start.split('T')[0]
+      const eventEndDate = event.end.split('T')[0]
+      return dateString >= eventStartDate && dateString <= eventEndDate
     })
   }
-
-  // calendarEvents 제거로 인해 더 이상 필요 없음
-  // const getCalendarEventsForDate = () => {
-  //   return []
-  // }
-
-  // getAllEventsForDate 더 이상 필요없음 - DB 통합 관리로 대체
-  // const getAllEventsForDate = (dateString: string) => {
-  //   const leaveEventsForDate = leaveEvents.filter(event => {
-  //     const startDate = new Date(event.start_date)
-  //     const endDate = new Date(event.end_date)
-  //     const checkDate = new Date(dateString)
-  //     return checkDate >= startDate && checkDate <= endDate
-  //   })
-  // }
 
   const isHoliday = (dateString: string) => {
     return koreanHolidays[dateString as keyof typeof koreanHolidays]
@@ -490,10 +194,9 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateString = getDateString(year, month, day)
       const isCurrentDay = isToday(currentDate, day)
-      const hasLeave = hasLeaveEvent(dateString)
+      const dayEvents = getEventsForDate(dateString)
       const holiday = isHoliday(dateString)
       const isWeekend = (firstDay + day - 1) % 7 === 0 || (firstDay + day - 1) % 7 === 6
-      // const dayEvents = getAllEventsForDate(dateString) // 더 이상 사용되지 않음
 
       days.push(
         <div
@@ -511,12 +214,11 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
           {holiday && (
             <div className="text-xs text-red-600 mt-1">{holiday}</div>
           )}
-          {hasLeave && (
-            <div className="text-xs bg-green-100 text-green-800 rounded px-1 mt-1">
-              휴가
+          {dayEvents.map((event, index) => (
+            <div key={index} className="text-xs bg-green-100 text-green-800 rounded px-1 mt-1 truncate">
+              {event.title}
             </div>
-          )}
-          {/* 캘린더 이벤트는 이제 DB를 통해 통합 관리되므로 제거 */}
+          ))}
         </div>
       )
     }
@@ -537,33 +239,17 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     const currentMonth = currentDate.getMonth()
     const currentYear = currentDate.getFullYear()
     
-    // 개인 휴가 이벤트
     const filteredEvents = leaveEvents.filter(event => {
-      const eventDate = new Date(event.start_date)
+      const eventDate = new Date(event.start)
       return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
     })
 
-    // 구글 캘린더에서 가져온 모든 직원 휴가 이벤트는 이제 DB에서 통합 관리
-    // 라인 제거 - 더 이상 필요없음
-
-    const allEvents = [
-      ...filteredEvents.map(event => ({
-        type: 'personal',
-        title: event.leave_type,
-        employee: user.name,
-        date: event.start_date === event.end_date ? event.start_date : `${event.start_date} ~ ${event.end_date}`,
-        reason: event.reason,
-        status: event.status
-      })),
-      // 캘린더 이벤트는 이제 DB의 meetings 테이블에서 통합 관리되므로 제거
-    ]
-
     // 날짜순으로 정렬
-    allEvents.sort((a, b) => new Date(a.date.split(' ~ ')[0]).getTime() - new Date(b.date.split(' ~ ')[0]).getTime())
+    const sortedEvents = filteredEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
 
     return (
       <div className="space-y-3">
-        {allEvents.length === 0 ? (
+        {sortedEvents.length === 0 ? (
           <div className="text-center py-8">
             <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -571,51 +257,47 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
             <p className="text-gray-500 mt-2">이번 달 휴가 일정이 없습니다.</p>
           </div>
         ) : (
-          allEvents.map((event, index) => (
-            <div key={`event-${index}`} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start space-y-2 sm:space-y-0">
-                <div className="flex-1">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 space-y-2 sm:space-y-0">
-                    <h4 className="font-semibold text-gray-900 text-lg">{event.employee}</h4>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 self-start">
-                      {event.title}
-                    </span>
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <p className="text-sm text-gray-600 flex items-center">
-                      <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {event.date}
-                    </p>
-                    {event.reason && (
-                      <p className="text-sm text-gray-500 flex items-start">
-                        <svg className="w-4 h-4 mr-2 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          sortedEvents.map((event, index) => {
+            const startDate = new Date(event.start)
+            const endDate = new Date(event.end)
+            const isSameDay = startDate.toDateString() === endDate.toDateString()
+            
+            return (
+              <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-900 text-lg">{event.title}</h4>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-sm text-gray-600 flex items-center">
+                        <svg className="w-4 h-4 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {event.reason}
+                        {isSameDay 
+                          ? startDate.toLocaleDateString('ko-KR')
+                          : `${startDate.toLocaleDateString('ko-KR')} - ${endDate.toLocaleDateString('ko-KR')}`
+                        }
                       </p>
-                    )}
+                      {event.description && (
+                        <p className="text-sm text-gray-500 flex items-start">
+                          <svg className="w-4 h-4 mr-2 text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          {event.description}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <div className="flex justify-end sm:justify-start">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                    event.status === 'approved' ? 'bg-green-100 text-green-800' :
-                    event.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {event.status === 'approved' ? '승인' : 
-                     event.status === 'pending' ? '대기' : '거절'}
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+                    휴가
                   </span>
                 </div>
               </div>
-            </div>
-          ))
+            )
+          })
         )}
       </div>
     )
   }
-
 
   if (loading) {
     return (
@@ -642,13 +324,26 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-lg font-medium text-gray-900">휴가 관리</h3>
-              <p className="text-sm text-gray-500">휴가 현황 및 신청</p>
+              <h3 className="text-lg font-medium text-gray-900">휴가 현황</h3>
+              <p className="text-sm text-gray-500">전체 직원 휴가 현황 조회 (보기 전용)</p>
             </div>
           </div>
           
-          {/* 데스크톱 버튼들 */}
-          <div className="hidden md:flex space-x-2">
+          {/* 새로고침 및 뷰 토글 버튼 */}
+          <div className="flex space-x-2">
+            <button
+              onClick={fetchLeaveEvents}
+              className="px-3 py-1 text-sm rounded-md flex items-center space-x-1 bg-blue-100 text-blue-800"
+              disabled={loading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>새로고침</span>
+              {loading && (
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+              )}
+            </button>
             <button
               onClick={() => setCalendarView('calendar')}
               className={`px-3 py-1 text-sm rounded-md ${
@@ -669,101 +364,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
             >
               목록
             </button>
-            {calendarConfigs.length > 0 && (
-              <button
-                onClick={() => setShowCalendarEvents(!showCalendarEvents)}
-                className={`px-3 py-1 text-sm rounded-md flex items-center space-x-1 ${
-                  showCalendarEvents 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-                disabled={calendarLoading}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Google 캘린더</span>
-                {calendarLoading && (
-                  <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </button>
-            )}
           </div>
-          
-          {/* 모바일 메뉴 버튼 */}
-          <div className="md:hidden">
-            <button
-              onClick={() => setCalendarView(calendarView === 'calendar' ? 'list' : 'calendar')}
-              className="flex items-center space-x-1 px-3 py-1 text-sm rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200"
-            >
-              {calendarView === 'calendar' ? (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                  </svg>
-                  <span>목록</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002 2z" />
-                  </svg>
-                  <span>캘린더</span>
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-
-        {/* 휴가 현황 요약 */}
-        <div className="mt-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600">연차: {leaveData?.leave_types.used_annual_days || 0}일 / {leaveData?.leave_types.annual_days || 0}일</p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full" 
-                  style={{
-                    width: `${leaveData ? Math.min((leaveData.leave_types.used_annual_days / leaveData.leave_types.annual_days) * 100, 100) : 0}%`
-                  }}
-                ></div>
-              </div>
-            </div>
-            <div>
-              <p className="text-gray-600">병가: {leaveData?.leave_types.used_sick_days || 0}일 / {leaveData?.leave_types.sick_days || 0}일</p>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                <div 
-                  className="bg-red-600 h-2 rounded-full" 
-                  style={{
-                    width: `${leaveData ? Math.min((leaveData.leave_types.used_sick_days / leaveData.leave_types.sick_days) * 100, 100) : 0}%`
-                  }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* 모바일 구글 캘린더 토글 */}
-        <div className="md:hidden mt-4">
-          {calendarConfigs.length > 0 && (
-            <button
-              onClick={() => setShowCalendarEvents(!showCalendarEvents)}
-              className={`w-full px-3 py-2 text-sm rounded-md flex items-center justify-center space-x-2 ${
-                showCalendarEvents 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-gray-100 text-gray-600'
-              }`}
-              disabled={calendarLoading}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <span>Google 캘린더 {showCalendarEvents ? '숨기기' : '보기'}</span>
-              {calendarLoading && (
-                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-              )}
-            </button>
-          )}
         </div>
       </div>
 
@@ -794,107 +395,8 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
 
       {/* 메인 콘텐츠 */}
       <div className="p-5">
-        {/* 데스크톱에서는 선택된 뷰를 표시 */}
-        <div className="hidden md:block">
-          {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
-        </div>
-        
-        {/* 모바일에서는 항상 리스트뷰를 표시 */}
-        <div className="md:hidden">
-          {renderLeaveList()}
-        </div>
+        {calendarView === 'calendar' ? renderCalendar() : renderLeaveList()}
       </div>
-
-      {/* 액션 버튼들 */}
-      <div className="bg-gray-50 px-5 py-3">
-        <div className="text-sm">
-          <div className="flex justify-between items-center">
-            <button 
-              onClick={() => openFormModal('휴가 신청', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=vacation')}
-              className="font-medium text-indigo-600 hover:text-indigo-500 text-left flex-1"
-            >
-              📝 휴가 신청하기
-            </button>
-            <button 
-              onClick={() => handleFormComplete('휴가 신청')}
-              className="ml-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-2 py-1 rounded text-xs font-medium"
-            >
-              신청 완료
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 휴가 신청 모달 */}
-      {showLeaveForm && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">휴가 신청</h3>
-              
-              <form className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">휴가 종류</label>
-                  <select className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
-                    <option value="annual">연차</option>
-                    <option value="sick">병가</option>
-                    <option value="personal">개인사유</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">시작일</label>
-                  <input
-                    type="date"
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">종료일</label>
-                  <input
-                    type="date"
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">사유</label>
-                  <textarea
-                    rows={3}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    placeholder="휴가 사유를 입력해주세요"
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowLeaveForm(false)}
-                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
-                  >
-                    신청
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 휴가 현황 모달 */}
-      <LeaveStatusModal 
-        user={user}
-        isOpen={showStatusModal}
-        onClose={() => setShowStatusModal(false)}
-      />
-
     </div>
   )
 }
