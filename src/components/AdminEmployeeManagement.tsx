@@ -164,6 +164,40 @@ export default function AdminEmployeeManagement() {
     }
   }
 
+  /**
+   * 직원의 리뷰 링크를 동기화합니다.
+   * 406 오류의 원인인 '한 사용자에게 여러 활성 링크가 존재하는' 문제를 해결하기 위해,
+   * 먼저 해당 사용자의 모든 링크를 비활성화한 후, 제공된 URL만 활성 상태로 생성/업데이트합니다.
+   * @param userId - 대상 직원의 UUID
+   * @param userName - 대상 직원의 이름
+   * @param url - 새로운 리뷰 링크 URL. 비어있으면 모든 링크를 비활성화합니다.
+   */
+  const syncReviewLink = async (userId: string, userName: string, url: string) => {
+    // 1. 먼저 해당 유저의 모든 리뷰 링크를 비활성화하여 초기화합니다.
+    const { error: updateError } = await supabase
+      .from('review_links')
+      .update({ is_active: false })
+      .eq('user_id', userId);
+
+    if (updateError) {
+      console.error('기존 리뷰 링크 비활성화 실패:', updateError);
+      // 이 오류가 전체를 막아서는 안 되므로 경고만 하고 계속 진행합니다.
+    }
+
+    // 2. 관리자가 새 URL을 입력한 경우, 해당 링크를 활성 상태로 생성/업데이트(upsert)합니다.
+    if (url.trim()) {
+      // 'all_year' 시즌으로 고정하여 사실상 user_id당 하나의 링크만 관리하도록 합니다.
+      const { error: upsertError } = await supabase
+        .from('review_links')
+        .upsert({ user_id: userId, employee_name: userName, review_url: url.trim(), is_active: true, season: 'all_year' }, { onConflict: 'user_id, season' });
+
+      if (upsertError) {
+        console.error('리뷰 링크 저장/업데이트 실패:', upsertError);
+        alert('직원 정보는 처리되었지만 리뷰 링크 저장에 실패했습니다.');
+      }
+    }
+  };
+
   const handleAddEmployee = () => {
     setFormData({
       name: '',
@@ -376,46 +410,29 @@ export default function AdminEmployeeManagement() {
           throw new Error(result.error || '수정에 실패했습니다.')
         }
 
-        // 입사일이 변경되었을 수 있으므로 연차 정보도 업데이트
-        const annual_days = result.user.hire_date ? calculateAnnualLeave(result.user.hire_date) : 15;
-        const { error: leaveError } = await supabase
-            .from('leave_days')
-            .update({ 
-                leave_types: { 
-                    annual_days: annual_days,
-                    used_annual_days: 0, // 입사일 변경 시 사용일수는 초기화 (정책 필요)
-                    sick_days: 5, // 기본 병가
-                    used_sick_days: 0
-                }
-            })
-            .eq('user_id', result.user.id)
+        // 입사일이 변경되었을 수 있으므로 연차 정보도 업데이트 (데이터 손실 방지)
+        const { data: currentLeaveData } = await supabase
+          .from('leave_days')
+          .select('leave_types')
+          .eq('user_id', result.user.id)
+          .single();
 
-        if (leaveError) throw leaveError;
+        if (currentLeaveData) {
+          const new_annual_days = calculateAnnualLeave(result.user.hire_date);
+          const updatedLeaveTypes = {
+            ...currentLeaveData.leave_types, // 기존 데이터(사용일수 등) 유지
+            annual_days: new_annual_days,   // 총 연차만 재계산하여 덮어쓰기
+          };
 
-        // 리뷰 링크 저장/업데이트
-        if (reviewUrl.trim()) {
-          const { error: reviewError } = await supabase
-            .from('review_links')
-            .upsert([{
-              user_id: result.user.id,
-              employee_name: result.user.name,
-              review_url: reviewUrl.trim(),
-              season: 'both',
-              is_active: true
-            }], {
-              onConflict: 'user_id'
-            })
-          
-          if (reviewError) {
-            console.error('리뷰 링크 저장 실패:', reviewError)
-          }
-        } else {
-          // 리뷰 URL이 비어있으면 기존 링크 삭제
-          await supabase
-            .from('review_links')
-            .delete()
-            .eq('user_id', result.user.id)
+          const { error: leaveError } = await supabase
+              .from('leave_days')
+              .update({ leave_types: updatedLeaveTypes })
+              .eq('user_id', result.user.id);
+          if (leaveError) throw leaveError;
         }
+
+        // 리뷰 링크 동기화
+        await syncReviewLink(result.user.id, result.user.name, reviewUrl);
 
         alert('직원 정보가 수정되었습니다.')
         setShowAddForm(false)
@@ -457,30 +474,28 @@ export default function AdminEmployeeManagement() {
             throw leaveError;
         }
 
-        // 리뷰 링크 저장 (새 직원 추가 시)
-        if (reviewUrl.trim()) {
-          const { error: reviewError } = await supabase
-            .from('review_links')
-            .insert([{
-              user_id: newUserData.id,
-              employee_name: newUserData.name,
-              review_url: reviewUrl.trim(),
-              season: 'both',
-              is_active: true
-            }])
-          
-          if (reviewError) {
-            console.error('리뷰 링크 저장 실패:', reviewError)
-          }
-        }
+        // 리뷰 링크 동기화
+        await syncReviewLink(newUserData.id, newUserData.name, reviewUrl);
 
         alert('새 직원이 추가되었습니다. (기본 비밀번호: 0000)')
         setShowAddForm(false)
         fetchEmployees()
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('폼 제출 오류:', err)
-      alert('오류가 발생했습니다.')
+      if (err && typeof err === 'object' && 'code' in err && err.code === '23505') { // Supabase unique constraint violation
+        const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : '';
+        if (errorMessage.includes('users_email_key')) {
+          alert('오류: 이미 사용 중인 이메일입니다. 다른 이메일을 입력해주세요.');
+        } else if (errorMessage.includes('users_employee_id_key')) {
+          alert('오류: 이미 사용 중인 사번입니다. 다른 사번을 입력해주세요.');
+        } else {
+          alert('오류: 중복된 데이터(이메일 또는 사번)가 존재하여 등록할 수 없습니다.');
+        }
+      } else {
+        const errorMessage = err && typeof err === 'object' && 'message' in err ? String(err.message) : '알 수 없는 오류';
+        alert(`오류가 발생했습니다: ${errorMessage}`)
+      }
     } finally {
       setFormLoading(false)
     }

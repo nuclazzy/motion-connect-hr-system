@@ -14,31 +14,26 @@ interface Meeting {
   date: string
   location?: string
   description?: string
+  google_event_id?: string
   user?: {
     name: string
     department: string
   }
 }
 
-interface CalendarEvent {
-  id: string
-  title: string
-  start: string
-  end: string
-  description?: string
-  location?: string
-  calendarId?: string
-  calendarName: string
-  color?: string
-}
-
-interface CalendarConfig {
-  id: string
-  config_type: 'team' | 'function'
-  target_name: string
-  calendar_id: string
-  calendar_alias: string | null
-  is_active: boolean
+interface GoogleEvent {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: {
+    dateTime?: string;
+    date?: string;
+  };
+  end?: {
+    dateTime?: string;
+    date?: string;
+  };
 }
 
 interface AdminTeamScheduleProps {
@@ -58,104 +53,18 @@ interface FormData {
 export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
   const [allUsers, setAllUsers] = useState<User[]>([])
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
-  const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
-  const [calendarLoading, setCalendarLoading] = useState(false)
-  const [showCalendarEvents, setShowCalendarEvents] = useState(true)
-  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
-  const [showEditForm, setShowEditForm] = useState(false)
+  const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState<FormData>({
     title: '',
     date: '',
     time: '',
     location: '',
     description: '',
-    created_by: user.id, // 기본값은 관리자 자신
-    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || '' // 기본 캘린더 설정
+    created_by: user.id,
+    targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
   })
-
-  const fetchCalendarConfigs = useCallback(async () => {
-    try {
-      // 직접 캘린더 매핑 설정 사용
-      const configs = ADMIN_TEAM_CALENDARS.map(cal => ({
-        id: cal.id,
-        config_type: 'team' as const,
-        target_name: 'admin-schedule',
-        calendar_id: cal.id,
-        calendar_alias: cal.name,
-        is_active: true
-      }))
-      
-      setCalendarConfigs(configs)
-    } catch (error) {
-      console.error('관리자 팀 일정 캘린더 설정 조회 오류:', error)
-    }
-  }, [])
-
-  const fetchCalendarEvents = useCallback(async () => {
-    if (!showCalendarEvents || calendarConfigs.length === 0) {
-      setCalendarEvents([])
-      return
-    }
-
-    setCalendarLoading(true)
-    try {
-      const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
-      
-      // 각 팀 캘린더에서 이벤트 가져오기
-      for (const config of calendarConfigs) {
-        try {
-          const response = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              calendarId: config.calendar_id,
-              timeMin,
-              timeMax,
-              maxResults: 250
-            }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            if (data.events) {
-              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
-                ...event,
-                calendarName: config.calendar_alias,
-                calendarId: config.calendar_id
-              }))
-              allEvents.push(...eventsWithCalendarInfo)
-            }
-          }
-        } catch (error) {
-          console.error(`캘린더 ${config.calendar_alias} 이벤트 조회 오류:`, error)
-        }
-      }
-
-      // 현재 주의 이벤트만 필터링
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-      const weeklyEvents = allEvents.filter(event => {
-        const eventDate = new Date(event.start || '')
-        return eventDate >= startOfWeek && eventDate <= endOfWeek
-      })
-      
-      setCalendarEvents(weeklyEvents)
-    } catch (error) {
-      console.error('캘린더 이벤트 조회 오류:', error)
-      setCalendarEvents([])
-    } finally {
-      setCalendarLoading(false)
-    }
-  }, [currentDate, showCalendarEvents, calendarConfigs])
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -182,114 +91,113 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     }
   }, [currentDate])
 
-  // 이벤트 수정 핸들러
-  const handleEditEvent = (event: CalendarEvent) => {
-    setEditingEvent(event)
-    // 이벤트 데이터로 폼 채우기
-    const eventDate = new Date(event.start)
-    const timeStr = eventDate.toTimeString().slice(0, 5)
+  const syncAndFetchMeetings = useCallback(async () => {
+    setLoading(true)
+    try {
+      const allGoogleEvents: GoogleEvent[] = []
+      const { timeMin, timeMax } = getCurrentYearRange()
+      
+      // 각 팀 캘린더에서 이벤트 가져오기
+      for (const calendarConfig of ADMIN_TEAM_CALENDARS) {
+        try {
+          const response = await fetch('/api/calendar/events', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              calendarId: calendarConfig.id,
+              timeMin,
+              timeMax,
+              maxResults: 250
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data.events && data.events.length > 0) {
+              allGoogleEvents.push(...data.events)
+            }
+          }
+        } catch (error) {
+          console.error(`캘린더 ${calendarConfig.name} 이벤트 조회 오류:`, error)
+        }
+      }
+
+      // Google Calendar 이벤트를 우리 DB와 동기화
+      if (allGoogleEvents.length > 0) {
+        try {
+          const syncResponse = await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              events: allGoogleEvents, 
+              userId: user.id 
+            })
+          })
+
+          const syncResult = await syncResponse.json()
+          if (syncResult.success && syncResult.synced > 0) {
+            console.log(`${syncResult.synced}개 이벤트가 동기화되었습니다.`)
+          }
+        } catch (error) {
+          console.error('캘린더 동기화 오류:', error)
+        }
+      }
+
+      // 동기화 완료 후 meetings 테이블에서 모든 일정 조회 (단일 진실 공급원)
+      await fetchMeetings()
+    } catch (error) {
+      console.error('캘린더 동기화 및 미팅 조회 오류:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user.id, fetchMeetings])
+
+  const handleEditMeeting = (meeting: Meeting) => {
+    // Meeting 수정 핸들러
     setFormData({
-      title: event.title,
-      date: eventDate.toISOString().split('T')[0],
-      time: timeStr,
-      location: event.location || '',
-      description: event.description || '',
-      created_by: user.id,
-      targetCalendar: event.calendarId || ADMIN_TEAM_CALENDARS[0]?.id || ''
+      title: meeting.title,
+      date: meeting.date,
+      time: '00:00', // 기본 시간 설정
+      location: meeting.location || '',
+      description: meeting.description || '',
+      created_by: meeting.created_by,
+      targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
     })
-    setShowEditForm(true)
+    setShowAddForm(true)
   }
 
-  // 이벤트 삭제 핸들러
-  const handleDeleteEvent = async (event: CalendarEvent) => {
-    if (!confirm(`"${event.title}" 일정을 삭제하시겠습니까?`)) {
+  const handleDeleteMeeting = async (meeting: Meeting) => {
+    if (!confirm(`"${meeting.title}" 일정을 삭제하시겠습니까?`)) {
       return
     }
 
     try {
-      const response = await fetch('/api/calendar/delete-event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          eventId: event.id,
-          calendarId: event.calendarId
-        })
-      })
+      // 시스템 DB에서 삭제
+      const { error } = await supabase
+        .from('meetings')
+        .delete()
+        .eq('id', meeting.id)
 
-      if (response.ok) {
-        alert('일정이 삭제되었습니다.')
-        fetchCalendarEvents() // 캘린더 이벤트 새로고침
-      } else {
-        const error = await response.json()
-        alert(`삭제 실패: ${error.message || '알 수 없는 오류'}`)
+      if (error) {
+        console.error('미팅 삭제 실패:', error)
+        alert('일정 삭제에 실패했습니다.')
+        return
       }
+
+      alert('일정이 삭제되었습니다.')
+      syncAndFetchMeetings() // 미팅 목록 새로고침
     } catch (error) {
       console.error('일정 삭제 오류:', error)
       alert('일정 삭제 중 오류가 발생했습니다.')
     }
   }
 
-  // 이벤트 수정 저장 핸들러
-  const handleUpdateEvent = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingEvent) return
-
-    try {
-      const startDateTime = new Date(`${formData.date}T${formData.time}`)
-      const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 후
-
-      const response = await fetch('/api/calendar/update-event', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          eventId: editingEvent.id,
-          calendarId: editingEvent.calendarId,
-          title: formData.title,
-          description: formData.description,
-          location: formData.location,
-          start: startDateTime.toISOString(),
-          end: endDateTime.toISOString()
-        })
-      })
-
-      if (response.ok) {
-        alert('일정이 수정되었습니다.')
-        setShowEditForm(false)
-        setEditingEvent(null)
-        fetchCalendarEvents() // 캘린더 이벤트 새로고침
-        // 폼 초기화
-        setFormData({
-          title: '',
-          date: '',
-          time: '',
-          location: '',
-          description: '',
-          created_by: user.id,
-          targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
-        })
-      } else {
-        const error = await response.json()
-        alert(`수정 실패: ${error.message || '알 수 없는 오류'}`)
-      }
-    } catch (error) {
-      console.error('일정 수정 오류:', error)
-      alert('일정 수정 중 오류가 발생했습니다.')
-    }
-  }
-
   useEffect(() => {
-    fetchMeetings()
+    syncAndFetchMeetings()
     fetchAllUsers()
-    fetchCalendarConfigs()
-  }, [fetchMeetings, fetchCalendarConfigs])
-
-  useEffect(() => {
-    fetchCalendarEvents()
-  }, [fetchCalendarEvents])
+  }, [syncAndFetchMeetings])
 
   useEffect(() => {
     // 공휴일 캐시 초기화
@@ -327,24 +235,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
     return meetings.filter(meeting => meeting.date === dateStr)
   }
 
-  const getCalendarEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return calendarEvents.filter(event => {
-      const eventDate = new Date(event.start).toISOString().split('T')[0]
-      return eventDate === dateStr
-    })
-  }
-
-  const getAllEventsForDate = (date: Date) => {
-    const meetingsForDate = getMeetingsForDate(date)
-    const events = getCalendarEventsForDate(date)
-    
-    return {
-      meetings: meetingsForDate,
-      calendarEvents: events,
-      totalCount: meetingsForDate.length + events.length
-    }
-  }
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate)
@@ -451,8 +341,7 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
         created_by: user.id,
         targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
       })
-      fetchMeetings()
-      fetchCalendarEvents()
+      syncAndFetchMeetings()
     } catch (error) {
       console.error('일정 등록 오류:', error)
       alert('일정 등록 중 오류가 발생했습니다.')
@@ -494,25 +383,19 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
             </div>
           </div>
           <div className="flex space-x-2">
-            {calendarConfigs.length > 0 && (
-              <button
-                onClick={() => setShowCalendarEvents(!showCalendarEvents)}
-                className={`px-3 py-1 text-sm rounded-md flex items-center space-x-1 ${
-                  showCalendarEvents 
-                    ? 'bg-green-100 text-green-800' 
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-                disabled={calendarLoading}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Google 캘린더</span>
-                {calendarLoading && (
-                  <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
-                )}
-              </button>
-            )}
+            <button
+              onClick={syncAndFetchMeetings}
+              className="px-3 py-1 text-sm rounded-md flex items-center space-x-1 bg-blue-100 text-blue-800"
+              disabled={loading}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>동기화</span>
+              {loading && (
+                <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin"></div>
+              )}
+            </button>
             <button 
               onClick={() => setShowAddForm(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm"
@@ -558,7 +441,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
               {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
                 const day = weekDays[index]
                 const dayMeetings = getMeetingsForDate(day)
-                const dayEvents = getAllEventsForDate(day)
                 const isTodayDay = isToday(day)
                 const isWeekendDay = isWeekend(day)
                 const holidayInfo = getHolidayInfoSync(day)
@@ -587,51 +469,30 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                       {dayMeetings.map((meeting, idx) => (
                         <div 
                           key={`meeting-${idx}`}
-                          className={`text-xs p-1 rounded break-words ${
+                          className={`text-xs p-1 rounded break-words cursor-pointer hover:opacity-80 relative group ${
                             meeting.meeting_type === 'external' 
                               ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                               : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                           }`}
-                          title={`${meeting.title} (${meeting.user?.department})`}
+                          title={`${meeting.title} (${meeting.user?.department}) - 클릭하여 수정/삭제`}
+                          onClick={() => handleEditMeeting(meeting)}
                         >
                           <div className="font-medium">[{meeting.user?.department}]</div>
                           <div>{meeting.title}</div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteMeeting(meeting)
+                            }}
+                            className="absolute top-0 right-0 text-red-600 hover:text-red-800 text-xs opacity-0 group-hover:opacity-100 bg-white rounded-full w-4 h-4 flex items-center justify-center"
+                            title="삭제"
+                          >
+                            ×
+                          </button>
                         </div>
                       ))}
                       
-                      {/* Google Calendar 이벤트 표시 */}
-                      {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
-                        <div 
-                          key={`cal-${event.id}-${idx}`}
-                          className="text-xs p-1 rounded break-words bg-green-100 text-green-800 border-l-2 border-green-500 group hover:bg-green-200 relative"
-                          title={`${event.title} (${event.calendarName})`}
-                        >
-                          <div className="font-medium">[{event.calendarName}]</div>
-                          <div className="pr-12">{event.title}</div>
-                          <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
-                            <button
-                              onClick={() => handleEditEvent(event)}
-                              className="text-blue-600 hover:text-blue-800 p-1"
-                              title="수정"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => handleDeleteEvent(event)}
-                              className="text-red-600 hover:text-red-800 p-1"
-                              title="삭제"
-                            >
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                      
-                      {dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0) && (
+                      {dayMeetings.length === 0 && (
                         <div className="text-xs text-gray-400 text-center pt-8">
                           일정 없음
                         </div>
@@ -646,12 +507,11 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
             <div className="md:hidden space-y-2 mt-4">
               {weekDays.map((day, index) => {
                 const dayMeetings = getMeetingsForDate(day)
-                const dayEvents = getAllEventsForDate(day)
                 const isTodayDay = isToday(day)
                 const isWeekendDay = isWeekend(day)
                 const holidayInfo = getHolidayInfoSync(day)
                 const dayName = ['일', '월', '화', '수', '목', '금', '토'][index]
-                const totalEvents = dayMeetings.length + (showCalendarEvents ? dayEvents.calendarEvents.length : 0)
+                const totalEvents = dayMeetings.length
                 
                 if (totalEvents === 0 && !holidayInfo.isHoliday) return null
                 
@@ -684,38 +544,34 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
                         {dayMeetings.map((meeting, idx) => (
                           <div 
                             key={`meeting-${idx}`}
-                            className={`text-sm p-2 rounded break-words ${
+                            className={`text-sm p-2 rounded break-words cursor-pointer hover:opacity-80 ${
                               meeting.meeting_type === 'external' 
                                 ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                                 : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                             }`}
-                            title={`${meeting.title} (${meeting.user?.department})`}
+                            title={`${meeting.title} (${meeting.user?.department}) - 클릭하여 수정/삭제`}
+                            onClick={() => handleEditMeeting(meeting)}
                           >
                             <div className="font-medium text-xs text-gray-600 mb-1">[{meeting.user?.department}]</div>
                             <div className="font-medium">{meeting.title}</div>
                             {meeting.location && (
                               <div className="text-xs text-gray-600 mt-1">📍 {meeting.location}</div>
                             )}
+                            <div className="flex justify-end mt-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteMeeting(meeting)
+                                }}
+                                className="text-red-600 hover:text-red-800 text-xs px-2 py-1 bg-white rounded"
+                                title="삭제"
+                              >
+                                삭제
+                              </button>
+                            </div>
                           </div>
                         ))}
                         
-                        {/* Google Calendar 이벤트 표시 */}
-                        {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
-                          <div 
-                            key={`cal-${event.id}-${idx}`}
-                            className={`text-sm p-2 rounded break-words ${
-                              event.calendarName.includes('외부') 
-                                ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500'
-                                : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
-                            }`}
-                          >
-                            <div className="font-medium text-xs text-gray-600 mb-1">[{event.calendarName}]</div>
-                            <div className="font-medium">{event.title}</div>
-                            {event.location && (
-                              <div className="text-xs text-gray-600 mt-1">📍 {event.location}</div>
-                            )}
-                          </div>
-                        ))}
                       </div>
                     )}
                   </div>
@@ -724,9 +580,8 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
               
               {weekDays.every(day => {
                 const dayMeetings = getMeetingsForDate(day)
-                const dayEvents = getAllEventsForDate(day)
                 const holidayInfo = getHolidayInfoSync(day)
-                return dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0) && !holidayInfo.isHoliday
+                return dayMeetings.length === 0 && !holidayInfo.isHoliday
               }) && (
                 <div className="text-center py-8 text-gray-400">
                   <div className="text-4xl mb-2">📅</div>
@@ -737,85 +592,6 @@ export default function AdminTeamSchedule({ user }: AdminTeamScheduleProps) {
           </div>
         </div>
       </div>
-
-      {/* 팀 일정 수정 폼 */}
-      {showEditForm && editingEvent && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">일정 수정</h3>
-              <form onSubmit={handleUpdateEvent} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.title}
-                    onChange={(e) => setFormData({...formData, title: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">날짜</label>
-                  <input
-                    type="date"
-                    required
-                    value={formData.date}
-                    onChange={(e) => setFormData({...formData, date: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">시간</label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.time}
-                    onChange={(e) => setFormData({...formData, time: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">장소</label>
-                  <input
-                    type="text"
-                    value={formData.location}
-                    onChange={(e) => setFormData({...formData, location: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
-                  <textarea
-                    value={formData.description}
-                    onChange={(e) => setFormData({...formData, description: e.target.value})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    rows={3}
-                  />
-                </div>
-                <div className="flex justify-end space-x-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowEditForm(false)
-                      setEditingEvent(null)
-                    }}
-                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    취소
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium"
-                  >
-                    수정
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 미팅 추가 모달 */}
       {showAddForm && (

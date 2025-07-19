@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
 interface LeaveData {
   id: string
@@ -388,14 +389,58 @@ export default function AdminLeaveManagement() {
         console.error('수동 입력 기록 추가 실패:', requestError)
       }
       
-      // 3. 구글 캘린더에 이벤트 추가 (TODO: 실제 API 연동)
-      // 임시로 콘솔 로그로 대체
-      console.log('구글 캘린더 이벤트 추가:', {
-        title: `${addLeaveForm.employee_name} ${addLeaveForm.leave_type === 'annual' ? '연차' : '병가'}`,
-        start: addLeaveForm.start_date,
-        end: addLeaveForm.end_date,
-        description: addLeaveForm.reason
-      })
+      // 3. 구글 캘린더에 이벤트 추가
+      try {
+        const leaveTypeText = addLeaveForm.leave_type === 'annual' ? '연차' : '병가'
+        const halfDayText = addLeaveForm.is_half_day ? ` (${addLeaveForm.half_day_type === 'morning' ? '오전' : '오후'} 반차)` : ''
+        
+        const eventData = {
+          summary: `${addLeaveForm.employee_name} ${leaveTypeText}${halfDayText}`,
+          description: addLeaveForm.reason || `관리자에 의한 수동 ${leaveTypeText} 등록`,
+          start: addLeaveForm.is_half_day 
+            ? {
+                dateTime: addLeaveForm.half_day_type === 'morning' 
+                  ? `${addLeaveForm.start_date}T09:00:00`
+                  : `${addLeaveForm.start_date}T13:00:00`,
+                timeZone: 'Asia/Seoul'
+              }
+            : {
+                date: addLeaveForm.start_date,
+                timeZone: 'Asia/Seoul'
+              },
+          end: addLeaveForm.is_half_day
+            ? {
+                dateTime: addLeaveForm.half_day_type === 'morning'
+                  ? `${addLeaveForm.start_date}T12:00:00`
+                  : `${addLeaveForm.start_date}T18:00:00`,
+                timeZone: 'Asia/Seoul'
+              }
+            : {
+                date: new Date(new Date(addLeaveForm.end_date).getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                timeZone: 'Asia/Seoul'
+              }
+        }
+        
+        const calendarResponse = await fetch('/api/calendar/create-event-direct', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+            eventData
+          })
+        })
+
+        const calendarResult = await calendarResponse.json()
+        if (calendarResult.success) {
+          console.log('휴가 캘린더 이벤트 생성 성공:', calendarResult.event)
+        } else {
+          console.error('휴가 캘린더 이벤트 생성 실패:', calendarResult.error)
+        }
+      } catch (calendarError) {
+        console.error('휴가 캘린더 연동 오류:', calendarError)
+      }
       
       alert(`${addLeaveForm.employee_name}님의 ${addLeaveForm.leave_type === 'annual' ? '연차' : '병가'} ${addLeaveForm.days}일이 등록되었습니다.`)
       setShowAddLeave(false)

@@ -22,16 +22,20 @@ interface Meeting {
   }
 }
 
-interface CalendarEvent {
-  id: string
-  title: string
-  start: string
-  end: string
-  description?: string
-  location?: string
-  calendarId?: string
-  calendarName: string
-  color?: string
+
+interface GoogleEvent {
+  id: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: {
+    dateTime?: string;
+    date?: string;
+  };
+  end?: {
+    dateTime?: string;
+    date?: string;
+  };
 }
 
 interface UserWeeklyScheduleProps {
@@ -40,7 +44,6 @@ interface UserWeeklyScheduleProps {
 
 export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([])
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [showAddForm, setShowAddForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
@@ -56,69 +59,6 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
     description: '',
     created_by: user.id
   })
-
-  const fetchCalendarEvents = useCallback(async () => {
-    if (!showCalendarEvents) {
-      setCalendarEvents([])
-      return
-    }
-
-    setCalendarLoading(true)
-    try {
-      const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
-      
-      // 외부 및 내부 미팅 캘린더에서 이벤트 가져오기
-      for (const calendarConfig of ADMIN_WEEKLY_CALENDARS) {
-        try {
-          const response = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              calendarId: calendarConfig.id,
-              timeMin,
-              timeMax,
-              maxResults: 250
-            }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            if (data.events) {
-              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
-                ...event,
-                calendarName: calendarConfig.name,
-                calendarId: calendarConfig.id
-              }))
-              allEvents.push(...eventsWithCalendarInfo)
-            }
-          }
-        } catch (error) {
-          console.error(`캘린더 ${calendarConfig.name} 이벤트 조회 오류:`, error)
-        }
-      }
-
-      // 현재 주의 이벤트만 필터링
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-      const weeklyEvents = allEvents.filter(event => {
-        const eventDate = new Date(event.start || '')
-        return eventDate >= startOfWeek && eventDate <= endOfWeek
-      })
-      
-      setCalendarEvents(weeklyEvents)
-    } catch (error) {
-      console.error('캘린더 이벤트 조회 오류:', error)
-      setCalendarEvents([])
-    } finally {
-      setCalendarLoading(false)
-    }
-  }, [currentDate, showCalendarEvents])
 
   const fetchMeetings = useCallback(async () => {
     try {
@@ -145,13 +85,75 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
     }
   }, [currentDate])
 
-  useEffect(() => {
-    fetchMeetings()
-  }, [fetchMeetings])
+  const syncAndFetchMeetings = useCallback(async () => {
+    setCalendarLoading(true)
+    try {
+      // Google Calendar 연동이 활성화된 경우에만 동기화 수행
+      if (showCalendarEvents) {
+        const allGoogleEvents: GoogleEvent[] = []
+        const { timeMin, timeMax } = getCurrentYearRange()
+        
+        // 외부 및 내부 미팅 캘린더에서 이벤트 가져오기
+        for (const calendarConfig of ADMIN_WEEKLY_CALENDARS) {
+          try {
+            const response = await fetch('/api/calendar/events', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                calendarId: calendarConfig.id,
+                timeMin,
+                timeMax,
+                maxResults: 250
+              }),
+            })
+
+            if (response.ok) {
+              const data = await response.json()
+              if (data.events && data.events.length > 0) {
+                allGoogleEvents.push(...data.events)
+              }
+            }
+          } catch (error) {
+            console.error(`캘린더 ${calendarConfig.name} 이벤트 조회 오류:`, error)
+          }
+        }
+
+        // Google Calendar 이벤트를 우리 DB와 동기화
+        if (allGoogleEvents.length > 0) {
+          try {
+            const syncResponse = await fetch('/api/calendar/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                events: allGoogleEvents, 
+                userId: user.id 
+              })
+            })
+
+            const syncResult = await syncResponse.json()
+            if (syncResult.success && syncResult.synced > 0) {
+              console.log(`${syncResult.synced}개 이벤트가 동기화되었습니다.`)
+            }
+          } catch (error) {
+            console.error('캘린더 동기화 오류:', error)
+          }
+        }
+      }
+
+      // 동기화 완료 후 meetings 테이블에서 모든 일정 조회 (단일 진실 공급원)
+      await fetchMeetings()
+    } catch (error) {
+      console.error('캘린더 동기화 및 미팅 조회 오류:', error)
+    } finally {
+      setCalendarLoading(false)
+    }
+  }, [showCalendarEvents, user.id, fetchMeetings])
 
   useEffect(() => {
-    fetchCalendarEvents()
-  }, [fetchCalendarEvents])
+    syncAndFetchMeetings()
+  }, [syncAndFetchMeetings])
 
   useEffect(() => {
     // 공휴일 캐시 초기화
@@ -176,24 +178,6 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
     return meetings.filter(meeting => meeting.date === dateStr)
   }
 
-  const getCalendarEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return calendarEvents.filter(event => {
-      const eventDate = new Date(event.start).toISOString().split('T')[0]
-      return eventDate === dateStr
-    })
-  }
-
-  const getAllEventsForDate = (date: Date) => {
-    const meetingsForDate = getMeetingsForDate(date)
-    const events = getCalendarEventsForDate(date)
-    
-    return {
-      meetings: meetingsForDate,
-      calendarEvents: events,
-      totalCount: meetingsForDate.length + events.length
-    }
-  }
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate)
@@ -371,8 +355,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
         description: '',
         created_by: user.id
       })
-      fetchMeetings()
-      fetchCalendarEvents()
+      syncAndFetchMeetings()
     } catch (error) {
       console.error(editingMeeting ? '일정 수정 오류:' : '일정 등록 오류:', error)
       alert(editingMeeting ? '일정 수정 중 오류가 발생했습니다.' : '일정 등록 중 오류가 발생했습니다.')
@@ -441,8 +424,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
       }
 
       alert('일정이 성공적으로 삭제되었습니다!')
-      fetchMeetings()
-      fetchCalendarEvents()
+      syncAndFetchMeetings()
     } catch (error) {
       console.error('일정 삭제 오류:', error)
       alert('일정 삭제 중 오류가 발생했습니다.')
@@ -529,7 +511,6 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
             {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
               const day = weekDays[index]
               const dayMeetings = getMeetingsForDate(day)
-              const dayEvents = getAllEventsForDate(day)
               const isTodayDay = isToday(day)
               const isWeekendDay = isWeekend(day)
               const holidayInfo = getHolidayInfoSync(day)
@@ -554,7 +535,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                         🎌 {holidayInfo.name}
                       </div>
                     )}
-                    {/* 미팅 표시 */}
+                    {/* 모든 미팅 표시 (DB + Google Calendar 동기화된 데이터) */}
                     {dayMeetings.map((meeting, idx) => (
                       <div 
                         key={`meeting-${idx}`}
@@ -563,32 +544,20 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                             ? 'bg-red-100 text-red-800 border-l-2 border-red-500' 
                             : 'bg-blue-100 text-blue-800 border-l-2 border-blue-500'
                         }`}
-                        title={`${meeting.title} (${meeting.user?.department}) - 클릭하여 수정/삭제`}
+                        title={`${meeting.title} ${meeting.user?.department ? `(${meeting.user.department})` : ''} - 클릭하여 수정/삭제`}
                         onClick={() => handleMeetingClick(meeting)}
                       >
-                        <div className="font-medium">[{meeting.user?.department}]</div>
+                        {meeting.user?.department && (
+                          <div className="font-medium">[{meeting.user.department}]</div>
+                        )}
                         <div>{meeting.title}</div>
-                        <div className="text-xs opacity-70 mt-1">✏️ 편집 가능</div>
+                        <div className="text-xs opacity-70 mt-1">
+                          {meeting.google_event_id ? '🔄 Google 연동' : '📝 직접 등록'} ✏️ 편집 가능
+                        </div>
                       </div>
                     ))}
                     
-                    {/* Google Calendar 이벤트 표시 */}
-                    {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
-                      <div 
-                        key={`cal-${event.id}-${idx}`}
-                        className={`text-xs p-1 rounded break-words ${
-                          event.calendarName.includes('외부') 
-                            ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500'
-                            : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
-                        }`}
-                        title={`${event.title} (${event.calendarName})`}
-                      >
-                        <div className="font-medium">[{event.calendarName}]</div>
-                        <div>{event.title}</div>
-                      </div>
-                    ))}
-                    
-                    {dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0) && (
+                    {dayMeetings.length === 0 && (
                       <div className="text-xs text-gray-400 text-center pt-8">
                         일정 없음
                       </div>
@@ -604,12 +573,11 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
         <div className="md:hidden space-y-2">
           {weekDays.map((day, index) => {
             const dayMeetings = getMeetingsForDate(day)
-            const dayEvents = getAllEventsForDate(day)
             const isTodayDay = isToday(day)
             const isWeekendDay = isWeekend(day)
             const holidayInfo = getHolidayInfoSync(day)
             const dayName = ['일', '월', '화', '수', '목', '금', '토'][index]
-            const totalEvents = dayMeetings.length + (showCalendarEvents ? dayEvents.calendarEvents.length : 0)
+            const totalEvents = dayMeetings.length
             
             if (totalEvents === 0) return null
             
@@ -637,7 +605,7 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                 </div>
                 
                 <div className="space-y-2">
-                  {/* 미팅 표시 */}
+                  {/* 모든 미팅 표시 (DB + Google Calendar 동기화된 데이터) */}
                   {dayMeetings.map((meeting, idx) => (
                     <div 
                       key={`meeting-${idx}`}
@@ -649,30 +617,16 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
                       title={`${meeting.title} - 클릭하여 수정/삭제`}
                       onClick={() => handleMeetingClick(meeting)}
                     >
-                      <div className="font-medium text-xs text-gray-600 mb-1">[{meeting.user?.department}]</div>
+                      {meeting.user?.department && (
+                        <div className="font-medium text-xs text-gray-600 mb-1">[{meeting.user.department}]</div>
+                      )}
                       <div className="font-medium">{meeting.title}</div>
                       {meeting.location && (
                         <div className="text-xs text-gray-600 mt-1">📍 {meeting.location}</div>
                       )}
-                      <div className="text-xs opacity-70 mt-1">✏️ 편집 가능</div>
-                    </div>
-                  ))}
-                  
-                  {/* Google Calendar 이벤트 표시 */}
-                  {showCalendarEvents && dayEvents.calendarEvents.map((event, idx) => (
-                    <div 
-                      key={`cal-${event.id}-${idx}`}
-                      className={`text-sm p-2 rounded break-words ${
-                        event.calendarName.includes('외부') 
-                          ? 'bg-orange-100 text-orange-800 border-l-2 border-orange-500'
-                          : 'bg-purple-100 text-purple-800 border-l-2 border-purple-500'
-                      }`}
-                    >
-                      <div className="font-medium text-xs text-gray-600 mb-1">[{event.calendarName}]</div>
-                      <div className="font-medium">{event.title}</div>
-                      {event.location && (
-                        <div className="text-xs text-gray-600 mt-1">📍 {event.location}</div>
-                      )}
+                      <div className="text-xs opacity-70 mt-1">
+                        {meeting.google_event_id ? '🔄 Google 연동' : '📝 직접 등록'} ✏️ 편집 가능
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -682,12 +636,14 @@ export default function UserWeeklySchedule({ user }: UserWeeklyScheduleProps) {
           
           {weekDays.every(day => {
             const dayMeetings = getMeetingsForDate(day)
-            const dayEvents = getAllEventsForDate(day)
-            return dayMeetings.length === 0 && (!showCalendarEvents || dayEvents.calendarEvents.length === 0)
+            return dayMeetings.length === 0
           }) && (
             <div className="text-center py-8 text-gray-400">
               <div className="text-4xl mb-2">📅</div>
               <div>이번 주에 등록된 일정이 없습니다</div>
+              {showCalendarEvents && (
+                <div className="text-sm mt-2">Google Calendar와 동기화된 일정도 표시됩니다</div>
+              )}
             </div>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
 import LeaveStatusModal from './LeaveStatusModal'
+import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 // import { CALENDAR_IDS, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping' // 더 이상 사용하지 않음
 
 // 한국 공휴일 데이터 (2024년)
@@ -79,15 +80,16 @@ interface CalendarConfig {
   is_active: boolean
 }
 
-interface CalendarEvent {
-  id: string
-  title: string
-  start: string
-  end: string
-  description?: string
-  calendarId?: string
-  calendarName: string
-}
+// CalendarEvent interface 더 이상 사용되지 않음 - 대신 meetings DB에서 통합 관리
+// interface CalendarEvent {
+//   id: string
+//   title: string
+//   start: string
+//   end: string
+//   description?: string
+//   calendarId?: string
+//   calendarName: string
+// }
 
 interface LeaveManagementProps {
   user: User
@@ -97,7 +99,6 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [leaveData, setLeaveData] = useState<LeaveData | null>(null)
   const [leaveEvents, setLeaveEvents] = useState<LeaveEvent[]>([])
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
-  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [showCalendarEvents, setShowCalendarEvents] = useState(true)
   const [loading, setLoading] = useState(true)
   const [calendarLoading, setCalendarLoading] = useState(false)
@@ -107,36 +108,58 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
   const [calendarView, setCalendarView] = useState<'calendar' | 'list'>('calendar')
 
   const fetchLeaveData = async () => {
+    if (!user.hire_date) {
+      console.error('사용자의 입사일 정보가 없어 연차를 계산할 수 없습니다.');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const { data, error } = await supabase
+      const correctAnnualDays = calculateAnnualLeave(user.hire_date);
+
+      const { data: storedLeaveData, error } = await supabase
         .from('leave_days')
         .select('*')
         .eq('user_id', user.id)
         .single()
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error fetching leave data:', error)
-      } else if (data) {
-        setLeaveData(data)
+        throw error;
+      }
+
+      if (storedLeaveData) {
+        // DB에 데이터가 있지만, 계산된 연차 일수가 현재와 다르면 업데이트
+        if (storedLeaveData.leave_types.annual_days !== correctAnnualDays) {
+          const { data: updatedLeaveData, error: updateError } = await supabase
+            .from('leave_days')
+            .update({ leave_types: { ...storedLeaveData.leave_types, annual_days: correctAnnualDays } })
+            .eq('user_id', user.id)
+            .select()
+            .single();
+          
+          if (updateError) throw updateError;
+          setLeaveData(updatedLeaveData);
+        } else {
+          setLeaveData(storedLeaveData);
+        }
       } else {
-        // 데이터가 없으면 기본값 생성
+        // DB에 데이터가 없으면 새로 생성
         const { data: newLeaveData, error: insertError } = await supabase
           .from('leave_days')
           .insert([{
             user_id: user.id,
             leave_types: {
-              annual_days: 15, // 기본 연차일수
+              annual_days: correctAnnualDays,
               used_annual_days: 0,
-              sick_days: 3, // 기본 병가일수
+              sick_days: 30, // 기본 병가일수 (정책에 맞게 조정)
               used_sick_days: 0
             }
           }])
           .select()
           .single()
 
-        if (!insertError && newLeaveData) {
-          setLeaveData(newLeaveData)
-        }
+        if (insertError) throw insertError;
+        setLeaveData(newLeaveData)
       }
     } catch (error) {
       console.error('Error in fetchLeaveData:', error)
@@ -213,7 +236,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       if (result.success) {
         console.log('휴가 캘린더 이벤트 생성 성공:', result.event)
         // 캘린더 이벤트 새로고침
-        fetchCalendarEvents()
+        syncCalendarAndFetchLeaveEvents()
         return result.event
       } else {
         console.error('휴가 캘린더 이벤트 생성 실패:', result.error)
@@ -223,68 +246,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     }
   }
 
-  const fetchCalendarEvents = useCallback(async () => {
-    if (!showCalendarEvents || calendarConfigs.length === 0) {
-      setCalendarEvents([])
-      return
-    }
-
-    setCalendarLoading(true)
-    try {
-      const allEvents: CalendarEvent[] = []
-      // 월별 데이터를 가져오도록 수정 (성능 개선)
-      const year = currentDate.getFullYear()
-      const month = currentDate.getMonth()
-      const timeMin = new Date(year, month, 1).toISOString()
-      const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
-      
-      // DB에서 가져온 캘린더 설정 사용
-      const leaveCalendar = calendarConfigs.find(c => c.target_name === 'leave-management')
-      if (!leaveCalendar) {
-        console.error('휴가 캘린더 설정을 찾을 수 없습니다.')
-        setCalendarEvents([])
-        return
-      }
-
-      try {
-        const response = await fetch('/api/calendar/events', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            calendarId: leaveCalendar.calendar_id,
-            timeMin,
-            timeMax,
-            maxResults: 250
-          }),
-        })
-
-        if (response.ok) {
-          const data = await response.json()
-          if (data.events) {
-            const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
-              ...event,
-              calendarName: leaveCalendar.calendar_alias || '휴가 캘린더',
-              calendarId: leaveCalendar.calendar_id
-            }))
-            allEvents.push(...eventsWithCalendarInfo)
-          }
-        }
-      } catch (error) {
-        console.error('휴가 캘린더 이벤트 조회 오류:', error)
-      }
-
-      setCalendarEvents(allEvents)
-    } catch (error) {
-      console.error('캘린더 이벤트 조회 오류:', error)
-      setCalendarEvents([])
-    } finally {
-      setCalendarLoading(false)
-    }
-  }, [currentDate, showCalendarEvents, calendarConfigs])
-
-  const fetchLeaveEvents = async () => {
+  const fetchLeaveEvents = useCallback(async () => {
     try {
       // 실제로는 form_requests 테이블에서 승인된 휴가 신청을 가져와야 하지만,
       // 현재는 샘플 데이터로 대체
@@ -312,17 +274,87 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     } catch (error) {
       console.error('Error fetching leave events:', error)
     }
-  }
+  }, [user.id])
+
+  const syncCalendarAndFetchLeaveEvents = useCallback(async () => {
+    if (!showCalendarEvents || calendarConfigs.length === 0) {
+      return
+    }
+
+    setCalendarLoading(true)
+    try {
+      // 월별 데이터를 가져오도록 수정 (성능 개선)
+      const year = currentDate.getFullYear()
+      const month = currentDate.getMonth()
+      const timeMin = new Date(year, month, 1).toISOString()
+      const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+      
+      // DB에서 가져온 캘린더 설정 사용
+      const leaveCalendar = calendarConfigs.find(c => c.target_name === 'leave-management')
+      if (!leaveCalendar) {
+        console.error('휴가 캘린더 설정을 찾을 수 없습니다.')
+        return
+      }
+
+      const allGoogleEvents: unknown[] = []
+      try {
+        const response = await fetch('/api/calendar/events', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            calendarId: leaveCalendar.calendar_id,
+            timeMin,
+            timeMax,
+            maxResults: 250
+          }),
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.events && data.events.length > 0) {
+            allGoogleEvents.push(...data.events)
+          }
+        }
+      } catch (error) {
+        console.error('휴가 캘린더 이벤트 조회 오류:', error)
+      }
+
+      // Google Calendar 이벤트를 우리 DB와 동기화
+      if (allGoogleEvents.length > 0) {
+        try {
+          await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              events: allGoogleEvents, 
+              userId: user.id 
+            })
+          })
+        } catch (error) {
+          console.error('휴가 캘린더 동기화 오류:', error)
+        }
+      }
+
+      // 동기화 후 시스템 DB에서 휴가 이벤트 조회
+      await fetchLeaveEvents()
+    } catch (error) {
+      console.error('캘린더 동기화 및 휴가 이벤트 조회 오류:', error)
+    } finally {
+      setCalendarLoading(false)
+    }
+  }, [currentDate, showCalendarEvents, calendarConfigs, user.id, fetchLeaveEvents])
 
   useEffect(() => {
     fetchLeaveData()
     fetchLeaveEvents()
     fetchCalendarConfigs()
-  }, [user.id, fetchCalendarConfigs])
+  }, [user.id, fetchCalendarConfigs]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    fetchCalendarEvents()
-  }, [fetchCalendarEvents])
+    syncCalendarAndFetchLeaveEvents()
+  }, [syncCalendarAndFetchLeaveEvents])
 
   const openFormModal = (formType: string, formUrl: string) => {
     // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
@@ -411,29 +443,20 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
     })
   }
 
-  const getCalendarEventsForDate = (dateString: string) => {
-    return calendarEvents.filter(event => {
-      const eventDate = new Date(event.start).toISOString().split('T')[0]
-      return eventDate === dateString
-    })
-  }
+  // calendarEvents 제거로 인해 더 이상 필요 없음
+  // const getCalendarEventsForDate = () => {
+  //   return []
+  // }
 
-  const getAllEventsForDate = (dateString: string) => {
-    const leaveEventsForDate = leaveEvents.filter(event => {
-      const startDate = new Date(event.start_date)
-      const endDate = new Date(event.end_date)
-      const checkDate = new Date(dateString)
-      return checkDate >= startDate && checkDate <= endDate
-    })
-
-    const calendarEventsForDate = getCalendarEventsForDate(dateString)
-    
-    return {
-      leaveEvents: leaveEventsForDate,
-      calendarEvents: calendarEventsForDate,
-      totalCount: leaveEventsForDate.length + calendarEventsForDate.length
-    }
-  }
+  // getAllEventsForDate 더 이상 필요없음 - DB 통합 관리로 대체
+  // const getAllEventsForDate = (dateString: string) => {
+  //   const leaveEventsForDate = leaveEvents.filter(event => {
+  //     const startDate = new Date(event.start_date)
+  //     const endDate = new Date(event.end_date)
+  //     const checkDate = new Date(dateString)
+  //     return checkDate >= startDate && checkDate <= endDate
+  //   })
+  // }
 
   const isHoliday = (dateString: string) => {
     return koreanHolidays[dateString as keyof typeof koreanHolidays]
@@ -470,7 +493,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       const hasLeave = hasLeaveEvent(dateString)
       const holiday = isHoliday(dateString)
       const isWeekend = (firstDay + day - 1) % 7 === 0 || (firstDay + day - 1) % 7 === 6
-      const dayEvents = getAllEventsForDate(dateString)
+      // const dayEvents = getAllEventsForDate(dateString) // 더 이상 사용되지 않음
 
       days.push(
         <div
@@ -493,23 +516,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
               휴가
             </div>
           )}
-          {showCalendarEvents && dayEvents.calendarEvents.map((event, index) => {
-            // 이벤트 제목에서 직원 이름 추출 (예: "홍길동 - 연차")
-            const titleParts = event.title.split(' - ')
-            const employeeName = titleParts[0]
-            const leaveType = titleParts[1] || event.title
-            
-            return (
-              <div 
-                key={`cal-${event.id}-${index}`}
-                className="text-xs bg-green-100 text-green-800 rounded px-1 mt-1 truncate border-l-2 border-green-500"
-                title={`${event.title} (${event.calendarName})`}
-              >
-                <div className="font-medium">{employeeName}</div>
-                <div className="text-xs opacity-75">{leaveType}</div>
-              </div>
-            )
-          })}
+          {/* 캘린더 이벤트는 이제 DB를 통해 통합 관리되므로 제거 */}
         </div>
       )
     }
@@ -536,11 +543,8 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
       return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
     })
 
-    // 구글 캘린더에서 가져온 모든 직원 휴가 이벤트
-    const filteredCalendarEvents = calendarEvents.filter(event => {
-      const eventDate = new Date(event.start)
-      return eventDate.getMonth() === currentMonth && eventDate.getFullYear() === currentYear
-    })
+    // 구글 캘린더에서 가져온 모든 직원 휴가 이벤트는 이제 DB에서 통합 관리
+    // 라인 제거 - 더 이상 필요없음
 
     const allEvents = [
       ...filteredEvents.map(event => ({
@@ -551,20 +555,7 @@ export default function LeaveManagement({ user }: LeaveManagementProps) {
         reason: event.reason,
         status: event.status
       })),
-      ...filteredCalendarEvents.map(event => {
-        const titleParts = event.title.split(' - ')
-        const employeeName = titleParts[0]
-        const leaveType = titleParts[1] || event.title
-        
-        return {
-          type: 'calendar',
-          title: leaveType,
-          employee: employeeName,
-          date: new Date(event.start).toLocaleDateString('ko-KR'),
-          reason: event.description || '',
-          status: 'approved'
-        }
-      })
+      // 캘린더 이벤트는 이제 DB의 meetings 테이블에서 통합 관리되므로 제거
     ]
 
     // 날짜순으로 정렬
