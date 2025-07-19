@@ -22,6 +22,7 @@ interface AdminLeaveManagementProps {
 interface AddLeaveForm {
   employee_id: string
   leave_type: 'annual' | 'special' | 'maternity' | 'paternity' | 'family_care' | 'sick'
+  special_leave_detail: string
   start_date: string
   end_date: string
   is_half_day: boolean
@@ -39,6 +40,7 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
   const [addLeaveForm, setAddLeaveForm] = useState<AddLeaveForm>({
     employee_id: '',
     leave_type: 'annual',
+    special_leave_detail: '',
     start_date: '',
     end_date: '',
     is_half_day: false,
@@ -195,7 +197,10 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
         family_care: '가족돌봄휴가',
         sick: '병가'
       }
-      const leaveTypeText = leaveTypeTexts[addLeaveForm.leave_type]
+      let leaveTypeText = leaveTypeTexts[addLeaveForm.leave_type]
+      if (addLeaveForm.leave_type === 'special' && addLeaveForm.special_leave_detail) {
+        leaveTypeText = `특별휴가(${addLeaveForm.special_leave_detail})`
+      }
       const halfDayText = addLeaveForm.is_half_day ? 
         ` (${addLeaveForm.half_day_type === 'morning' ? '오전' : '오후'} 반차)` : ''
 
@@ -255,6 +260,7 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
         setAddLeaveForm({
           employee_id: '',
           leave_type: 'annual',
+          special_leave_detail: '',
           start_date: '',
           end_date: '',
           is_half_day: false,
@@ -521,7 +527,7 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
                   <label className="block text-sm font-medium text-gray-700">휴가 유형</label>
                   <select
                     value={addLeaveForm.leave_type}
-                    onChange={(e) => setAddLeaveForm({...addLeaveForm, leave_type: e.target.value as AddLeaveForm['leave_type']})}
+                    onChange={(e) => setAddLeaveForm({...addLeaveForm, leave_type: e.target.value as AddLeaveForm['leave_type'], special_leave_detail: ''})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                     required
                   >
@@ -533,6 +539,21 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
                     <option value="sick">병가</option>
                   </select>
                 </div>
+
+                {/* 특별휴가 세부 사항 */}
+                {addLeaveForm.leave_type === 'special' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">특별휴가 세부 사항</label>
+                    <input
+                      type="text"
+                      value={addLeaveForm.special_leave_detail}
+                      onChange={(e) => setAddLeaveForm({...addLeaveForm, special_leave_detail: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      placeholder="예: 결혼, 장례, 이사 등"
+                      required
+                    />
+                  </div>
+                )}
 
                 {/* 반차 여부 */}
                 <div>
@@ -604,6 +625,7 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
                       setAddLeaveForm({
                         employee_id: '',
                         leave_type: 'annual',
+                        special_leave_detail: '',
                         start_date: '',
                         end_date: '',
                         is_half_day: false,

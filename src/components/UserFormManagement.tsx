@@ -25,6 +25,7 @@ interface UserFormManagementProps {
 export default function UserFormManagement({ user }: UserFormManagementProps) {
   const [formRequests, setFormRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [showLeaveForm, setShowLeaveForm] = useState(false)
 
   const fetchMyFormRequests = useCallback(async () => {
     try {
@@ -72,6 +73,36 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
     } catch (err) {
       console.error('서식 삭제 오류:', err)
       alert('삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleLeaveRequest = async () => {
+    try {
+      const { error } = await supabase
+        .from('form_requests')
+        .insert([
+          {
+            user_id: user.id,
+            form_type: '휴가신청서',
+            status: 'pending',
+            request_data: {
+              form_name: '휴가신청서',
+              submitted_via: '웹앱'
+            }
+          }
+        ])
+
+      if (error) {
+        console.error('휴가 신청 실패:', error)
+        alert('휴가 신청에 실패했습니다.')
+      } else {
+        alert('휴가 신청서가 제출되었습니다.\n관리자가 검토 후 처리해드립니다.')
+        setShowLeaveForm(false)
+        fetchMyFormRequests()
+      }
+    } catch (err) {
+      console.error('휴가 신청 오류:', err)
+      alert('신청 중 오류가 발생했습니다.')
     }
   }
 
@@ -127,15 +158,28 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="p-5">
-        <div className="flex items-center mb-6">
-          <div className="flex-shrink-0">
-            <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div className="ml-5">
+              <h3 className="text-lg font-medium text-gray-900">내 서식 신청 내역</h3>
+              <p className="text-sm text-gray-500">신청한 서식의 처리 상태를 확인하고 관리할 수 있습니다</p>
+            </div>
           </div>
-          <div className="ml-5">
-            <h3 className="text-lg font-medium text-gray-900">내 서식 신청 내역</h3>
-            <p className="text-sm text-gray-500">신청한 서식의 처리 상태를 확인하고 관리할 수 있습니다</p>
+          <div className="flex space-x-3">
+            <button
+              onClick={() => setShowLeaveForm(true)}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              휴가 신청서 작성
+            </button>
           </div>
         </div>
 
@@ -208,6 +252,63 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
           )}
         </div>
       </div>
+
+      {/* 휴가 신청 모달 */}
+      {showLeaveForm && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+            <div className="mt-3">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">휴가 신청서 작성</h3>
+              
+              <div className="space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-blue-800">휴가 신청 안내</h3>
+                      <div className="mt-2 text-sm text-blue-700">
+                        <p>• 휴가 신청서는 기존 웹앱을 통해 작성됩니다.</p>
+                        <p>• 신청 후 관리자 승인을 거쳐 처리됩니다.</p>
+                        <p>• 신청 상태는 이 페이지에서 확인할 수 있습니다.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 rounded-md p-4">
+                  <h4 className="text-sm font-medium text-gray-900 mb-2">신청자 정보</h4>
+                  <div className="text-sm text-gray-600">
+                    <p>이름: {user.name}</p>
+                    <p>부서: {user.department}</p>
+                    <p>직급: {user.position}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowLeaveForm(false)}
+                  className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleLeaveRequest}
+                  className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  휴가 신청서 제출
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
