@@ -25,6 +25,7 @@ interface FormData {
   title: string
   date: string
   time: string
+  is_all_day: boolean
   location: string
   description: string
   targetCalendar: string
@@ -41,6 +42,7 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
     title: '',
     date: '',
     time: '',
+    is_all_day: false,
     location: '',
     description: '',
     targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
@@ -195,15 +197,32 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
     }
 
     const apiRoute = editingEvent ? '/api/calendar/update-event' : '/api/calendar/create-event-direct'
-    const startDateTime = new Date(`${formData.date}T${formData.time || '00:00'}:00`)
-    const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 지속
+    
+    let eventData
+    if (formData.is_all_day) {
+      // 종일 이벤트
+      const endDate = new Date(formData.date)
+      endDate.setDate(endDate.getDate() + 1) // Google Calendar 규칙: 종료일은 다음 날
+      
+      eventData = {
+        summary: formData.title,
+        description: formData.description,
+        location: formData.location,
+        start: { date: formData.date },
+        end: { date: endDate.toISOString().split('T')[0] }
+      }
+    } else {
+      // 시간 지정 이벤트
+      const startDateTime = new Date(`${formData.date}T${formData.time || '09:00'}:00`)
+      const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 지속
 
-    const eventData = {
-      summary: formData.title,
-      description: formData.description,
-      location: formData.location,
-      start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
-      end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+      eventData = {
+        summary: formData.title,
+        description: formData.description,
+        location: formData.location,
+        start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
+        end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+      }
     }
 
     const body = editingEvent 
@@ -231,6 +250,7 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
         title: '',
         date: '',
         time: '',
+        is_all_day: false,
         location: '',
         description: '',
         targetCalendar: ADMIN_TEAM_CALENDARS[0]?.id || ''
@@ -244,11 +264,13 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
 
   const handleEditEvent = (event: CalendarEvent) => {
     setEditingEvent(event)
+    const isAllDayEvent = !event.start.includes('T')
     const eventDate = new Date(event.start)
     setFormData({
       title: event.title,
       date: eventDate.toISOString().split('T')[0],
-      time: event.start.includes('T') ? eventDate.toTimeString().slice(0, 5) : '',
+      time: isAllDayEvent ? '' : eventDate.toTimeString().slice(0, 5),
+      is_all_day: isAllDayEvent,
       location: event.location || '',
       description: event.description || '',
       targetCalendar: event.calendarId || ''
@@ -575,14 +597,29 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">시간</label>
-                  <input
-                    type="time"
-                    value={formData.time}
-                    onChange={(e) => setFormData({...formData, time: e.target.value})}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                  />
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.is_all_day}
+                      onChange={(e) => setFormData({...formData, is_all_day: e.target.checked, time: e.target.checked ? '' : formData.time})}
+                      className="mr-2 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-gray-700">종일</span>
+                  </label>
                 </div>
+
+                {!formData.is_all_day && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">시간</label>
+                    <input
+                      type="time"
+                      value={formData.time}
+                      onChange={(e) => setFormData({...formData, time: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      required
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">장소</label>
