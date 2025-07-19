@@ -59,9 +59,8 @@ export default function AdminLeaveManagement() {
     setLoading(true)
     try {
       const year = currentDate.getFullYear()
-      const month = currentDate.getMonth()
-      const timeMin = new Date(year, month, 1).toISOString()
-      const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+      const timeMin = new Date(year, 0, 1).toISOString()
+      const timeMax = new Date(year, 11, 31, 23, 59, 59).toISOString()
 
       console.log('📅 [DEBUG] 휴가 캘린더 이벤트 조회:', { 
         calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT, 

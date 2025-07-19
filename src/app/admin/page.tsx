@@ -7,7 +7,6 @@ import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import UserProfile from '@/components/UserProfile'
-import LeaveManagement from '@/components/LeaveManagement'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import AdminWeeklySchedule from '@/components/AdminWeeklySchedule'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
@@ -94,11 +93,6 @@ export default function AdminDashboard() {
                 <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
                 <AdminWeeklySchedule user={user} />
                 <AdminTeamSchedule user={user} />
-            </div>
-            
-            {/* 휴가 관리 - 전체 너비 사용 */}
-            <div className="mt-6">
-                <LeaveManagement user={user} />
             </div>
           </div>
 
