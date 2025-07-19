@@ -84,6 +84,25 @@ export default function AdminLeaveManagement() {
       if (response.ok) {
         const data = await response.json()
         console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', data.events?.length || 0)
+        
+        // 휴가 이벤트 상세 로그
+        if (data.events && data.events.length > 0) {
+          console.log('📅 [DEBUG] 첫 번째 휴가 이벤트 샘플:', data.events[0])
+          data.events.forEach((event: unknown, index: number) => {
+            const googleEvent = event as { id?: string; summary?: string; start?: { date?: string; dateTime?: string }; end?: { date?: string; dateTime?: string }; description?: string }
+            if (index < 3) { // 처음 3개만 상세 로그
+              console.log(`📅 [DEBUG] 휴가 이벤트 ${index + 1}:`, {
+                summary: googleEvent.summary,
+                start: googleEvent.start,
+                end: googleEvent.end,
+                description: googleEvent.description
+              })
+            }
+          })
+        } else {
+          console.log('⚠️ [DEBUG] 휴가 캘린더에 이벤트가 없습니다.')
+        }
+        
         setCalendarEvents(data.events || [])
       } else {
         const errorText = await response.text()
@@ -301,6 +320,13 @@ export default function AdminLeaveManagement() {
       const dayEvents = calendarEvents.filter(event => 
         (event.start?.date || event.start?.dateTime?.split('T')[0]) === dateString
       )
+      
+      // 이벤트가 있는 날의 디버그 로그
+      if (dayEvents.length > 0) {
+        console.log(`📅 [DEBUG] ${dateString}에 ${dayEvents.length}개 휴가 이벤트:`, 
+          dayEvents.map(e => e.summary)
+        )
+      }
       const holidayInfo = getHolidayInfoSync(date)
       const isToday = new Date().toDateString() === date.toDateString()
 
