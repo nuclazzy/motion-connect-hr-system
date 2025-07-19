@@ -16,14 +16,12 @@ interface MeetingListWidgetProps {
   title: string
   calendarType: 'internal' | 'external' // 직접 캘린더 타입 지정
   noEventsMessage: string
-  maxResults?: number
 }
 
 export default function MeetingListWidget({ 
   title, 
   calendarType, 
-  noEventsMessage, 
-  maxResults = 5 
+  noEventsMessage
 }: MeetingListWidgetProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,12 +40,18 @@ export default function MeetingListWidget({
     try {
       const calendarId = getCalendarId()
       
-      // 현재 월의 데이터만 가져오기 (성능 최적화)
+      // 이번주 데이터만 가져오기 (일요일 시작 기준)
       const now = new Date()
-      const year = now.getFullYear()
-      const month = now.getMonth()
-      const timeMin = new Date(year, month, 1).toISOString()
-      const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
+      const startOfWeek = new Date(now)
+      startOfWeek.setDate(now.getDate() - now.getDay()) // 이번주 일요일
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6) // 이번주 토요일
+      endOfWeek.setHours(23, 59, 59, 999)
+      
+      const timeMin = startOfWeek.toISOString()
+      const timeMax = endOfWeek.toISOString()
 
       console.log(`📅 [DEBUG] ${title} 이벤트 조회 시작:`, { calendarId, timeMin, timeMax })
 
@@ -58,7 +62,7 @@ export default function MeetingListWidget({
           calendarId,
           timeMin,
           timeMax,
-          maxResults: maxResults * 2,
+          maxResults: 100, // 이번주 전체 일정 가져오기
         }),
       })
 
@@ -95,14 +99,13 @@ export default function MeetingListWidget({
         console.error(`${title} 이벤트 조회 실패:`, response.status, errorText)
       }
 
-      // 최근 이벤트 순으로 정렬 및 제한
+      // 이번주 일정 중 과거 → 현재/미래 순으로 정렬
       const sortedEvents = fetchedEvents
         .sort((a, b) => {
           const dateA = new Date(a.start)
           const dateB = new Date(b.start)
-          return dateB.getTime() - dateA.getTime()
+          return dateA.getTime() - dateB.getTime() // 과거순 정렬
         })
-        .slice(0, maxResults)
 
       console.log(`📅 [DEBUG] ${title} 최종 이벤트 수:`, sortedEvents.length)
       setEvents(sortedEvents)
@@ -112,7 +115,7 @@ export default function MeetingListWidget({
     } finally {
       setLoading(false)
     }
-  }, [title, maxResults, getCalendarId])
+  }, [title, getCalendarId])
 
   useEffect(() => {
     fetchCalendarEvents()
@@ -157,7 +160,10 @@ export default function MeetingListWidget({
       {events.length === 0 ? (
         <p className="text-xs text-gray-500 mt-1">{noEventsMessage}</p>
       ) : (
-        <div className="space-y-2 mt-2">
+        <div className="space-y-2 mt-2 max-h-64 overflow-y-auto pr-1 hover:pr-0" style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: '#CBD5E1 #F1F5F9'
+        }}>
           {events.map((event, index) => (
             <div key={event.id || index} className="text-xs border-l-2 border-gray-200 pl-2">
               <p className="font-medium text-gray-700 line-clamp-1">{event.title}</p>

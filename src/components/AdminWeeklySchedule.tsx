@@ -33,14 +33,12 @@ export default function AdminWeeklySchedule({}: AdminWeeklyScheduleProps) {
             title="외부 미팅 및 답사"
             calendarType="external"
             noEventsMessage="외부 미팅 및 답사 일정이 없습니다"
-            maxResults={5}
           />
           <hr className="border-gray-200" />
           <MeetingListWidget
             title="내부 회의 및 면담"
             calendarType="internal"
             noEventsMessage="내부 회의 및 면담 일정이 없습니다"
-            maxResults={5}
           />
         </div>
       </div>

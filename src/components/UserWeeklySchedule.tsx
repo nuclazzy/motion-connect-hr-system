@@ -16,7 +16,6 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
           title="외부 미팅 및 답사 일정"
           calendarType="external"
           noEventsMessage="외부 미팅 및 답사 일정이 없습니다"
-          maxResults={10}
         />
       </div>
       
@@ -26,7 +25,6 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
           title="내부 회의 및 면담 일정"
           calendarType="internal"
           noEventsMessage="내부 회의 및 면담 일정이 없습니다"
-          maxResults={10}
         />
       </div>
     </div>
