@@ -158,7 +158,9 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     return leaveEvents.filter(event => {
       const eventStartDate = event.start.split('T')[0]
       const eventEndDate = event.end.split('T')[0]
-      return dateString >= eventStartDate && dateString <= eventEndDate
+      // Google Calendar의 종일 이벤트는 종료일을 포함하지 않으므로 (exclusive)
+      // 현재 날짜가 시작일(포함) 이상이고 종료일(미포함) 미만인지 확인
+      return dateString >= eventStartDate && dateString < eventEndDate
     })
   }
 

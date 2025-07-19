@@ -285,8 +285,17 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
     // 현재 달의 날들
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-      const dateString = date.toISOString().split('T')[0]
-      const dayEvents = leaveEvents.filter(event => event.start.startsWith(dateString))
+      // 시간대 문제를 피하고 정확한 날짜 비교를 위해 YYYY-MM-DD 형식으로 직접 생성
+      const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      
+      const dayEvents = leaveEvents.filter(event => {
+        const startDateStr = event.start.includes('T') ? event.start.split('T')[0] : event.start
+        const endDateStr = event.end.includes('T') ? event.end.split('T')[0] : event.end
+        
+        // Google Calendar의 종일 이벤트는 종료일을 포함하지 않으므로 (exclusive)
+        // 현재 날짜가 시작일(포함) 이상이고 종료일(미포함) 미만인지 확인
+        return dateString >= startDateStr && dateString < endDateStr
+      })
       const isCurrentDay = isToday(currentDate, day)
       const isWeekendDay = isWeekend(date)
       const holidayInfo = getHolidayInfoSync(date)
