@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
-import { ADMIN_TEAM_CALENDARS, getCurrentYearRange } from '@/lib/calendarMapping'
+import { ADMIN_TEAM_CALENDARS } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 
 interface CalendarEvent {
@@ -53,7 +53,17 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
     setLoading(true)
     try {
       const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
+      // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
+      const startOfWeek = new Date(currentDate)
+      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+
+      const timeMin = startOfWeek.toISOString()
+      const timeMax = endOfWeek.toISOString()
       
       console.log('📅 [DEBUG] 전체 팀 캘린더 이벤트 조회 시작:', { timeMin, timeMax })
 
@@ -119,19 +129,8 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
         }
       }
 
-      // 현재 주의 이벤트만 필터링
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-      const weeklyEvents = allEvents.filter(event => {
-        const eventDate = new Date(event.start)
-        return eventDate >= startOfWeek && eventDate <= endOfWeek
-      })
-      
-      console.log(`📅 [DEBUG] 이번 주 전체 팀 이벤트 수:`, weeklyEvents.length)
-      setCalendarEvents(weeklyEvents)
+      console.log(`📅 [DEBUG] 이번 주 전체 팀 이벤트 수:`, allEvents.length)
+      setCalendarEvents(allEvents)
     } catch (error) {
       console.error('전체 팀 캘린더 이벤트 조회 오류:', error)
       setCalendarEvents([])
@@ -318,7 +317,7 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
   const weekDays = getWeekDays()
 
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg col-span-full">
+    <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center">

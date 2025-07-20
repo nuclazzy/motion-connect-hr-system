@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
-import { getDepartmentCalendars, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
+import { getDepartmentCalendars, CALENDAR_NAMES } from '@/lib/calendarMapping'
 
 interface CalendarEvent {
   id: string
@@ -86,7 +86,17 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
     setCalendarLoading(true)
     try {
       const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
+      // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
+      const startOfWeek = new Date(currentDate)
+      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+
+      const timeMin = startOfWeek.toISOString()
+      const timeMax = endOfWeek.toISOString()
       console.log('🔄 [DEBUG] 시간 범위:', { timeMin, timeMax })
 
       // Google Calendar에서 이벤트 가져오기
@@ -126,19 +136,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
         }
       }
 
-      // 현재 주의 이벤트만 필터링
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-      const weeklyEvents = allEvents.filter(event => {
-        const eventDate = new Date(event.start || '')
-        return eventDate >= startOfWeek && eventDate <= endOfWeek
-      })
-      
-      console.log(`🔄 [DEBUG] 이번 주 이벤트 수: ${weeklyEvents.length}`)
-      setCalendarEvents(weeklyEvents)
+      console.log(`🔄 [DEBUG] 이번 주 이벤트 수:`, allEvents.length)
+      setCalendarEvents(allEvents)
     } catch (error) {
       console.error('캘린더 이벤트 조회 오류:', error)
       setCalendarEvents([])

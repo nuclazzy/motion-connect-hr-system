@@ -29,7 +29,7 @@ export default function UserWeeklySchedule() {
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
-  const [isManualView, setIsManualView] = useState(false)
+  const [isManualView] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
@@ -537,77 +537,20 @@ export default function UserWeeklySchedule() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* 헤더 - TeamSchedule과 동일한 구조 */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
-        <div>
-          <div className="flex items-center space-x-4">
-            <h2 className="text-xl font-semibold text-gray-900">미팅 및 답사 일정</h2>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={goToPreviousWeek}
-                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <span className="text-sm font-medium text-gray-700 min-w-[120px] text-center">
-                {formatWeekRange()}
-              </span>
-              <button
-                onClick={goToNextWeek}
-                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-              <button
-                onClick={goToCurrentWeek}
-                className="ml-2 px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
-              >
-                이번주
-              </button>
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <div className="ml-5">
+              <h3 className="text-lg font-medium text-gray-900">주간 미팅/답사 일정</h3>
+              <p className="text-sm text-gray-500">외부/내부 일정을 확인하고 관리합니다.</p>
             </div>
           </div>
-          <p className="text-sm text-gray-600 mt-1">외부 미팅 및 답사, 내부 회의 및 면담 일정을 확인하고 관리할 수 있습니다</p>
-        </div>
-        
-        <div className="flex items-center space-x-3">
-          {/* 뷰 전환 버튼 - TeamSchedule과 동일 */}
-          <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-            <button
-              onClick={() => {
-                setViewType('calendar')
-                setIsManualView(true)
-                setTimeout(() => setIsManualView(false), 5000)
-              }}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                viewType === 'calendar'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              캘린더
-            </button>
-            <button
-              onClick={() => {
-                setViewType('list')
-                setIsManualView(true)
-                setTimeout(() => setIsManualView(false), 5000)
-              }}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                viewType === 'list'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              목록
-            </button>
-          </div>
-
-          {/* 일정 추가 버튼 */}
           <button
             onClick={handleAddEvent}
             className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center"
@@ -628,12 +571,38 @@ export default function UserWeeklySchedule() {
         </div>
       )}
 
-      {/* 뷰 렌더링 */}
+      {/* 메인 컨텐츠 */}
       {!calendarLoading && (
-        viewType === 'calendar' ? renderCalendarView() : renderListView()
+        <div className="mt-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-medium text-gray-900">{formatWeekRange()}</h4>
+            <div className="flex items-center space-x-2">
+              <div className="flex bg-gray-200 p-1 rounded-lg">
+                <button onClick={() => setViewType('calendar')} className={`px-3 py-1 text-sm rounded-md ${viewType === 'calendar' ? 'bg-white shadow' : ''}`}>캘린더</button>
+                <button onClick={() => setViewType('list')} className={`px-3 py-1 text-sm rounded-md ${viewType === 'list' ? 'bg-white shadow' : ''}`}>목록</button>
+              </div>
+              <button onClick={goToPreviousWeek} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+              </button>
+              <button onClick={goToCurrentWeek} className="bg-gray-600 hover:bg-gray-700 text-white px-2 py-1 rounded text-xs">이번 주</button>
+              <button onClick={goToNextWeek} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-200">
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+              </button>
+            </div>
+          </div>
+
+          {calendarLoading ? (
+            <div className="text-center py-10">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+              <p className="mt-2 text-sm text-gray-600">일정을 불러오는 중...</p>
+            </div>
+          ) : (
+            viewType === 'calendar' ? renderCalendarView() : renderListView()
+          )}
+        </div>
       )}
 
-      {/* 일정 추가/수정 모달 - TeamSchedule과 동일한 구조 */}
+      {/* 일정 추가/수정 모달 */}
       {(showAddForm || showEditForm) && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
