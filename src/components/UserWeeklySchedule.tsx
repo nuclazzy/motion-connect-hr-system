@@ -519,9 +519,8 @@ export default function UserWeeklySchedule() {
                       onClick={() => handleEditEvent(event)}
                       title={`${event.title}${event.location ? ` (${event.location})` : ''}`}
                     >
-                      <div className="font-medium leading-tight break-words overflow-hidden">
-                        <span className="md:hidden">{event.title.length > 8 ? event.title.substring(0, 8) + '...' : event.title}</span>
-                        <span className="hidden md:block">{event.title.length > 15 ? event.title.substring(0, 15) + '...' : event.title}</span>
+                      <div className="font-medium leading-tight break-words overflow-wrap-anywhere">
+                        {event.title}
                       </div>
                       {event.start.includes('T00:00:00') && (
                         <div className="text-xs text-gray-500">종일</div>

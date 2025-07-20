@@ -9,7 +9,7 @@ import AdminFormManagement from '@/components/AdminFormManagement'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserProfile from '@/components/UserProfile'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
-import AdminWeeklySchedule from '@/components/AdminWeeklySchedule'
+import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 
 export default function AdminDashboard() {
@@ -93,7 +93,7 @@ export default function AdminDashboard() {
             <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
-                <AdminWeeklySchedule user={user} />
+                <UserWeeklySchedule />
                 <AdminTeamSchedule user={user} />
               </div>
               {/* 서식 신청 컴포넌트 */}
