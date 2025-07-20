@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { getMeetingCalendars, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
+import { getMeetingCalendars, CALENDAR_NAMES } from '@/lib/calendarMapping'
 
 interface CalendarEvent {
   id: string
@@ -27,7 +27,7 @@ interface CalendarConfig {
 export default function UserWeeklySchedule() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
-  const [currentDate] = useState(new Date())
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
   const [isManualView, setIsManualView] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -83,8 +83,20 @@ export default function UserWeeklySchedule() {
     setCalendarLoading(true)
     try {
       const allEvents: CalendarEvent[] = []
-      const { timeMin, timeMax } = getCurrentYearRange()
-      console.log('🔄 [DEBUG] 시간 범위:', { timeMin, timeMax })
+      // 현재 주간의 시간 범위 계산
+      const startOfWeek = new Date(currentDate)
+      const day = startOfWeek.getDay()
+      const diff = startOfWeek.getDate() - day
+      startOfWeek.setDate(diff)
+      startOfWeek.setHours(0, 0, 0, 0)
+      
+      const endOfWeek = new Date(startOfWeek)
+      endOfWeek.setDate(startOfWeek.getDate() + 6)
+      endOfWeek.setHours(23, 59, 59, 999)
+      
+      const timeMin = startOfWeek.toISOString()
+      const timeMax = endOfWeek.toISOString()
+      console.log('🔄 [DEBUG] 현재 주간 시간 범위:', { timeMin, timeMax })
 
       // Google Calendar에서 이벤트 가져오기 - TeamSchedule과 동일한 방식
       for (const config of calendarConfigs) {
@@ -124,19 +136,8 @@ export default function UserWeeklySchedule() {
         }
       }
 
-      // 현재 주의 이벤트만 필터링 - TeamSchedule과 동일한 방식
-      const startOfWeek = new Date(currentDate)
-      startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
-      const endOfWeek = new Date(startOfWeek)
-      endOfWeek.setDate(startOfWeek.getDate() + 6)
-
-      const weeklyEvents = allEvents.filter(event => {
-        const eventDate = new Date(event.start || '')
-        return eventDate >= startOfWeek && eventDate <= endOfWeek
-      })
-      
-      console.log(`🔄 [DEBUG] 이번 주 미팅 이벤트 수: ${weeklyEvents.length}`)
-      setCalendarEvents(weeklyEvents)
+      console.log(`🔄 [DEBUG] 이번 주 미팅 이벤트 수: ${allEvents.length}`)
+      setCalendarEvents(allEvents)
     } catch (error) {
       console.error('미팅 캘린더 이벤트 조회 오류:', error)
       setCalendarEvents([])
@@ -151,7 +152,7 @@ export default function UserWeeklySchedule() {
 
   useEffect(() => {
     fetchCalendarEvents()
-  }, [fetchCalendarEvents])
+  }, [fetchCalendarEvents, currentDate])
 
   // 화면 크기에 따른 자동 뷰 변경 - TeamSchedule과 동일
   useEffect(() => {
@@ -166,6 +167,36 @@ export default function UserWeeklySchedule() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [isManualView])
+
+  // 주간 네비게이션 함수들
+  const goToPreviousWeek = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() - 7)
+    setCurrentDate(newDate)
+  }
+
+  const goToNextWeek = () => {
+    const newDate = new Date(currentDate)
+    newDate.setDate(newDate.getDate() + 7)
+    setCurrentDate(newDate)
+  }
+
+  const goToCurrentWeek = () => {
+    setCurrentDate(new Date())
+  }
+
+  const formatWeekRange = () => {
+    const startOfWeek = new Date(currentDate)
+    const day = startOfWeek.getDay()
+    const diff = startOfWeek.getDate() - day
+    startOfWeek.setDate(diff)
+    
+    const endOfWeek = new Date(startOfWeek)
+    endOfWeek.setDate(startOfWeek.getDate() + 6)
+    
+    const formatDate = (date: Date) => `${date.getMonth() + 1}/${date.getDate()}`
+    return `${formatDate(startOfWeek)} - ${formatDate(endOfWeek)}`
+  }
 
   const resetFormData = () => {
     setFormData({
@@ -511,8 +542,37 @@ export default function UserWeeklySchedule() {
       {/* 헤더 - TeamSchedule과 동일한 구조 */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">이번주 미팅 및 답사 일정</h2>
-          <p className="text-sm text-gray-600">외부 미팅 및 답사, 내부 회의 및 면담 일정을 확인하고 관리할 수 있습니다</p>
+          <div className="flex items-center space-x-4">
+            <h2 className="text-xl font-semibold text-gray-900">미팅 및 답사 일정</h2>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={goToPreviousWeek}
+                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+              <span className="text-sm font-medium text-gray-700 min-w-[120px] text-center">
+                {formatWeekRange()}
+              </span>
+              <button
+                onClick={goToNextWeek}
+                className="p-1 rounded-md hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+              <button
+                onClick={goToCurrentWeek}
+                className="ml-2 px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
+              >
+                이번주
+              </button>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 mt-1">외부 미팅 및 답사, 내부 회의 및 면담 일정을 확인하고 관리할 수 있습니다</p>
         </div>
         
         <div className="flex items-center space-x-3">
