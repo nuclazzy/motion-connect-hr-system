@@ -630,7 +630,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                 
                 <div className="grid grid-cols-7 gap-1 md:gap-2">
                   {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
-                    const day = weekDays[index]
+                    const day = getWeekDays()[index]
                     const dayEvents = getEventsForDate(day).filter(event => 
                       getDepartmentCalendars(user.department).own.includes(event.calendarId || '')
                     )
@@ -706,7 +706,7 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                 
                 <div className="grid grid-cols-7 gap-1 md:gap-2">
                   {['일', '월', '화', '수', '목', '금', '토'].map((dayName, index) => {
-                    const day = weekDays[index]
+                    const day = getWeekDays()[index]
                     const otherTeamEvents = getEventsForDate(day).filter(event => 
                       getDepartmentCalendars(user.department).others.includes(event.calendarId || '')
                     )
