@@ -308,8 +308,13 @@ export default function UserWeeklySchedule() {
     }
   }
 
-  const handleDeleteEvent = async (eventId: string, calendarId: string) => {
-    if (!confirm('정말로 이 일정을 삭제하시겠습니까?')) {
+  const handleDeleteEvent = async (event: CalendarEvent) => {
+    if (!confirm(`'${event.title}' 일정을 정말로 삭제하시겠습니까?`)) {
+      return
+    }
+
+    if (!event.id || !event.calendarId) {
+      alert('삭제할 이벤트 정보가 올바르지 않습니다.')
       return
     }
 
@@ -318,8 +323,8 @@ export default function UserWeeklySchedule() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          calendarId,
-          eventId
+          calendarId: event.calendarId,
+          eventId: event.id
         })
       })
 
@@ -410,7 +415,7 @@ export default function UserWeeklySchedule() {
                         수정
                       </button>
                       <button
-                        onClick={() => handleDeleteEvent(event.id, event.calendarId!)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
                         className="text-red-600 hover:text-red-800 text-sm"
                       >
                         삭제
@@ -459,7 +464,7 @@ export default function UserWeeklySchedule() {
                         수정
                       </button>
                       <button
-                        onClick={() => handleDeleteEvent(event.id, event.calendarId!)}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteEvent(event); }}
                         className="text-red-600 hover:text-red-800 text-sm"
                       >
                         삭제
@@ -514,7 +519,7 @@ export default function UserWeeklySchedule() {
                   {dayEvents.map((event) => (
                     <div
                       key={event.id}
-                      className="text-xs p-1 rounded cursor-pointer hover:opacity-80"
+                      className="text-xs p-1 rounded cursor-pointer hover:opacity-80 relative group"
                       style={{ backgroundColor: event.color + '20', borderLeft: `3px solid ${event.color}` }}
                       onClick={() => handleEditEvent(event)}
                       title={`${event.title}${event.location ? ` (${event.location})` : ''}`}
@@ -522,6 +527,16 @@ export default function UserWeeklySchedule() {
                       <div className="font-medium leading-tight break-words overflow-wrap-anywhere">
                         {event.title}
                       </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteEvent(event);
+                        }}
+                        className="absolute top-0 right-0 text-red-600 hover:text-red-800 text-xs opacity-0 group-hover:opacity-100 bg-white rounded-full w-4 h-4 flex items-center justify-center"
+                        title="삭제"
+                      >
+                        ×
+                      </button>
                       {event.start.includes('T00:00:00') && (
                         <div className="text-xs text-gray-500">종일</div>
                       )}

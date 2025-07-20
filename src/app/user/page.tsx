@@ -381,8 +381,6 @@ export default function UserDashboard() {
             )}
 
 
-            {/* 팀 일정 위젯 */}
-            <TeamSchedule user={user} />
 
             {/* 서식 신청 위젯 */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -480,6 +478,11 @@ export default function UserDashboard() {
           {/* 이번주 미팅 및 답사일정 - 전체 너비 사용 */}
           <div className="mt-8">
             <UserWeeklySchedule />
+          </div>
+
+          {/* 팀 일정 - 전체 너비 사용 */}
+          <div className="mt-8">
+            <TeamSchedule user={user} />
           </div>
 
           {/* 휴가 관리 - 전체 너비 사용 */}
