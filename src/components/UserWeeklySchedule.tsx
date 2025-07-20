@@ -338,15 +338,15 @@ export default function UserWeeklySchedule() {
   }
 
   const getWeekDays = () => {
-    const today = new Date()
+    const today = new Date(currentDate)
     const currentDay = today.getDay()
-    const mondayDate = new Date(today)
-    mondayDate.setDate(today.getDate() - currentDay + 1)
+    const sundayDate = new Date(today)
+    sundayDate.setDate(today.getDate() - currentDay)
     
     const weekDays = []
     for (let i = 0; i < 7; i++) {
-      const day = new Date(mondayDate)
-      day.setDate(mondayDate.getDate() + i)
+      const day = new Date(sundayDate)
+      day.setDate(sundayDate.getDate() + i)
       weekDays.push(day)
     }
     return weekDays
