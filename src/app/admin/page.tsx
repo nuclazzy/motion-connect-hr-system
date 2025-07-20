@@ -91,11 +91,16 @@ export default function AdminDashboard() {
           <div className="mb-12">
             <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-gray-200">개인 업무</h2>
             <div className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
-                <UserWeeklySchedule />
                 <AdminTeamSchedule user={user} />
               </div>
+              
+              {/* 주간 미팅 일정 - 가로 전체 */}
+              <div className="w-full">
+                <UserWeeklySchedule />
+              </div>
+              
               {/* 서식 신청 컴포넌트 */}
               <UserFormManagement user={user} />
             </div>
