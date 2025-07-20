@@ -54,6 +54,20 @@ export const ADMIN_WEEKLY_CALENDARS = [
   { id: CALENDAR_IDS.INTERNAL_MEETING, name: CALENDAR_NAMES[CALENDAR_IDS.INTERNAL_MEETING], type: 'internal' },
 ];
 
+// 미팅 캘린더 전용 설정 (UserWeeklySchedule용)
+export const MEETING_CALENDARS = [
+  CALENDAR_IDS.EXTERNAL_MEETING, // 외부 미팅 및 답사
+  CALENDAR_IDS.INTERNAL_MEETING  // 내부 회의 및 면담
+];
+
+// 미팅 캘린더 가져오기 함수 (TeamSchedule의 getDepartmentCalendars와 동일한 패턴)
+export const getMeetingCalendars = (): { own: string[]; others: string[] } => {
+  return {
+    own: [...MEETING_CALENDARS], // 미팅 캘린더는 모두 own으로 처리
+    others: [] as string[]
+  };
+};
+
 // 올해 날짜 범위 계산
 export const getCurrentYearRange = () => {
   const currentYear = new Date().getFullYear();

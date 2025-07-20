@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { type User } from '@/lib/auth'
-import { CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
+import { getMeetingCalendars, CALENDAR_NAMES, getCurrentYearRange } from '@/lib/calendarMapping'
 
 interface CalendarEvent {
   id: string
@@ -25,11 +24,7 @@ interface CalendarConfig {
   is_active: boolean
 }
 
-interface UserWeeklyScheduleProps {
-  user: User
-}
-
-export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
+export default function UserWeeklySchedule() {
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [calendarConfigs, setCalendarConfigs] = useState<CalendarConfig[]>([])
   const [currentDate] = useState(new Date())
@@ -49,20 +44,19 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     targetCalendar: ''
   })
 
-  // 미팅 캘린더 설정 - TeamSchedule과 동일한 구조
+  // TeamSchedule과 동일한 캘린더 설정 조회 로직
   const fetchCalendarConfigs = useCallback(async () => {
     try {
       console.log('📅 [DEBUG] 미팅 캘린더 설정 시작')
       
-      // 미팅 캘린더 직접 정의
-      const meetingCalendars = [
-        'motionsense.co.kr_vdbr1eu5ectsbsnod67gdohj00@group.calendar.google.com', // 외부 미팅 및 답사
-        'dingastory.com_aatf30n7ad8e3mq7kfilhvu6rk@group.calendar.google.com'  // 내부 회의 및 면담
-      ]
+      // 미팅 캘린더 매핑 사용 - TeamSchedule과 동일한 패턴
+      const meetingCalendars = getMeetingCalendars()
+      console.log('📅 [DEBUG] 미팅 캘린더:', meetingCalendars)
       
-      console.log('📅 [DEBUG] 미팅 캘린더 목록:', meetingCalendars)
+      const allCalendars = [...meetingCalendars.own, ...meetingCalendars.others]
+      console.log('📅 [DEBUG] 전체 미팅 캘린더 목록:', allCalendars)
       
-      const configs = meetingCalendars.map(calendarId => ({
+      const configs = allCalendars.map(calendarId => ({
         id: calendarId,
         config_type: 'meeting' as const,
         target_name: 'meetings',
@@ -78,7 +72,7 @@ export default function UserWeeklySchedule({}: UserWeeklyScheduleProps) {
     }
   }, [])
 
-  // TeamSchedule과 동일한 이벤트 조회 로직
+  // TeamSchedule과 완전히 동일한 이벤트 조회 로직
   const fetchCalendarEvents = useCallback(async () => {
     if (calendarConfigs.length === 0) {
       console.log('🔄 [DEBUG] 미팅 캘린더 설정이 비어있음 - 이벤트 조회 생략')

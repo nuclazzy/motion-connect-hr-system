@@ -397,7 +397,7 @@ export default function UserDashboard() {
                   </div>
                 </div>
 
-                <UserWeeklySchedule user={user} />
+                <UserWeeklySchedule />
               </div>
             </div>
 

@@ -484,8 +484,6 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
     )
   }
 
-  const weekDays = getWeekDays()
-
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg col-span-full">
       <div className="p-3 md:p-5">
