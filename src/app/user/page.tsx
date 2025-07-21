@@ -141,8 +141,8 @@ export default function UserDashboard() {
   }
 
   const handleLeaveApplication = () => {
-    // 휴가 신청서 웹앱 URL (예시)
-    const leaveFormUrl = 'https://forms.google.com/your-leave-form-url'
+    // 휴가 신청서 웹앱 URL
+    const leaveFormUrl = 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=vacation'
     window.open(leaveFormUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
   }
 
