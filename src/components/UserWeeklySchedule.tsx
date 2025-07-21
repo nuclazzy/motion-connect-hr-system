@@ -395,8 +395,8 @@ export default function UserWeeklySchedule() {
                 {sortedExternalEvents.map((event) => (
                   <div key={event.id} className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{event.title}</h4>
-                      <p className="text-sm text-gray-600">
+                      <h4 className="font-medium text-black">{event.title}</h4>
+                      <p className="text-sm text-black">
                         {new Date(event.start).toLocaleDateString('ko-KR', {
                           month: 'long',
                           day: 'numeric',
@@ -405,7 +405,7 @@ export default function UserWeeklySchedule() {
                         })}
                         {event.start.includes('T00:00:00') && ' (종일)'}
                       </p>
-                      {event.location && <p className="text-sm text-gray-500">📍 {event.location}</p>}
+                      {event.location && <p className="text-sm text-black">📍 {event.location}</p>}
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -444,8 +444,8 @@ export default function UserWeeklySchedule() {
                 {sortedInternalEvents.map((event) => (
                   <div key={event.id} className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
                     <div className="flex-1">
-                      <h4 className="font-medium text-gray-900">{event.title}</h4>
-                      <p className="text-sm text-gray-600">
+                      <h4 className="font-medium text-black">{event.title}</h4>
+                      <p className="text-sm text-black">
                         {new Date(event.start).toLocaleDateString('ko-KR', {
                           month: 'long',
                           day: 'numeric',
@@ -454,7 +454,7 @@ export default function UserWeeklySchedule() {
                         })}
                         {event.start.includes('T00:00:00') && ' (종일)'}
                       </p>
-                      {event.location && <p className="text-sm text-gray-500">📍 {event.location}</p>}
+                      {event.location && <p className="text-sm text-black">📍 {event.location}</p>}
                     </div>
                     <div className="flex space-x-2">
                       <button
