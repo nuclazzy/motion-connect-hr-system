@@ -10,6 +10,7 @@ import TeamSchedule from '@/components/TeamSchedule'
 import DocumentLibrary from '@/components/DocumentLibrary'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
+import UserLeaveStatus from '@/components/UserLeaveStatus'
 
 interface ReviewLink {
   id: string
@@ -225,6 +226,9 @@ export default function UserDashboard() {
             
             {/* 내 정보 위젯 */}
             <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
+
+            {/* 나의 휴가 현황 위젯 */}
+            <UserLeaveStatus user={user} />
 
             {/* 근태 관리 위젯 */}
             <div className="bg-white overflow-hidden shadow rounded-lg">

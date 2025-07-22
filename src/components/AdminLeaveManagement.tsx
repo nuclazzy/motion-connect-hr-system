@@ -68,6 +68,235 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
     }
   }, [])
 
+  // 휴가 일수 자동 차감 함수
+  const updateLeaveBalance = async (leaveForm: AddLeaveForm) => {
+    try {
+      // 휴가 일수 계산 (반차는 0.5일, 종일휴가는 1일 단위로 계산)
+      let leaveDays: number
+      
+      if (leaveForm.is_half_day) {
+        // 반차는 0.5일
+        leaveDays = 0.5
+      } else {
+        // 종일 휴가는 시작일부터 종료일까지의 일수 계산
+        const startDate = new Date(leaveForm.start_date)
+        const endDate = new Date(leaveForm.end_date)
+        const timeDiff = endDate.getTime() - startDate.getTime()
+        leaveDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1 // 당일 포함
+      }
+
+      console.log(`💰 [휴가차감] ${leaveForm.leave_type} ${leaveDays}일 차감 시작`)
+
+      // 현재 직원의 휴가 데이터 조회
+      const { data: currentLeaveData, error: fetchError } = await supabase
+        .from('leave_days')
+        .select('*')
+        .eq('user_id', leaveForm.employee_id)
+        .single()
+
+      if (fetchError) {
+        console.error('직원 휴가 데이터 조회 실패:', fetchError)
+        return
+      }
+
+      if (!currentLeaveData) {
+        console.error('직원 휴가 데이터를 찾을 수 없습니다.')
+        return
+      }
+
+      // 현재 휴가 타입에 따른 사용 일수 업데이트
+      const updatedLeaveTypes = { ...currentLeaveData.leave_types }
+      
+      switch (leaveForm.leave_type) {
+        case 'annual':
+          updatedLeaveTypes.used_annual_days = (updatedLeaveTypes.used_annual_days || 0) + leaveDays
+          break
+        case 'sick':
+          updatedLeaveTypes.used_sick_days = (updatedLeaveTypes.used_sick_days || 0) + leaveDays
+          break
+        case 'special':
+          updatedLeaveTypes.used_special_days = (updatedLeaveTypes.used_special_days || 0) + leaveDays
+          break
+        case 'maternity':
+          updatedLeaveTypes.used_maternity_days = (updatedLeaveTypes.used_maternity_days || 0) + leaveDays
+          break
+        case 'paternity':
+          updatedLeaveTypes.used_paternity_days = (updatedLeaveTypes.used_paternity_days || 0) + leaveDays
+          break
+        case 'family_care':
+          updatedLeaveTypes.used_family_care_days = (updatedLeaveTypes.used_family_care_days || 0) + leaveDays
+          break
+        default:
+          console.warn('알 수 없는 휴가 타입:', leaveForm.leave_type)
+          return
+      }
+
+      // 데이터베이스 업데이트
+      const { error: updateError } = await supabase
+        .from('leave_days')
+        .update({
+          leave_types: updatedLeaveTypes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', leaveForm.employee_id)
+
+      if (updateError) {
+        console.error('휴가 일수 차감 실패:', updateError)
+        alert('휴가는 등록되었지만 일수 차감에 실패했습니다. 관리자에게 문의하세요.')
+      } else {
+        console.log(`✅ [휴가차감] ${leaveForm.leave_type} ${leaveDays}일 차감 완료`)
+      }
+    } catch (error) {
+      console.error('휴가 일수 업데이트 오류:', error)
+      alert('휴가는 등록되었지만 일수 차감에 실패했습니다. 관리자에게 문의하세요.')
+    }
+  }
+
+  // 휴가 삭제 및 일수 복원 함수
+  const deleteLeaveAndRestoreBalance = async (event: CalendarEvent) => {
+    if (!confirm(`'${event.title}' 휴가를 삭제하시겠습니까?\n삭제 시 해당 휴가 일수가 복원됩니다.`)) {
+      return
+    }
+
+    try {
+      // 1. Google Calendar에서 이벤트 삭제
+      const response = await fetch('/api/calendar/delete-event', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+          eventId: event.id
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error('캘린더 이벤트 삭제 실패')
+      }
+
+      // 2. 휴가 일수 복원 로직
+      await restoreLeaveBalance(event)
+      
+      alert('휴가가 삭제되고 일수가 복원되었습니다.')
+      fetchLeaveEvents() // 캘린더 새로고침
+    } catch (error) {
+      console.error('휴가 삭제 오류:', error)
+      alert('휴가 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 휴가 일수 복원 함수
+  const restoreLeaveBalance = async (event: CalendarEvent) => {
+    try {
+      // 이벤트 제목에서 직원 이름과 휴가 타입 파싱
+      const titleParts = event.title.split(' ')
+      if (titleParts.length < 2) {
+        console.warn('이벤트 제목 형식을 파싱할 수 없습니다:', event.title)
+        return
+      }
+
+      const employeeName = titleParts[0]
+      const leaveTypeText = titleParts[1]
+      const isHalfDay = event.title.includes('반차')
+      
+      // 휴가 타입 매핑
+      let leaveType: string
+      if (leaveTypeText.includes('연차')) leaveType = 'annual'
+      else if (leaveTypeText.includes('병가')) leaveType = 'sick' 
+      else if (leaveTypeText.includes('특별휴가')) leaveType = 'special'
+      else if (leaveTypeText.includes('출산휴가')) leaveType = 'maternity'
+      else if (leaveTypeText.includes('배우자출산휴가')) leaveType = 'paternity'
+      else if (leaveTypeText.includes('가족돌봄휴가')) leaveType = 'family_care'
+      else {
+        console.warn('알 수 없는 휴가 타입:', leaveTypeText)
+        return
+      }
+
+      // 휴가 일수 계산
+      let leaveDays: number
+      if (isHalfDay) {
+        leaveDays = 0.5
+      } else {
+        // 종일 휴가는 시작일~종료일 계산 (Google Calendar 이벤트 기준)
+        const startDate = new Date(event.start)
+        const endDate = new Date(event.end)
+        
+        // 시간이 포함된 경우 (반차)와 날짜만 있는 경우 (종일) 구분
+        if (event.start.includes('T') && event.end.includes('T')) {
+          // 시간 기반 이벤트 (반차) - 이미 위에서 처리됨
+          leaveDays = 0.5
+        } else {
+          // 날짜 기반 이벤트 (종일)
+          const timeDiff = endDate.getTime() - startDate.getTime()
+          leaveDays = Math.ceil(timeDiff / (1000 * 3600 * 24))
+        }
+      }
+
+      console.log(`🔄 [휴가복원] ${employeeName} ${leaveType} ${leaveDays}일 복원 시작`)
+
+      // 직원 ID 찾기
+      const matchingUser = users.find(user => user.name === employeeName)
+      if (!matchingUser) {
+        console.error('해당 직원을 찾을 수 없습니다:', employeeName)
+        return
+      }
+
+      // 현재 직원의 휴가 데이터 조회
+      const { data: currentLeaveData, error: fetchError } = await supabase
+        .from('leave_days')
+        .select('*')
+        .eq('user_id', matchingUser.id)
+        .single()
+
+      if (fetchError || !currentLeaveData) {
+        console.error('직원 휴가 데이터 조회 실패:', fetchError)
+        return
+      }
+
+      // 휴가 타입에 따른 사용 일수 복원 (차감된 만큼 빼기)
+      const updatedLeaveTypes = { ...currentLeaveData.leave_types }
+      
+      switch (leaveType) {
+        case 'annual':
+          updatedLeaveTypes.used_annual_days = Math.max(0, (updatedLeaveTypes.used_annual_days || 0) - leaveDays)
+          break
+        case 'sick':
+          updatedLeaveTypes.used_sick_days = Math.max(0, (updatedLeaveTypes.used_sick_days || 0) - leaveDays)
+          break
+        case 'special':
+          updatedLeaveTypes.used_special_days = Math.max(0, (updatedLeaveTypes.used_special_days || 0) - leaveDays)
+          break
+        case 'maternity':
+          updatedLeaveTypes.used_maternity_days = Math.max(0, (updatedLeaveTypes.used_maternity_days || 0) - leaveDays)
+          break
+        case 'paternity':
+          updatedLeaveTypes.used_paternity_days = Math.max(0, (updatedLeaveTypes.used_paternity_days || 0) - leaveDays)
+          break
+        case 'family_care':
+          updatedLeaveTypes.used_family_care_days = Math.max(0, (updatedLeaveTypes.used_family_care_days || 0) - leaveDays)
+          break
+      }
+
+      // 데이터베이스 업데이트
+      const { error: updateError } = await supabase
+        .from('leave_days')
+        .update({
+          leave_types: updatedLeaveTypes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', matchingUser.id)
+
+      if (updateError) {
+        console.error('휴가 일수 복원 실패:', updateError)
+        alert('캘린더에서는 삭제되었지만 일수 복원에 실패했습니다.')
+      } else {
+        console.log(`✅ [휴가복원] ${employeeName} ${leaveType} ${leaveDays}일 복원 완료`)
+      }
+    } catch (error) {
+      console.error('휴가 일수 복원 오류:', error)
+      alert('캘린더에서는 삭제되었지만 일수 복원에 실패했습니다.')
+    }
+  }
+
   // Google Calendar에서 직접 휴가 이벤트 조회
   const fetchLeaveEvents = useCallback(async () => {
     setLoading(true)
@@ -276,6 +505,9 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
 
       const result = await response.json()
       if (result.success) {
+        // 휴가 일수 자동 차감 로직
+        await updateLeaveBalance(addLeaveForm)
+        
         alert(`휴가가 성공적으로 등록되었습니다.`)
         setShowAddLeave(false)
         setAddLeaveForm({
@@ -349,11 +581,21 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
           )}
           <div className="mt-1 md:mt-2 space-y-1">
             {dayEvents.slice(0, 2).map((event, index) => (
-              <div key={index} className="text-xs p-1 rounded bg-green-100 text-green-800 cursor-pointer hover:opacity-80" title={event.title}>
-                <div className="font-medium leading-tight break-words overflow-hidden">
+              <div key={index} className="text-xs p-1 rounded bg-green-100 text-green-800 cursor-pointer hover:opacity-80 relative group" title={event.title}>
+                <div className="font-medium leading-tight break-words overflow-hidden pr-4">
                   <span className="md:hidden">{event.title.length > 8 ? event.title.substring(0, 8) + '...' : event.title}</span>
                   <span className="hidden md:block">{event.title.length > 15 ? event.title.substring(0, 15) + '...' : event.title}</span>
                 </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteLeaveAndRestoreBalance(event);
+                  }}
+                  className="absolute top-0 right-0 text-red-600 hover:text-red-800 text-xs opacity-0 group-hover:opacity-100 bg-white rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                  title="휴가 삭제"
+                >
+                  ×
+                </button>
               </div>
             ))}
             {dayEvents.length > 2 && (
@@ -434,10 +676,19 @@ export default function AdminLeaveManagement({}: AdminLeaveManagementProps) {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center md:ml-4 mt-2 md:mt-0">
+                  <div className="flex items-center space-x-2 md:ml-4 mt-2 md:mt-0">
                     <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
                       휴가
                     </span>
+                    <button
+                      onClick={() => deleteLeaveAndRestoreBalance(event)}
+                      className="text-red-600 hover:text-red-800 p-1 rounded-full hover:bg-red-50"
+                      title="휴가 삭제"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
