@@ -43,17 +43,31 @@ export default function UserLeaveStatus({ user }: UserLeaveStatusProps) {
     const fetchLeaveData = async () => {
       try {
         setLoading(true)
-        const response = await fetch(`/api/user/leave-data?userId=${user.id}`)
+        console.log('휴가 데이터 조회 시작:', { userId: user.id, userName: user.name })
+        
+        const response = await fetch(`/api/user/leave-data?userId=${user.id}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        })
+        
+        console.log('API 응답 상태:', response.status)
         
         if (response.ok) {
           const result = await response.json()
+          console.log('API 응답 데이터:', result)
+          
           if (result.success) {
             setLeaveData(result.data)
           } else {
+            console.error('API 오류:', result.error)
             setError(result.error || '휴가 데이터를 불러올 수 없습니다.')
           }
         } else {
-          setError('휴가 데이터를 불러오는 중 오류가 발생했습니다.')
+          const errorText = await response.text()
+          console.error('HTTP 오류:', response.status, errorText)
+          setError(`휴가 데이터를 불러오는 중 오류가 발생했습니다. (${response.status})`)
         }
       } catch (err) {
         console.error('휴가 데이터 조회 오류:', err)
@@ -64,7 +78,7 @@ export default function UserLeaveStatus({ user }: UserLeaveStatusProps) {
     }
 
     fetchLeaveData()
-  }, [user.id])
+  }, [user.id, user.name])
 
   if (loading) {
     return (
