@@ -11,6 +11,7 @@ import DocumentLibrary from '@/components/DocumentLibrary'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import UserLeaveStatus from '@/components/UserLeaveStatus'
+import FormApplicationModal from '@/components/FormApplicationModal'
 
 interface ReviewLink {
   id: string
@@ -27,6 +28,7 @@ export default function UserDashboard() {
   const [isPromotionTarget, setIsPromotionTarget] = useState(false)
   const [reviewLink, setReviewLink] = useState<ReviewLink | null>(null)
   const [showPromotionDetails, setShowPromotionDetails] = useState(false)
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -103,48 +105,9 @@ export default function UserDashboard() {
     saveUserSession(updatedUser)
   }
 
-  const openFormModal = (formType: string, formUrl: string) => {
-    // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
-    const popup = window.open(formUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
-    
-    if (!popup) {
-      alert('팝업이 차단되었습니다. 브라우저의 팝업 차단을 해제해주세요.')
-    }
-  }
-
-  const handleFormComplete = async (formType: string) => {
-    if (confirm(`${formType} 서식을 작성하고 제출하셨나요?\n\n작성 완료 후 서식을 인쇄하여 대표에게 제출해주세요.`)) {
-      try {
-        const { error } = await supabase
-          .from('form_requests')
-          .insert([{
-            user_id: user.id,
-            form_type: formType,
-            status: 'pending',
-            submitted_at: new Date().toISOString(),
-            request_data: {
-              form_name: formType,
-              submitted_via: 'web_form'
-            }
-          }])
-
-        if (error) {
-          console.error('서식 신청 저장 실패:', error)
-          alert('❌ 신청 저장에 실패했습니다. 다시 시도해주세요.')
-        } else {
-          alert(`✅ 신청이 완료되었습니다!\n\n📄 작성한 서식을 인쇄하여 대표에게 제출해주세요.\n관리자가 확인 후 최종 승인 처리됩니다.`)
-        }
-      } catch (error) {
-        console.error('서식 신청 오류:', error)
-        alert('❌ 신청 처리 중 오류가 발생했습니다.')
-      }
-    }
-  }
 
   const handleLeaveApplication = () => {
-    // 휴가 신청서 웹앱 URL
-    const leaveFormUrl = 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=vacation'
-    window.open(leaveFormUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
+    setIsFormModalOpen(true)
   }
 
 
@@ -386,7 +349,7 @@ export default function UserDashboard() {
 
 
 
-            {/* 서식 신청 위젯 */}
+            {/* 통합 서식 신청 위젯 */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="p-5">
                 <div className="flex items-center">
@@ -401,76 +364,27 @@ export default function UserDashboard() {
                         서식 신청
                       </dt>
                       <dd className="text-lg font-medium text-gray-900">
-                        각종 서식 신청 및 출력
+                        통합 서식 신청 시스템
                       </dd>
                     </dl>
                   </div>
                 </div>
                 <div className="mt-3">
                   <p className="text-xs text-gray-500">
-                    웹앱에서 서식을 작성한 후 출력하여 관리자에게 제출하세요
+                    모든 서식을 한 곳에서 신청하고 관리할 수 있습니다
                   </p>
                 </div>
               </div>
-              <div className="bg-gray-50 px-5 py-3 space-y-2">
-                <div className="grid grid-cols-1 gap-2 text-sm">
-                  <div className="flex justify-between items-center">
-                    <button 
-                      onClick={() => openFormModal('휴직계', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=leave')}
-                      className="font-medium text-blue-600 hover:text-blue-500 text-left flex-1"
-                    >
-                      🏥 휴직계
-                    </button>
-                    <button 
-                      onClick={() => handleFormComplete('휴직계')}
-                      className="ml-2 bg-blue-100 hover:bg-blue-200 text-blue-800 px-2 py-1 rounded text-xs font-medium"
-                    >
-                      신청 완료
-                    </button>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <button 
-                      onClick={() => openFormModal('재직증명서', 'http://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=certificate')}
-                      className="font-medium text-indigo-600 hover:text-indigo-500 text-left flex-1"
-                    >
-                      📄 재직증명서
-                    </button>
-                    <button 
-                      onClick={() => handleFormComplete('재직증명서')}
-                      className="ml-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-2 py-1 rounded text-xs font-medium"
-                    >
-                      신청 완료
-                    </button>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <button 
-                      onClick={() => openFormModal('경위서', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=report')}
-                      className="font-medium text-purple-600 hover:text-purple-500 text-left flex-1"
-                    >
-                      📋 경위서
-                    </button>
-                    <button 
-                      onClick={() => handleFormComplete('경위서')}
-                      className="ml-2 bg-purple-100 hover:bg-purple-200 text-purple-800 px-2 py-1 rounded text-xs font-medium"
-                    >
-                      신청 완료
-                    </button>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <button 
-                      onClick={() => openFormModal('출산휴가 및 육아휴직 신청서', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=maternity')}
-                      className="font-medium text-green-600 hover:text-green-500 text-left flex-1"
-                    >
-                      👶 출산휴가 및 육아휴직
-                    </button>
-                    <button 
-                      onClick={() => handleFormComplete('출산휴가 및 육아휴직 신청서')}
-                      className="ml-2 bg-green-100 hover:bg-green-200 text-green-800 px-2 py-1 rounded text-xs font-medium"
-                    >
-                      신청 완료
-                    </button>
-                  </div>
-                </div>
+              <div className="bg-gray-50 px-5 py-3">
+                <button 
+                  onClick={() => setIsFormModalOpen(true)}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  서식 신청하기
+                </button>
               </div>
             </div>
 
@@ -500,6 +414,21 @@ export default function UserDashboard() {
           </div>
         </div>
       </main>
+
+      {/* 통합 서식 신청 모달 */}
+      {user && (
+        <FormApplicationModal
+          user={user}
+          isOpen={isFormModalOpen}
+          onClose={() => setIsFormModalOpen(false)}
+          onSuccess={() => {
+            // 폼 제출 성공 시 서식 신청 내역을 새로고침하도록 시간차를 둔 새로고침
+            setTimeout(() => {
+              window.location.reload()
+            }, 1000)
+          }}
+        />
+      )}
 
       {/* 연차 촉진 상세 안내 모달 */}
       {showPromotionDetails && (
