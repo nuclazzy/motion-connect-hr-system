@@ -33,7 +33,7 @@ export interface AuthResult {
  * 사용자 로그인 (API Route 사용)
  */
 export async function loginUser(credentials: LoginCredentials): Promise<AuthResult> {
-  try {
+ try {
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
@@ -43,7 +43,7 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
     })
 
     const result = await response.json()
-    
+
     if (!response.ok) {
       return {
         success: false,
@@ -51,8 +51,13 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
       }
     }
 
-    return result
+    // 로그인 성공 시, localStorage에 사용자 정보 저장
+    if (result.success && result.user) {
+      saveUserSession(result.user)
+    }
 
+    return result
+    
   } catch (error) {
     console.error('Login error:', error)
     return {
@@ -65,35 +70,31 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
 /**
  * 현재 로그인된 사용자 정보 조회
  */
-export async function getCurrentUser(): Promise<User | null> {
-  try {
-    // 브라우저 환경에서만 실행
-    if (typeof window === 'undefined') {
-      return null
-    }
-
-    const userString = localStorage.getItem('motion-connect-user')
-    if (!userString) {
-      return null
-    }
-
-    const user = JSON.parse(userString)
-    
-    // 토큰 유효성 검사 (향후 JWT 구현 시 사용)
-    return user
-
-  } catch (error) {
-    console.error('Get current user error:', error)
+export function getCurrentUser(): User | null {
+  if (typeof window === 'undefined') {
     return null
   }
+  const userString = localStorage.getItem('motion-connect-user')
+  if (!userString) {
+    return null
+  }
+  return JSON.parse(userString)
 }
 
 /**
  * 사용자 로그아웃
  */
-export function logoutUser(): void {
+export async function logoutUser() {
+  // API를 호출하여 서버 세션(쿠키) 지우기
+  await fetch('/api/auth/logout', { method: 'POST' })
+
+  // 로컬 스토리지 비우기
   if (typeof window !== 'undefined') {
     localStorage.removeItem('motion-connect-user')
+  }
+
+  // 로그인 페이지로 리디렉션
+  if (typeof window !== 'undefined') {
     window.location.href = '/auth/login'
   }
 }

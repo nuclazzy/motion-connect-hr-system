@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 // Helper function to calculate leave days
 function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -15,64 +21,108 @@ function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boole
   return daysDiff
 }
 
+
 export async function POST(request: NextRequest) {
   try {
     const { formType, requestData } = await request.json()
-    const supabase = await createClient()
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
+    // 로컬 테스트용 가짜 인증 (localStorage에서 사용자 정보 가져올 것으로 가정)
+    const authHeader = request.headers.get('authorization')
+    if (!authHeader) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const userId = session.user.id
+
+    // authHeader에서 userId 파싱 (Bearer userId 형식)
+    const userId = authHeader.replace('Bearer ', '')
+    
+    console.log('🔍 추출된 userId:', userId)
+
+    console.log('📝 로컬 서식 신청:', { formType, requestData, userId })
 
     // 휴가 신청일 경우, 잔여 일수 확인 로직
     if (formType === '휴가 신청서') {
-      const { data: leaveDaysData, error: leaveDaysError } = await supabase
+      console.log('🔍 Supabase 휴가 데이터 조회:', userId)
+      
+      // Supabase에서 휴가 데이터 조회
+      const { data: userLeaveData, error: leaveError } = await supabase
         .from('leave_days')
         .select('leave_types')
         .eq('user_id', userId)
         .single()
 
-      if (leaveDaysError || !leaveDaysData) {
+      if (leaveError || !userLeaveData) {
+        console.error('❌ 휴가 정보 조회 실패:', leaveError)
         return NextResponse.json({ error: '휴가 정보를 조회할 수 없습니다.' }, { status: 404 })
       }
 
       const isHalfDay = requestData.휴가형태?.includes('반차')
       const daysToDeduct = calculateLeaveDays(requestData.시작일, requestData.종료일, isHalfDay)
-      const leaveTypes = leaveDaysData.leave_types as Record<string, { total: number; used: number }>
+      const leaveTypes = userLeaveData.leave_types
       
-      // 휴가 타입에 따른 키 결정
-      let leaveTypeKey = 'annual'
-      if (requestData.휴가형태 === '병가') {
-        leaveTypeKey = 'sick'
-      }
+      console.log('📊 휴가 데이터 확인:', { userId, leaveTypes, daysToDeduct })
+      
+      // 휴가 타입별 처리
+      if (requestData.휴가형태 === '대체휴가' || requestData.휴가형태 === '보상휴가') {
+        // 시간 단위 휴가 처리
+        const hoursToDeduct = calculateHoursToDeduct(daysToDeduct)
+        const fieldName = requestData.휴가형태 === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
+        const availableHours = leaveTypes[fieldName] || 0
+        
+        console.log('🔍 시간 단위 휴가 검증:', {
+          휴가형태: requestData.휴가형태,
+          신청일수: daysToDeduct,
+          필요시간: hoursToDeduct,
+          잔여시간: availableHours,
+          fieldName,
+          leaveTypes
+        })
+        
+        if (availableHours < hoursToDeduct) {
+          console.error('❌ 시간 부족:', { availableHours, hoursToDeduct })
+          return NextResponse.json({ 
+            error: `잔여 ${requestData.휴가형태}가 부족합니다. (잔여: ${availableHours}시간, 필요: ${hoursToDeduct}시간)` 
+          }, { status: 400 })
+        }
+      } else {
+        // 기존 연차/병가 처리
+        let leaveTypeKey = 'annual_days'
+        let usedTypeKey = 'used_annual_days'
+        if (requestData.휴가형태 === '병가') {
+          leaveTypeKey = 'sick_days'
+          usedTypeKey = 'used_sick_days'
+        }
 
-      // 잔여 일수 계산
-      const totalDays = leaveTypes[leaveTypeKey]?.total || 0
-      const usedDays = leaveTypes[leaveTypeKey]?.used || 0
-      const remainingDays = totalDays - usedDays
+        const totalDays = leaveTypes[leaveTypeKey] || 0
+        const usedDays = leaveTypes[usedTypeKey] || 0
+        const remainingDays = totalDays - usedDays
 
-      if (remainingDays < daysToDeduct) {
-        return NextResponse.json({ 
-          error: `잔여 ${requestData.휴가형태}가 부족합니다. (잔여: ${remainingDays}일, 신청: ${daysToDeduct}일)` 
-        }, { status: 400 })
+        if (remainingDays < daysToDeduct) {
+          return NextResponse.json({ 
+            error: `잔여 ${requestData.휴가형태}가 부족합니다. (잔여: ${remainingDays}일, 신청: ${daysToDeduct}일)` 
+          }, { status: 400 })
+        }
       }
     }
 
-    // form_requests 테이블에 기록
-    const { error: insertError } = await supabase.from('form_requests').insert({
-      user_id: userId,
-      form_type: formType,
-      status: 'pending',
-      request_data: requestData,
-      submitted_at: new Date().toISOString(),
-    })
+    // Supabase에 신청 저장
+    const { data: newRequest, error: saveError } = await supabase
+      .from('form_requests')
+      .insert({
+        user_id: userId,
+        form_type: formType,
+        status: 'pending',
+        request_data: requestData,
+        submitted_at: new Date().toISOString()
+      })
+      .select()
+      .single()
 
-    if (insertError) {
-      console.error('Error inserting form request:', insertError)
+    if (saveError) {
+      console.error('❌ 신청서 저장 실패:', saveError)
       return NextResponse.json({ error: '신청서 저장에 실패했습니다.' }, { status: 500 })
     }
+
+    console.log('✅ Supabase 신청서 저장 완료:', newRequest)
 
     return NextResponse.json({ success: true, message: 'Request submitted successfully.' })
   } catch (error) {
@@ -82,53 +132,30 @@ export async function POST(request: NextRequest) {
 
 }
 
-export async function GET(request: NextRequest) {
+// Supabase 조회 API
+export async function GET() {
   try {
-    const supabase = await createClient()
+    console.log('📋 Supabase 신청 내역 조회 시작')
     
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // URL에서 쿼리 파라미터 추출
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
-
-    let query = supabase
+    const { data: requests, error } = await supabase
       .from('form_requests')
       .select(`
         *,
-        users!inner(name, department, position)
+        users!form_requests_user_id_fkey(name, department, position)
       `)
-
-    // 관리자인지 확인
-    const { data: currentUser } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single()
-
-    if (currentUser?.role === 'admin') {
-      // 관리자는 모든 요청 조회 가능
-      if (userId) {
-        query = query.eq('user_id', userId)
-      }
-    } else {
-      // 일반 사용자는 자신의 요청만 조회 가능
-      query = query.eq('user_id', session.user.id)
-    }
-
-    const { data: requests, error } = await query.order('submitted_at', { ascending: false })
+      .order('created_at', { ascending: false })
 
     if (error) {
-      console.error('Error fetching form requests:', error)
-      return NextResponse.json({ error: '신청 내역을 조회할 수 없습니다.' }, { status: 500 })
+      console.error('❌ 신청 내역 조회 실패:', error)
+      return NextResponse.json({ error: '신청 내역을 불러오는데 실패했습니다.' }, { status: 500 })
     }
 
-    return NextResponse.json({ requests })
+    console.log('✅ Supabase 신청 내역 조회 완료:', requests?.length, '건')
+
+    return NextResponse.json({ requests: requests || [] })
   } catch (error) {
     console.error('Form requests GET API error:', error)
     return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 })
   }
 }
+

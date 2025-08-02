@@ -16,12 +16,18 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    console.log('🔐 로그인 시도:', { email, password: '***' })
+
     try {
       const result = await loginUser({ email, password })
+      
+      console.log('📋 로그인 결과:', result)
       
       if (result.success && result.user) {
         // 세션 저장
         saveUserSession(result.user)
+        
+        console.log('✅ 로그인 성공, 리다이렉트:', result.user.role === 'admin' ? '/admin' : '/user')
         
         // 역할에 따라 리다이렉트
         if (result.user.role === 'admin') {
@@ -30,9 +36,11 @@ export default function LoginPage() {
           router.push('/user')
         }
       } else {
+        console.error('❌ 로그인 실패:', result.error)
         setError(result.error || '로그인에 실패했습니다.')
       }
-    } catch {
+    } catch (error) {
+      console.error('❌ 로그인 예외:', error)
       setError('로그인 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)

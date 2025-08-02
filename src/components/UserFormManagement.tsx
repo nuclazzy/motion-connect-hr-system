@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
 import { type User } from '@/lib/auth'
 
 interface FormRequest {
@@ -10,34 +9,34 @@ interface FormRequest {
   form_type: string
   status: 'pending' | 'approved' | 'rejected'
   submitted_at: string
-  request_data: {
-    form_name?: string
-    submitted_via?: string
-  } | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  request_data: any
   processed_at?: string
   processed_by?: string
+  user?: {
+    name: string
+    department: string
+    position: string
+  }
 }
 
 interface UserFormManagementProps {
   user: User
+  onApplyClick: () => void
 }
 
-export default function UserFormManagement({ user }: UserFormManagementProps) {
+export default function UserFormManagement({ user, onApplyClick }: UserFormManagementProps) {
   const [formRequests, setFormRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchMyFormRequests = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('form_requests')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('submitted_at', { ascending: false })
-
-      if (error) {
-        console.error('서식 신청 조회 실패:', error)
-      } else {
-        setFormRequests(data || [])
+      const response = await fetch('/api/form-requests')
+      if (response.ok) {
+        const data = await response.json()
+        // 현재 사용자의 신청만 필터링
+        const myRequests = data.requests.filter((req: FormRequest) => req.user_id === user.id)
+        setFormRequests(myRequests)
       }
     } catch (err) {
       console.error('서식 신청 조회 오류:', err)
@@ -49,70 +48,6 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
   useEffect(() => {
     fetchMyFormRequests()
   }, [fetchMyFormRequests])
-
-  const handleDeleteRequest = async (requestId: string, formType: string) => {
-    if (!confirm(`정말로 "${formType}" 신청을 삭제하시겠습니까?`)) {
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from('form_requests')
-        .delete()
-        .eq('id', requestId)
-        .eq('user_id', user.id) // 본인이 신청한 것만 삭제 가능
-
-      if (error) {
-        console.error('서식 삭제 실패:', error)
-        alert('서식 삭제에 실패했습니다.')
-      } else {
-        alert('서식 신청이 삭제되었습니다.')
-        fetchMyFormRequests()
-      }
-    } catch (err) {
-      console.error('서식 삭제 오류:', err)
-      alert('삭제 중 오류가 발생했습니다.')
-    }
-  }
-
-  const openFormModal = (formType: string, formUrl: string) => {
-    // Google Apps Script 웹앱은 iframe 제한이 있을 수 있으므로 새 창에서 열기
-    const popup = window.open(formUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
-    
-    if (!popup) {
-      alert('팝업이 차단되었습니다. 브라우저의 팝업 차단을 해제해주세요.')
-    }
-  }
-
-  const handleFormComplete = async (formType: string) => {
-    if (confirm(`${formType} 서식을 작성하고 제출하셨나요?\n\n작성 완료 후 서식을 인쇄하여 대표에게 제출해주세요.`)) {
-      try {
-        const { error } = await supabase
-          .from('form_requests')
-          .insert([{
-            user_id: user.id,
-            form_type: formType,
-            status: 'pending',
-            request_data: {
-              form_name: formType,
-              submitted_via: '웹앱'
-            }
-          }])
-
-        if (error) {
-          console.error('서식 신청 실패:', error)
-          alert('서식 신청에 실패했습니다.')
-        } else {
-          alert(`${formType} 신청이 완료되었습니다.\n관리자가 검토 후 처리해드립니다.`)
-          fetchMyFormRequests()
-        }
-      } catch (err) {
-        console.error('서식 신청 오류:', err)
-        alert('신청 중 오류가 발생했습니다.')
-      }
-    }
-  }
-
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -174,99 +109,26 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
               </svg>
             </div>
             <div className="ml-5">
-              <h3 className="text-lg font-medium text-gray-900">내 서식 신청 내역</h3>
-              <p className="text-sm text-gray-500">신청한 서식의 처리 상태를 확인하고 관리할 수 있습니다</p>
+              <h3 className="text-lg font-medium text-gray-900">문서/서식 신청 및 내역</h3>
+              <p className="text-sm text-gray-500">재직증명서, 경위서, 휴직계 등을 신청하고 내역을 확인합니다.</p>
             </div>
           </div>
           
-          {/* 서식 버튼들 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* 휴가 신청서 */}
-            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-              <button
-                onClick={() => openFormModal('휴가신청서', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=leave-request')}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 flex items-center"
-              >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                휴가 신청서 작성
-              </button>
-              <button
-                onClick={() => handleFormComplete('휴가신청서')}
-                className="bg-indigo-100 hover:bg-indigo-200 text-indigo-800 px-3 py-1 rounded text-sm font-medium border border-indigo-300"
-              >
-                작성 완료
-              </button>
-            </div>
-
-            {/* 재직증명서 */}
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <button
-                onClick={() => openFormModal('재직증명서', 'http://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=certificate')}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 flex items-center"
-              >
-                📄 재직증명서 작성
-              </button>
-              <button
-                onClick={() => handleFormComplete('재직증명서')}
-                className="bg-blue-100 hover:bg-blue-200 text-blue-800 px-3 py-1 rounded text-sm font-medium border border-blue-300"
-              >
-                작성 완료
-              </button>
-            </div>
-
-            {/* 경위서 */}
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg border border-purple-200">
-              <button
-                onClick={() => openFormModal('경위서', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=report')}
-                className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700 flex items-center"
-              >
-                📋 경위서 작성
-              </button>
-              <button
-                onClick={() => handleFormComplete('경위서')}
-                className="bg-purple-100 hover:bg-purple-200 text-purple-800 px-3 py-1 rounded text-sm font-medium border border-purple-300"
-              >
-                작성 완료
-              </button>
-            </div>
-
-            {/* 휴직계 */}
-            <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-              <button
-                onClick={() => openFormModal('휴직계', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=leave')}
-                className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 flex items-center"
-              >
-                🏥 휴직계 작성
-              </button>
-              <button
-                onClick={() => handleFormComplete('휴직계')}
-                className="bg-green-100 hover:bg-green-200 text-green-800 px-3 py-1 rounded text-sm font-medium border border-green-300"
-              >
-                작성 완료
-              </button>
-            </div>
-
-            {/* 출산휴가 및 육아휴직 */}
-            <div className="flex items-center justify-between p-3 bg-pink-50 rounded-lg border border-pink-200">
-              <button
-                onClick={() => openFormModal('출산휴가 및 육아휴직 신청서', 'https://script.google.com/a/motionsense.co.kr/macros/s/AKfycbwnUTLRBpF4gd35Lf07y34jFHsZpgKbTGcwwn5err0Mug9nUYqF0ONWmuntTckSo6Y9/exec?form=maternity')}
-                className="bg-pink-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-pink-700 flex items-center"
-              >
-                👶 출산휴가 및 육아휴직 작성
-              </button>
-              <button
-                onClick={() => handleFormComplete('출산휴가 및 육아휴직 신청서')}
-                className="bg-pink-100 hover:bg-pink-200 text-pink-800 px-3 py-1 rounded text-sm font-medium border border-pink-300"
-              >
-                작성 완료
-              </button>
-            </div>
+          {/* 서식 신청 버튼 */}
+          <div className="mb-6">
+            <button
+              onClick={onApplyClick}
+              className="w-full bg-indigo-600 text-white px-6 py-4 rounded-lg text-lg font-medium hover:bg-indigo-700 flex items-center justify-center"
+            >
+              <svg className="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              문서 서식 신청하기
+            </button>
           </div>
         </div>
 
-        {/* 공통 안내 문구 */}
+        {/* 안내 문구 */}
         <div className="mb-6 bg-blue-50 border border-blue-200 rounded-md p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -275,12 +137,12 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
               </svg>
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-blue-800">서식 신청 안내</h3>
+              <h3 className="text-sm font-medium text-blue-800">통합 서식 시스템</h3>
               <div className="mt-2 text-sm text-blue-700">
-                <p>• 작성 버튼 클릭 시 새 창에서 웹앱 서식이 열립니다.</p>
-                <p>• 서식 작성 후 인쇄하여 서명 후 관리자에게 제출하세요.</p>
-                <p>• 웹앱에서 작성 완료 시 오른쪽 &ldquo;작성 완료&rdquo; 버튼을 눌러 신청 내역에 기록해주세요.</p>
+                <p>• 모든 서식을 시스템 내에서 작성하고 자동으로 PDF가 생성됩니다.</p>
+                <p>• 휴가 신청 시 잔여 휴가가 자동으로 확인되고 차감됩니다.</p>
                 <p>• 관리자 승인을 거쳐 처리되며, 처리 상태는 아래 표에서 확인 가능합니다.</p>
+                <p>• 생성된 PDF를 인쇄하여 서명 후 관리자에게 제출하세요.</p>
               </div>
             </div>
           </div>
@@ -338,14 +200,14 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {request.status !== 'approved' && (
-                          <button
-                            onClick={() => handleDeleteRequest(request.id, request.form_type)}
-                            className="text-red-600 hover:text-red-900"
-                            title="삭제"
-                          >
-                            삭제
-                          </button>
+                        {request.status === 'pending' && (
+                          <span className="text-gray-500">승인 대기중</span>
+                        )}
+                        {request.status === 'approved' && (
+                          <span className="text-green-600">승인 완료</span>
+                        )}
+                        {request.status === 'rejected' && (
+                          <span className="text-red-600">거절됨</span>
                         )}
                       </td>
                     </tr>
@@ -356,7 +218,6 @@ export default function UserFormManagement({ user }: UserFormManagementProps) {
           )}
         </div>
       </div>
-
     </div>
   )
 }

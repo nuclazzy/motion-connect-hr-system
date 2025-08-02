@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
   id: string
@@ -9,281 +8,176 @@ interface FormRequest {
   form_type: string
   status: 'pending' | 'approved' | 'rejected'
   submitted_at: string
-  request_data: {
-    form_name?: string
-    submitted_via?: string
-  } | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  request_data: any
   processed_at?: string
-  processed_by?: string
-  user?: {
+  user: {
     name: string
     department: string
-    position: string
   }
 }
 
 export default function AdminFormManagement() {
-  const [formRequests, setFormRequests] = useState<FormRequest[]>([])
+  const [requests, setRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending')
+  const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState<'pending' | 'all'>('pending')
 
-  const fetchFormRequests = useCallback(async () => {
+  const fetchRequests = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      let query = supabase
-        .from('form_requests')
-        .select(`
-          *,
-          user:users!user_id(name, department, position)
-        `)
-        .order('submitted_at', { ascending: false })
-
-      if (filter !== 'all') {
-        query = query.eq('status', filter)
+      const response = await fetch(`/api/admin/form-requests?filter=${filter}`)
+      if (!response.ok) {
+        throw new Error('서식 신청 내역을 불러오는데 실패했습니다.')
       }
-
-      const { data, error } = await query
-
-      if (error) {
-        console.error('서식 신청 조회 실패:', error)
-      } else {
-        setFormRequests(data || [])
-      }
+      const data = await response.json()
+      setRequests(data.requests || [])
     } catch (err) {
-      console.error('서식 신청 조회 오류:', err)
+      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
   }, [filter])
 
   useEffect(() => {
-    fetchFormRequests()
-  }, [fetchFormRequests])
+    fetchRequests()
+  }, [fetchRequests])
 
-  const handleStatusChange = async (requestId: string, newStatus: 'approved' | 'rejected') => {
-    try {
-      // 현재 로그인한 관리자 정보 가져오기
-      const currentUser = JSON.parse(localStorage.getItem('motion-connect-user') || '{}')
-      
-      const { error } = await supabase
-        .from('form_requests')
-        .update({
-          status: newStatus,
-          processed_at: new Date().toISOString(),
-          processed_by: currentUser.id // 실제 관리자 UUID 사용
-        })
-        .eq('id', requestId)
-
-      if (error) {
-        console.error('상태 변경 실패:', error)
-        alert('상태 변경에 실패했습니다.')
-      } else {
-        alert(`서식 신청이 ${newStatus === 'approved' ? '승인' : '거절'}되었습니다.`)
-        fetchFormRequests()
-      }
-    } catch (err) {
-      console.error('상태 변경 오류:', err)
-      alert('오류가 발생했습니다.')
-    }
-  }
-
-  const handleDeleteRequest = async (requestId: string, formType: string) => {
-    if (!confirm(`정말로 이 "${formType}" 신청을 삭제하시겠습니까?`)) {
-      return
-    }
+  const handleUpdateRequest = async (requestId: string, newStatus: 'approved' | 'rejected') => {
+    const originalRequests = [...requests]
+    setRequests(currentRequests =>
+      currentRequests.map(req =>
+        req.id === requestId ? { ...req, status: newStatus, processed_at: new Date().toISOString() } : req
+      )
+    )
 
     try {
-      const { error } = await supabase
-        .from('form_requests')
-        .delete()
-        .eq('id', requestId)
+      const response = await fetch(`/api/admin/form-requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
 
-      if (error) {
-        console.error('서식 삭제 실패:', error)
-        alert('서식 삭제에 실패했습니다.')
-      } else {
-        alert('서식 신청이 삭제되었습니다.')
-        fetchFormRequests()
+      if (!response.ok) {
+        const result = await response.json()
+        throw new Error(result.error || '상태 업데이트에 실패했습니다.')
       }
+      // 성공 시 목록을 다시 불러와 최신 상태 유지
+      fetchRequests()
     } catch (err) {
-      console.error('서식 삭제 오류:', err)
-      alert('삭제 중 오류가 발생했습니다.')
+      alert(`처리 중 오류 발생: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      setRequests(originalRequests) // 실패 시 원래 상태로 롤백
     }
   }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'approved':
-        return 'bg-green-100 text-green-800'
-      case 'rejected':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
+      case 'pending': return 'bg-yellow-100 text-yellow-800'
+      case 'approved': return 'bg-green-100 text-green-800'
+      case 'rejected': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
     }
   }
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case 'pending':
-        return '대기중'
-      case 'approved':
-        return '승인됨'
-      case 'rejected':
-        return '거절됨'
-      default:
-        return '알 수 없음'
+      case 'pending': return '대기중'
+      case 'approved': return '승인됨'
+      case 'rejected': return '거절됨'
+      default: return '알 수 없음'
     }
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '-'
     return new Date(dateString).toLocaleString('ko-KR', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
     })
   }
 
-  if (loading) {
-    return (
-      <div className="bg-white overflow-hidden shadow rounded-lg">
-        <div className="p-5">
-          <div className="animate-pulse">
-            <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-            <div className="h-6 bg-gray-200 rounded w-1/2"></div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (loading) return <div className="p-4">로딩 중...</div>
+  if (error) return <div className="p-4 text-red-500">오류: {error}</div>
 
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="p-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="flex-shrink-0">
-              <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div className="ml-5">
-              <h3 className="text-lg font-medium text-gray-900">서식 신청 관리</h3>
-              <p className="text-sm text-gray-500">직원들의 서식 신청 현황 및 승인 관리</p>
-            </div>
-          </div>
-          <div className="flex space-x-2">
-            {['all', 'pending', 'approved', 'rejected'].map((status) => (
-              <button
-                key={status}
-                onClick={() => setFilter(status as 'all' | 'pending' | 'approved' | 'rejected')}
-                className={`px-3 py-1 text-sm rounded-md ${
-                  filter === status 
-                    ? 'bg-indigo-100 text-indigo-800' 
-                    : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {status === 'all' ? '전체' : 
-                 status === 'pending' ? '대기중' :
-                 status === 'approved' ? '승인' : '거절'}
-              </button>
-            ))}
+        <div className="flex justify-between items-center">
+          <h3 className="text-lg font-medium text-gray-900">전체 서식 신청 내역</h3>
+          <div className="space-x-2">
+            <button
+              onClick={() => setFilter('pending')}
+              className={`px-3 py-1 text-sm rounded-md ${filter === 'pending' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              승인 대기
+            </button>
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-3 py-1 text-sm rounded-md ${filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              전체 보기
+            </button>
           </div>
         </div>
 
-        <div className="mt-6">
-          {formRequests.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500">신청된 서식이 없습니다.</p>
-            </div>
-          ) : (
-            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-              <table className="min-w-full divide-y divide-gray-300">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      신청자
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      서식 종류
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      신청일시
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      상태
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      액션
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {formRequests.map((request) => (
-                    <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {request.user?.name}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {request.user?.department} {request.user?.position}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{request.form_type}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {formatDate(request.submitted_at)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
-                          {getStatusText(request.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {request.status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleStatusChange(request.id, 'approved')}
-                                className="text-green-600 hover:text-green-900"
-                              >
-                                승인
-                              </button>
-                              <button
-                                onClick={() => handleStatusChange(request.id, 'rejected')}
-                                className="text-red-600 hover:text-red-900"
-                              >
-                                거절
-                              </button>
-                            </>
-                          )}
-                          {request.status !== 'pending' && (
-                            <span className="text-gray-400 text-xs">
-                              {request.processed_at && formatDate(request.processed_at)}
-                            </span>
-                          )}
+        <div className="mt-6 overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-300">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청자</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">서식 종류</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일시</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">처리</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {requests.length > 0 ? (
+                requests.map((request) => (
+                  <tr key={request.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
+                      <div className="font-medium text-gray-900">{request.user.name}</div>
+                      <div className="text-gray-500">{request.user.department}</div>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{request.form_type}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{formatDate(request.submitted_at)}</td>
+                    <td className="px-4 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
+                        {getStatusText(request.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                      {request.status === 'pending' ? (
+                        <div className="space-x-4">
                           <button
-                            onClick={() => handleDeleteRequest(request.id, request.form_type)}
-                            className="text-red-600 hover:text-red-900 ml-2"
-                            title="삭제"
+                            onClick={() => handleUpdateRequest(request.id, 'approved')}
+                            className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
                           >
-                            삭제
+                            승인
+                          </button>
+                          <button
+                            onClick={() => handleUpdateRequest(request.id, 'rejected')}
+                            className="text-red-600 hover:text-red-900 disabled:text-gray-400"
+                          >
+                            거절
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      ) : (
+                        <span className="text-gray-500">{getStatusText(request.status)}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                    {filter === 'pending' ? '승인 대기 중인 신청이 없습니다.' : '표시할 신청 내역이 없습니다.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

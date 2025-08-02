@@ -70,10 +70,10 @@ VALUES
   '휴가 신청서',
   '연차, 병가, 경조사 등 일반 휴가를 신청합니다.',
   '[
-    { "name": "휴가형태", "label": "휴가 형태", "type": "select", "required": true, "options": ["연차", "오전 반차", "오후 반차", "병가", "경조사", "공가", "기타"] },
+    { "name": "휴가형태", "label": "휴가 형태", "type": "select", "required": true, "options": ["연차", "오전 반차", "오후 반차", "병가", "경조사", "공가", "대체휴가", "보상휴가", "기타"] },
     { "name": "시작일", "label": "날짜 또는 시작일", "type": "date", "required": true },
     { "name": "종료일", "label": "종료일", "type": "date", "required": true, "condition": { "field": "휴가형태", "operator": "not in", "value": ["오전 반차", "오후 반차"] } },
-    { "name": "사유", "label": "사유 (연차/반차 외 필수)", "type": "textarea", "required": false, "condition": { "field": "휴가형태", "operator": "not in", "value": ["연차", "오전 반차", "오후 반차"] } },
+    { "name": "사유", "label": "사유 (연차/반차 외 필수)", "type": "textarea", "required": false, "condition": { "field": "휴가형태", "operator": "not in", "value": ["연차", "오전 반차", "오후 반차", "대체휴가", "보상휴가"] } },
     { "name": "전달사항", "label": "전달사항 (업무 인수인계)", "type": "textarea", "required": false },
     { "name": "비상연락처", "label": "비상연락처", "type": "text", "required": false }
   ]'

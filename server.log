@@ -1,0 +1,896 @@
+
+> motion-connect@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.15
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1267ms
+ ○ Compiling /api/admin/employees/[userId]/adjust-leave ...
+ ✓ Compiled /api/admin/employees/[userId]/adjust-leave in 616ms (149 modules)
+🔧 휴가 일수 조정 요청: {
+  employeeId: '42daf526-2072-4a06-8517-aee100552ae0',
+  leaveType: 'annual_leave',
+  amount: 1
+}
+✅ 휴가 일수 조정 완료: {
+  employeeId: '42daf526-2072-4a06-8517-aee100552ae0',
+  leaveType: 'annual_leave',
+  before: 2,
+  adjustment: 1,
+  after: 3
+}
+ POST /api/admin/employees/42daf526-2072-4a06-8517-aee100552ae0/adjust-leave 200 in 1032ms
+ ○ Compiling / ...
+ ✓ Compiled / in 919ms (760 modules)
+ GET / 200 in 1126ms
+ ✓ Compiled in 188ms (305 modules)
+ ✓ Compiled /admin in 264ms (778 modules)
+ ○ Compiling /api/form-requests ...
+ ✓ Compiled /api/form-requests in 595ms (474 modules)
+ ✓ Compiled (1623 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 1471ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 2613ms
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 2665ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 2763ms
+ GET /api/holidays/naver?year=2025 200 in 18ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 91ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 113ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 183ms
+ GET /api/holidays/naver?year=2025 200 in 4ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+ GET /api/holidays/naver?year=2025 200 in 3ms
+ GET /api/holidays/naver?year=2025 200 in 4ms
+ GET /api/holidays/naver?year=2025 200 in 3ms
+ POST /api/calendar/events 200 in 725ms
+ POST /api/calendar/events 200 in 627ms
+ POST /api/calendar/events 200 in 3308ms
+ POST /api/calendar/events 200 in 723ms
+ POST /api/calendar/events 200 in 3395ms
+ POST /api/calendar/events 200 in 376ms
+ POST /api/calendar/events 200 in 357ms
+ POST /api/calendar/events 200 in 385ms
+ POST /api/calendar/events 200 in 403ms
+ POST /api/calendar/events 200 in 401ms
+ POST /api/calendar/events 200 in 372ms
+ POST /api/calendar/events 200 in 332ms
+ GET /api/admin/employees 401 in 21ms
+ ✓ Compiled in 320ms (881 modules)
+ ✓ Compiled in 149ms (881 modules)
+ ✓ Compiled in 192ms (881 modules)
+ ✓ Compiled in 245ms (881 modules)
+ ○ Compiling /api/admin/employees/[userId]/adjust-leave ...
+ ✓ Compiled /api/admin/employees/[userId]/adjust-leave in 542ms (468 modules)
+🔧 휴가 일수 조정 요청: {
+  employeeId: '42daf526-2072-4a06-8517-aee100552ae0',
+  leaveType: 'substitute_leave_hours',
+  amount: 1
+}
+📊 현재 leave_days 데이터: {
+  id: 'bbe43fb7-7de9-4cca-bee2-7e653a5f8437',
+  user_id: '42daf526-2072-4a06-8517-aee100552ae0',
+  leave_types: {
+    sick_days: 60,
+    annual_days: 15,
+    annual_leave: 3,
+    used_sick_days: 1,
+    substitute_hours: 9,
+    used_annual_days: 2,
+    compensatory_hours: 3,
+    substitute_leave_hours: 76,
+    compensatory_leave_hours: 8
+  },
+  created_at: '2025-08-02T04:27:19.582643+00:00',
+  updated_at: '2025-08-02T09:47:08.780314+00:00'
+}
+✅ 휴가 일수 조정 완료: {
+  employeeId: '42daf526-2072-4a06-8517-aee100552ae0',
+  leaveType: 'substitute_leave_hours',
+  before: 76,
+  adjustment: 1,
+  after: 77
+}
+ POST /api/admin/employees/42daf526-2072-4a06-8517-aee100552ae0/adjust-leave 200 in 1297ms
+ ✓ Compiled in 104ms (320 modules)
+ ✓ Compiled in 182ms (788 modules)
+ ✓ Compiled in 86ms (320 modules)
+ ✓ Compiled in 88ms (320 modules)
+ GET /admin 200 in 134ms
+ ○ Compiling /api/form-requests ...
+ ✓ Compiled /api/form-requests in 858ms (390 modules)
+ ✓ Compiled (1643 modules)
+ GET /favicon.ico 200 in 3000ms
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 2996ms
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 3138ms
+ ✓ Compiled /api/admin/form-requests in 142ms (1645 modules)
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 3741ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 827ms
+ GET /api/holidays/naver?year=2025 200 in 10ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 65ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 155ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+ POST /api/calendar/events 200 in 4165ms
+ GET /api/holidays/naver?year=2025 200 in 4ms
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 86ms
+ GET /api/holidays/naver?year=2025 200 in 12ms
+ GET /api/holidays/naver?year=2025 200 in 17ms
+ GET /api/holidays/naver?year=2025 200 in 19ms
+ POST /api/calendar/events 200 in 4248ms
+ GET /api/holidays/naver?year=2025 200 in 12ms
+ POST /api/calendar/events 200 in 1463ms
+ POST /api/calendar/events 200 in 719ms
+ POST /api/calendar/events 200 in 1341ms
+ POST /api/calendar/events 200 in 396ms
+ POST /api/calendar/events 200 in 436ms
+ POST /api/calendar/events 200 in 449ms
+ POST /api/calendar/events 200 in 414ms
+ POST /api/calendar/events 200 in 414ms
+ POST /api/calendar/events 200 in 364ms
+ POST /api/calendar/events 200 in 334ms
+ ✓ Compiled /api/auth/logout in 241ms (561 modules)
+ POST /api/auth/logout 200 in 835ms
+ ✓ Compiled /auth/login in 262ms (873 modules)
+ GET /auth/login 200 in 331ms
+ ✓ Compiled /api/auth/login in 90ms (567 modules)
+ POST /api/auth/login 200 in 377ms
+ ✓ Compiled /user in 281ms (889 modules)
+ ○ Compiling /api/form-requests ...
+ ✓ Compiled /api/form-requests in 676ms (579 modules)
+ ✓ Compiled (1634 modules)
+ GET /api/holidays/naver?year=2025 200 in 3488ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 3624ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+📋 Supabase 신청 내역 조회 시작
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 3642ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 50ms
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 3694ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 78ms
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 90ms
+ POST /api/calendar/events 200 in 4250ms
+ POST /api/calendar/events 200 in 741ms
+ POST /api/calendar/events 200 in 4296ms
+ POST /api/calendar/events 200 in 439ms
+ POST /api/auth/logout 200 in 96ms
+ GET /auth/login 200 in 133ms
+ POST /api/auth/login 200 in 248ms
+ ✓ Compiled /api/admin/employees in 139ms (1636 modules)
+ ✓ Compiled (1638 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 717ms
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 754ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 897ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 1000ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 51ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 0 건
+ GET /api/admin/form-requests?filter=pending 200 in 99ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 151ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ POST /api/calendar/events 200 in 1537ms
+ POST /api/calendar/events 200 in 814ms
+ POST /api/calendar/events 200 in 678ms
+ POST /api/calendar/events 200 in 1575ms
+ POST /api/calendar/events 200 in 941ms
+ POST /api/calendar/events 200 in 388ms
+ POST /api/calendar/events 200 in 410ms
+ POST /api/calendar/events 200 in 394ms
+ POST /api/calendar/events 200 in 397ms
+ POST /api/calendar/events 200 in 416ms
+ POST /api/calendar/events 200 in 343ms
+ POST /api/calendar/events 200 in 387ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 401 in 39ms
+ ✓ Compiled in 561ms (901 modules)
+ ✓ Compiled in 312ms (901 modules)
+ ✓ Compiled in 120ms (328 modules)
+ ✓ Compiled in 74ms (328 modules)
+ ✓ Compiled in 89ms (328 modules)
+ ✓ Compiled in 69ms (328 modules)
+ ✓ Compiled in 90ms (328 modules)
+ ✓ Compiled in 70ms (328 modules)
+ ✓ Compiled in 80ms (328 modules)
+ ✓ Compiled in 93ms (328 modules)
+ ✓ Compiled in 68ms (328 modules)
+ ✓ Compiled in 104ms (328 modules)
+ ✓ Compiled /api/auth/logout in 174ms (573 modules)
+ POST /api/auth/logout 200 in 802ms
+ GET /auth/login 200 in 96ms
+ ✓ Compiled /api/auth/login in 96ms (575 modules)
+ POST /api/auth/login 200 in 410ms
+ ○ Compiling /api/calendar/events ...
+ ✓ Compiled /api/calendar/events in 657ms (579 modules)
+ ✓ Compiled (1634 modules)
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 2493ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 2599ms
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 2609ms
+ GET /api/holidays/naver?year=2025 200 in 25ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+📋 Supabase 신청 내역 조회 시작
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 2698ms
+ GET /api/holidays/naver?year=2025 200 in 15ms
+✅ Supabase 신청 내역 조회 완료: 2 건
+ GET /api/form-requests 200 in 60ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 84ms
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 86ms
+ POST /api/calendar/events 200 in 901ms
+ POST /api/calendar/events 200 in 3394ms
+ POST /api/calendar/events 200 in 3390ms
+ POST /api/calendar/events 200 in 426ms
+ ✓ Compiled /api/form-templates in 155ms (1636 modules)
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+📋 로컬 폼 템플릿 조회
+ GET /api/form-templates 200 in 328ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 398ms
+🔍 추출된 userId: 42daf526-2072-4a06-8517-aee100552ae0
+📝 로컬 서식 신청: {
+  formType: '휴가 신청서',
+  requestData: {
+    '신청일': '2025-08-02',
+    '휴가형태': '대체휴가',
+    '시작일': '2025-08-11',
+    '종료일': '2025-08-11',
+    '휴가일수': '1'
+  },
+  userId: '42daf526-2072-4a06-8517-aee100552ae0'
+}
+🔍 Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+📊 휴가 데이터 확인: {
+  userId: '42daf526-2072-4a06-8517-aee100552ae0',
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 15,
+    annual_leave: 3,
+    used_sick_days: 1,
+    substitute_hours: 9,
+    used_annual_days: 2,
+    compensatory_hours: 3,
+    substitute_leave_hours: 77,
+    compensatory_leave_hours: 8
+  },
+  daysToDeduct: 1
+}
+🔍 시간 단위 휴가 검증: {
+  '휴가형태': '대체휴가',
+  '신청일수': 1,
+  '필요시간': 8,
+  '잔여시간': 77,
+  fieldName: 'substitute_leave_hours',
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 15,
+    annual_leave: 3,
+    used_sick_days: 1,
+    substitute_hours: 9,
+    used_annual_days: 2,
+    compensatory_hours: 3,
+    substitute_leave_hours: 77,
+    compensatory_leave_hours: 8
+  }
+}
+✅ Supabase 신청서 저장 완료: {
+  id: 'c59ec042-cf12-4699-ad7a-0395a00c859b',
+  user_id: '42daf526-2072-4a06-8517-aee100552ae0',
+  form_type: '휴가 신청서',
+  status: 'pending',
+  request_data: {
+    '시작일': '2025-08-11',
+    '신청일': '2025-08-02',
+    '종료일': '2025-08-11',
+    '휴가일수': '1',
+    '휴가형태': '대체휴가'
+  },
+  submitted_at: '2025-08-02T09:59:06.78+00:00',
+  processed_at: null,
+  processed_by: null,
+  admin_notes: null,
+  created_at: '2025-08-02T09:59:06.84959+00:00',
+  updated_at: '2025-08-02T09:59:06.84959+00:00'
+}
+ POST /api/form-requests 200 in 175ms
+ ✓ Compiled /api/generate-pdf in 137ms (1638 modules)
+📄 PDF 생성 요청: { formType: '휴가 신청서', userData: '테스트 직원3' }
+ POST /api/generate-pdf 200 in 166ms
+ GET /user 200 in 102ms
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 165ms
+ ✓ Compiled /favicon.ico in 160ms (1666 modules)
+ GET /api/holidays/naver?year=2025 200 in 269ms
+ GET /favicon.ico 200 in 626ms
+📋 Supabase 신청 내역 조회 시작
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 635ms
+ GET /api/holidays/naver?year=2025 200 in 29ms
+📋 Supabase 신청 내역 조회 시작
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 102ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 71ms
+ GET /api/holidays/naver?year=2025 200 in 15ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 972ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 85ms
+ POST /api/calendar/events 200 in 754ms
+ POST /api/calendar/events 200 in 1243ms
+ POST /api/calendar/events 200 in 1408ms
+ POST /api/calendar/events 200 in 505ms
+ POST /api/auth/logout 200 in 114ms
+ GET /auth/login 200 in 69ms
+ POST /api/auth/login 200 in 240ms
+ ✓ Compiled /api/admin/employees in 210ms (1668 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 362ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 403ms
+ ✓ Compiled /api/admin/form-requests in 98ms (1670 modules)
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 576ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 226ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 45ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 136ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 82ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ POST /api/calendar/events 200 in 1084ms
+ POST /api/calendar/events 200 in 1081ms
+ POST /api/calendar/events 200 in 1083ms
+ POST /api/calendar/events 200 in 740ms
+ POST /api/calendar/events 200 in 853ms
+ POST /api/calendar/events 200 in 373ms
+ POST /api/calendar/events 200 in 373ms
+ POST /api/calendar/events 200 in 402ms
+ POST /api/calendar/events 200 in 373ms
+ POST /api/calendar/events 200 in 376ms
+ POST /api/calendar/events 200 in 367ms
+ POST /api/calendar/events 200 in 368ms
+ ✓ Compiled /api/admin/form-requests/[requestId] in 165ms (1672 modules)
+ ⨯ No HTTP methods exported in '/Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts'. Export a named export for each HTTP method.
+ ⨯ No HTTP methods exported in '/Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts'. Export a named export for each HTTP method.
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 405 in 393ms
+ POST /api/auth/logout 200 in 574ms
+ GET /auth/login 200 in 73ms
+ POST /api/auth/login 200 in 262ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+ GET /api/holidays/naver?year=2025 200 in 65ms
+📋 Supabase 신청 내역 조회 시작
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 208ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 203ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+📋 Supabase 신청 내역 조회 시작
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 247ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 53ms
+ GET /api/user/leave-promotion-status?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 111ms
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 107ms
+ POST /api/calendar/events 200 in 837ms
+ POST /api/calendar/events 200 in 969ms
+ POST /api/calendar/events 200 in 1142ms
+ POST /api/calendar/events 200 in 654ms
+📋 로컬 폼 템플릿 조회
+ GET /api/form-templates 200 in 53ms
+🏖️ Supabase 휴가 데이터 조회: 42daf526-2072-4a06-8517-aee100552ae0
+✅ 휴가 데이터 조회 성공: 테스트 직원3
+ GET /api/user/leave-data?userId=42daf526-2072-4a06-8517-aee100552ae0 200 in 195ms
+ ✓ Compiled in 481ms (1962 modules)
+ ✓ Compiled /api/auth/logout in 157ms (577 modules)
+ POST /api/auth/logout 200 in 761ms
+ GET /auth/login 200 in 72ms
+ ✓ Compiled /api/auth/login in 65ms (575 modules)
+ POST /api/auth/login 401 in 155ms
+ POST /api/auth/login 200 in 337ms
+ ✓ Compiled /api/calendar/events in 57ms (577 modules)
+ ✓ Compiled (1633 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 1561ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 1653ms
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 1685ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 1700ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 35ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 90ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 160ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 12ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 10ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ POST /api/calendar/events 200 in 744ms
+ POST /api/calendar/events 200 in 2328ms
+ POST /api/calendar/events 200 in 2339ms
+ POST /api/calendar/events 200 in 713ms
+ POST /api/calendar/events 200 in 864ms
+ POST /api/calendar/events 200 in 369ms
+ POST /api/calendar/events 200 in 414ms
+ POST /api/calendar/events 200 in 411ms
+ POST /api/calendar/events 200 in 429ms
+ POST /api/calendar/events 200 in 372ms
+ POST /api/calendar/events 200 in 357ms
+ POST /api/calendar/events 200 in 450ms
+ GET /admin 200 in 113ms
+ GET /api/holidays/naver?year=2025 200 in 20ms
+📋 Supabase 신청 내역 조회 시작
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 92ms
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 123ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 221ms
+ ✓ Compiled /favicon.ico in 164ms (1661 modules)
+ GET /favicon.ico 200 in 244ms
+ GET /api/holidays/naver?year=2025 200 in 16ms
+ POST /api/calendar/events 200 in 465ms
+ POST /api/calendar/events 200 in 488ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 51ms
+ GET /api/holidays/naver?year=2025 200 in 4ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+ POST /api/calendar/events 200 in 585ms
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 98ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ GET /api/holidays/naver?year=2025 200 in 4ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ POST /api/calendar/events 200 in 496ms
+ POST /api/calendar/events 200 in 545ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 213ms
+ POST /api/calendar/events 200 in 695ms
+ POST /api/calendar/events 200 in 750ms
+ POST /api/calendar/events 200 in 678ms
+ POST /api/calendar/events 200 in 425ms
+ POST /api/calendar/events 200 in 451ms
+ POST /api/calendar/events 200 in 311ms
+ POST /api/calendar/events 200 in 344ms
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+ ○ Compiling /_not-found ...
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 500 in 1250ms
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ GET /admin 500 in 13ms
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ GET /admin 500 in 37ms
+ GET /favicon.ico 500 in 25ms
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ GET /_next/static/webpack/8b02bcb85371be3e.webpack.hot-update.json 500 in 575ms
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ GET / 500 in 641ms
+ GET /favicon.ico 500 in 27ms
+ ✓ Compiled / in 168ms (518 modules)
+ ✓ Compiled in 434ms (951 modules)
+ GET / 200 in 418ms
+ ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+ GET / 200 in 12ms
+ GET /_next/static/webpack/8b02bcb85371be3e.webpack.hot-update.json 404 in 509ms
+ GET / 200 in 20ms
+ GET /favicon.ico 200 in 31ms
+ ✓ Compiled /api/admin/form-requests in 60ms (472 modules)
+ ✓ Compiled (1702 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 1404ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 1473ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 1518ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 1636ms
+ GET /api/holidays/naver?year=2025 200 in 10ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 56ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 115ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 190ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ POST /api/calendar/events 200 in 746ms
+ POST /api/calendar/events 200 in 749ms
+ POST /api/calendar/events 200 in 710ms
+ POST /api/calendar/events 200 in 2245ms
+ POST /api/calendar/events 200 in 2283ms
+ POST /api/calendar/events 200 in 374ms
+ POST /api/calendar/events 200 in 356ms
+ POST /api/calendar/events 200 in 418ms
+ POST /api/calendar/events 200 in 480ms
+ ✓ Compiled in 122ms (518 modules)
+ POST /api/calendar/events 200 in 419ms
+ POST /api/calendar/events 200 in 381ms
+ POST /api/calendar/events 200 in 378ms
+ ✓ Compiled in 317ms (2206 modules)
+ ✓ Compiled in 137ms (518 modules)
+ GET /admin 200 in 152ms
+ GET /api/holidays/naver?year=2025 200 in 41ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 521ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 609ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 922ms
+ GET /favicon.ico 200 in 31ms
+ GET /api/holidays/naver?year=2025 200 in 10ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 51ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 86ms
+ POST /api/calendar/events 200 in 1197ms
+ POST /api/calendar/events 200 in 1175ms
+ GET /api/holidays/naver?year=2025 200 in 31ms
+ POST /api/calendar/events 200 in 727ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ POST /api/calendar/events 200 in 746ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 273ms
+ POST /api/calendar/events 200 in 1432ms
+ POST /api/calendar/events 200 in 368ms
+ POST /api/calendar/events 200 in 410ms
+ POST /api/calendar/events 200 in 379ms
+ POST /api/calendar/events 200 in 374ms
+ POST /api/calendar/events 200 in 384ms
+ POST /api/calendar/events 200 in 359ms
+ POST /api/calendar/events 200 in 356ms
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+ ○ Compiling /_not-found ...
+ ⨯ ./src/app/api/admin/form-requests/[requestId]/route.ts
+Error: Failed to read source code from /Users/lewis/Desktop/HR System/motion-connect/src/app/api/admin/form-requests/[requestId]/route.ts
+
+Caused by:
+    stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/app/api/admin/form-requests/[requestId]/route.ts
+Each child in a list should have a unique "key" prop.
+
+Check the render method of `Head`. See https://react.dev/link/warning-keys for more information.
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 500 in 668ms
+ ✓ Compiled /_not-found in 465ms (913 modules)
+ ✓ Compiled in 157ms (516 modules)
+ ✓ Compiled in 173ms (913 modules)
+ ✓ Compiled in 153ms (516 modules)
+ ✓ Compiled in 119ms (516 modules)
+ GET /admin 200 in 128ms
+ ○ Compiling /api/admin/employees ...
+ ✓ Compiled /api/admin/employees in 944ms (439 modules)
+ ✓ Compiled (1667 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 3951ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 4236ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 4427ms
+ ○ Compiling /api/admin/form-requests ...
+ POST /api/calendar/events 200 in 4919ms
+ POST /api/calendar/events 200 in 4931ms
+ POST /api/calendar/events 200 in 872ms
+ POST /api/calendar/events 200 in 5065ms
+ ✓ Compiled /favicon.ico in 1749ms (1669 modules)
+ ✓ Compiled (1697 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 1985ms
+ GET /favicon.ico 200 in 2065ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 1972ms
+ GET /api/holidays/naver?year=2025 200 in 13ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 2783ms
+ GET /api/holidays/naver?year=2025 200 in 13ms
+ GET /api/holidays/naver?year=2025 200 in 51ms
+ GET /api/holidays/naver?year=2025 200 in 13ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 2045ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 152ms
+ POST /api/calendar/events 200 in 3013ms
+ POST /api/calendar/events 200 in 568ms
+ POST /api/calendar/events 200 in 569ms
+ POST /api/calendar/events 200 in 540ms
+ POST /api/calendar/events 200 in 485ms
+ POST /api/calendar/events 200 in 482ms
+ POST /api/calendar/events 200 in 348ms
+ POST /api/calendar/events 200 in 419ms
+ ✓ Compiled in 565ms (927 modules)
+ ✓ Compiled /api/admin/employees in 100ms (613 modules)
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 1005ms
+ GET /admin 200 in 158ms
+ ✓ Compiled /api/calendar/events in 97ms (615 modules)
+ ✓ Compiled (1669 modules)
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 362ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 431ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 483ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 709ms
+ ✓ Compiled /favicon.ico in 301ms (1697 modules)
+ GET /favicon.ico 200 in 364ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+📋 Supabase 신청 내역 조회 시작
+ POST /api/calendar/events 200 in 1151ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 68ms
+ POST /api/calendar/events 200 in 800ms
+ GET /api/holidays/naver?year=2025 200 in 20ms
+ POST /api/calendar/events 200 in 1205ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+ POST /api/calendar/events 200 in 747ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ POST /api/calendar/events 200 in 826ms
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 107ms
+ GET /api/holidays/naver?year=2025 200 in 11ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+ GET /api/holidays/naver?year=2025 200 in 5ms
+👥 Supabase 직원 목록 조회 완료: 14 명
+ GET /api/admin/employees 200 in 184ms
+ POST /api/calendar/events 200 in 491ms
+ POST /api/calendar/events 200 in 489ms
+ POST /api/calendar/events 200 in 681ms
+ POST /api/calendar/events 200 in 419ms
+ POST /api/calendar/events 200 in 442ms
+ POST /api/calendar/events 200 in 356ms
+ POST /api/calendar/events 200 in 325ms
+ ✓ Compiled /api/admin/form-requests/[requestId] in 211ms (1699 modules)
+Admin approval request: {
+  requestId: 'c59ec042-cf12-4699-ad7a-0395a00c859b',
+  action: undefined,
+  adminNotes: undefined
+}
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 200 in 279ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 150ms
+Admin approval request: {
+  requestId: 'c59ec042-cf12-4699-ad7a-0395a00c859b',
+  action: undefined,
+  adminNotes: undefined
+}
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 200 in 23ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 109ms
+Admin approval request: {
+  requestId: 'c59ec042-cf12-4699-ad7a-0395a00c859b',
+  action: undefined,
+  adminNotes: undefined
+}
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 200 in 22ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 115ms
+Admin approval request: {
+  requestId: 'c59ec042-cf12-4699-ad7a-0395a00c859b',
+  action: undefined,
+  adminNotes: undefined
+}
+ PATCH /api/admin/form-requests/c59ec042-cf12-4699-ad7a-0395a00c859b 200 in 16ms
+🔍 관리자 서식 신청 내역 조회: { filter: 'pending' }
+✅ 관리자 서식 신청 내역 조회 완료: 1 건
+ GET /api/admin/form-requests?filter=pending 200 in 106ms
+ ✓ Compiled in 511ms (516 modules)
+ ✓ Compiled in 124ms (516 modules)
+ ✓ Compiled in 67ms (516 modules)
+ ✓ Compiled in 86ms (516 modules)
+ ✓ Compiled in 110ms (516 modules)
+ ✓ Compiled in 87ms (516 modules)
+ ✓ Compiled in 104ms (516 modules)
+ ✓ Compiled / in 302ms (415 modules)
+ GET / 200 in 443ms
+ ✓ Compiled /api/form-requests in 60ms (443 modules)
+ ✓ Compiled (1673 modules)
+ GET /api/admin/form-requests?filter=pending 401 in 296ms
+ GET /api/admin/employees 401 in 1457ms
+📋 Supabase 신청 내역 조회 시작
+ GET /api/holidays/naver?year=2025 200 in 1488ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 1542ms
+ GET /api/admin/form-requests?filter=pending 401 in 11ms
+ GET /api/admin/employees 401 in 15ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 41ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+ GET /api/holidays/naver?year=2025 200 in 10ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ GET /api/holidays/naver?year=2025 200 in 9ms
+ GET /api/holidays/naver?year=2025 200 in 8ms
+ POST /api/calendar/events 200 in 2190ms
+ POST /api/calendar/events 200 in 712ms
+ POST /api/calendar/events 200 in 2313ms
+ POST /api/calendar/events 200 in 837ms
+ POST /api/calendar/events 200 in 869ms
+ POST /api/calendar/events 200 in 552ms
+ POST /api/calendar/events 200 in 430ms
+ POST /api/calendar/events 200 in 569ms
+ POST /api/calendar/events 200 in 506ms
+ POST /api/calendar/events 200 in 497ms
+ POST /api/calendar/events 200 in 321ms
+ POST /api/calendar/events 200 in 325ms
+ GET /admin 200 in 159ms
+ GET /api/holidays/naver?year=2025 200 in 36ms
+ GET /api/admin/form-requests?filter=pending 401 in 31ms
+📋 Supabase 신청 내역 조회 시작
+ GET /api/admin/employees 401 in 41ms
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 110ms
+ ✓ Compiled /favicon.ico in 177ms (1701 modules)
+ GET /favicon.ico 200 in 249ms
+ GET /api/holidays/naver?year=2025 200 in 12ms
+ GET /api/admin/form-requests?filter=pending 401 in 11ms
+ GET /api/admin/employees 401 in 8ms
+📋 Supabase 신청 내역 조회 시작
+✅ Supabase 신청 내역 조회 완료: 3 건
+ GET /api/form-requests 200 in 57ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ GET /api/holidays/naver?year=2025 200 in 7ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ GET /api/holidays/naver?year=2025 200 in 6ms
+ POST /api/calendar/events 200 in 505ms
+ POST /api/calendar/events 200 in 540ms
+ POST /api/calendar/events 200 in 513ms
+ POST /api/calendar/events 200 in 529ms
+ POST /api/calendar/events 200 in 571ms
+ POST /api/calendar/events 200 in 661ms
+ POST /api/calendar/events 200 in 590ms
+ POST /api/calendar/events 200 in 710ms
+ POST /api/calendar/events 200 in 375ms
+ POST /api/calendar/events 200 in 426ms
+ POST /api/calendar/events 200 in 338ms
+ POST /api/calendar/events 200 in 315ms
+[?25h

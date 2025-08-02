@@ -29,6 +29,8 @@ export default function UserDashboard() {
   const [reviewLink, setReviewLink] = useState<ReviewLink | null>(null)
   const [showPromotionDetails, setShowPromotionDetails] = useState(false)
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
+  const [selectedFormType, setSelectedFormType] = useState<string | null>(null)
+  const [defaultFormValues, setDefaultFormValues] = useState<Record<string, string> | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -106,8 +108,10 @@ export default function UserDashboard() {
   }
 
 
-  const handleLeaveApplication = () => {
+  const handleOpenFormModal = (formType: string | null, defaultValues: Record<string, string> = {}) => {
     setIsFormModalOpen(true)
+    setSelectedFormType(formType)
+    setDefaultFormValues(defaultValues)
   }
 
 
@@ -162,7 +166,7 @@ export default function UserDashboard() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
-                      onClick={handleLeaveApplication}
+                      onClick={() => handleOpenFormModal('휴가 신청서', { '휴가형태': '연차' })}
                       className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-red-700 flex items-center"
                     >
                       <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,13 +189,10 @@ export default function UserDashboard() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            
+          {/* README.md에 따른 위젯 순서 재배치 */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* 내 정보 위젯 */}
             <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
-
-            {/* 나의 휴가 현황 위젯 */}
-            <UserLeaveStatus user={user} />
 
             {/* 근태 관리 위젯 */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -242,6 +243,12 @@ export default function UserDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* 나의 휴가 현황 위젯 */}
+            <UserLeaveStatus
+              user={user}
+              onApply={(formType, defaultValues) => handleOpenFormModal(formType, defaultValues)}
+            />
 
             {/* 반기 리뷰 위젯 (시즌별 표시) */}
             {isReviewSeason && reviewLink && (
@@ -347,70 +354,34 @@ export default function UserDashboard() {
               </div>
             )}
 
-
-
-            {/* 통합 서식 신청 위젯 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        서식 신청
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        통합 서식 신청 시스템
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs text-gray-500">
-                    모든 서식을 한 곳에서 신청하고 관리할 수 있습니다
-                  </p>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <button 
-                  onClick={() => setIsFormModalOpen(true)}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium flex items-center justify-center"
-                >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  서식 신청하기
-                </button>
-              </div>
-            </div>
-
-            {/* 자료실 위젯 */}
-            <DocumentLibrary />
-
           </div>
 
-          {/* 이번주 미팅 및 답사일정 - 전체 너비 사용 */}
+          {/* 주간 미팅/답사 일정 */}
           <div className="mt-8">
             <UserWeeklySchedule />
           </div>
 
-          {/* 팀 일정 - 전체 너비 사용 */}
+          {/* 팀 일정 */}
           <div className="mt-8">
             <TeamSchedule user={user} />
           </div>
 
-          {/* 휴가 관리 - 전체 너비 사용 */}
+          {/* 팀 휴가 일정 (캘린더) */}
           <div className="mt-8">
             <LeaveManagement user={user} />
           </div>
 
-          {/* 서식 신청 내역 관리 */}
-          <div className="mt-8">
-            <UserFormManagement user={user} />
+          {/* 하단 기타 섹션 */}
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 서식 신청 내역 관리 (역할 축소) */}
+            <div>
+              <UserFormManagement
+                user={user}
+                onApplyClick={() => handleOpenFormModal(null)} // 모든 서식을 선택할 수 있도록 null 전달
+              />
+            </div>
+            {/* 자료실 위젯 */}
+            <DocumentLibrary />
           </div>
         </div>
       </main>
@@ -420,13 +391,19 @@ export default function UserDashboard() {
         <FormApplicationModal
           user={user}
           isOpen={isFormModalOpen}
-          onClose={() => setIsFormModalOpen(false)}
+          onClose={() => {
+            setIsFormModalOpen(false)
+            setSelectedFormType(null) // 모달 닫을 때 선택된 폼 타입 초기화
+            setDefaultFormValues(null)
+          }}
           onSuccess={() => {
             // 폼 제출 성공 시 서식 신청 내역을 새로고침하도록 시간차를 둔 새로고침
             setTimeout(() => {
               window.location.reload()
             }, 1000)
           }}
+          defaultFormType={selectedFormType}
+          defaultValues={defaultFormValues}
         />
       )}
 
@@ -516,7 +493,7 @@ export default function UserDashboard() {
                   type="button"
                   onClick={() => {
                     setShowPromotionDetails(false)
-                    handleLeaveApplication()
+                    handleOpenFormModal('휴가 신청서', { '휴가형태': '연차' })
                   }}
                   className="bg-red-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-red-700"
                 >
