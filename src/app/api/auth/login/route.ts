@@ -54,7 +54,8 @@ export async function POST(request: Request) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7일
-    path: '/'
+    path: '/',
+    domain: process.env.NODE_ENV === 'production' ? '.motionsense.co.kr' : undefined
   })
   
   return response

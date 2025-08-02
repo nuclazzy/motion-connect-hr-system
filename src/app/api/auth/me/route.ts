@@ -30,7 +30,9 @@ export async function GET(request: NextRequest) {
         httpOnly: true, 
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 0 // 즉시 만료
+        maxAge: 0, // 즉시 만료
+        path: '/',
+        domain: process.env.NODE_ENV === 'production' ? '.motionsense.co.kr' : undefined
       })
       return response
     }

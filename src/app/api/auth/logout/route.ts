@@ -10,7 +10,8 @@ export async function POST() {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     maxAge: 0, // 즉시 만료
-    path: '/'
+    path: '/',
+    domain: process.env.NODE_ENV === 'production' ? '.motionsense.co.kr' : undefined
   })
   
   return response
