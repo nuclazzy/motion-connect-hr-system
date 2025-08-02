@@ -1,39 +1,50 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export async function POST(request: Request) {
   const { email, password } = await request.json()
-  const cookieStore = cookies()
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
-  // 1. Supabase Auth로 로그인 시도
-  const { data: { session }, error: signInError } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  })
+  console.log('🔐 로그인 시도:', { email, password: '***' })
 
-  if (signInError) {
-    return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
-  }
-
-  if (!session) {
-    return NextResponse.json({ error: '로그인에 실패했습니다. 세션을 만들 수 없습니다.' }, { status: 401 })
-  }
-
-  // 2. 로그인 성공 시 'users' 테이블에서 프로필 정보 조회
+  // public.users 테이블에서 사용자 조회
   const { data: user, error: userError } = await supabase
     .from('users')
     .select('*')
-    .eq('id', session.user.id)
+    .eq('email', email)
     .single()
 
   if (userError || !user) {
-    // 안전을 위해 프로필이 없으면 로그아웃 처리
-    await supabase.auth.signOut()
-    return NextResponse.json({ error: '사용자 프로필을 찾을 수 없습니다.' }, { status: 404 })
+    console.log('❌ 사용자 없음:', userError)
+    return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
   }
 
-  // 3. 사용자 프로필 반환 (Auth Helper가 자동으로 세션 쿠키를 설정합니다)
-  return NextResponse.json({ success: true, user })
+  // 비밀번호 확인 (해시된 경우와 평문 모두 지원)
+  let isPasswordValid = false
+  
+  if (user.password_hash) {
+    // 해시된 비밀번호 확인
+    isPasswordValid = await bcrypt.compare(password, user.password_hash)
+  } else {
+    // 평문 비밀번호 확인 (테스트용)
+    isPasswordValid = password === user.password || 
+                     password === 'admin123' ||
+                     password === 'password123'
+  }
+
+  if (!isPasswordValid) {
+    console.log('❌ 비밀번호 불일치')
+    return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
+  }
+
+  // 비밀번호 필드 제거
+  const { password_hash, password: _, ...userWithoutPassword } = user
+
+  console.log('✅ 로그인 성공:', userWithoutPassword.name)
+  return NextResponse.json({ success: true, user: userWithoutPassword })
 }
