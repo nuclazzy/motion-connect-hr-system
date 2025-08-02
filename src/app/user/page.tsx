@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getCurrentUser, logoutUser, saveUserSession, type User } from '@/lib/auth'
+import { getCurrentUser, logoutUser, type User } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import UserProfile from '@/components/UserProfile'
 import LeaveManagement from '@/components/LeaveManagement'
@@ -104,7 +104,6 @@ export default function UserDashboard() {
 
   const handleProfileUpdate = (updatedUser: User) => {
     setUser(updatedUser)
-    saveUserSession(updatedUser)
   }
 
 

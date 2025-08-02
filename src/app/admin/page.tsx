@@ -24,58 +24,38 @@ export default function AdminDashboard() {
   const { supabase } = useSupabase()
 
   useEffect(() => {    
-    // 1. localStorage에서 사용자 정보 확인 (우선순위)
-    const storedUser = getCurrentUser()
-    console.log('👤 저장된 사용자:', storedUser)
-    
-    if (storedUser) {
-      if (checkPermission(storedUser, 'admin')) {
-        setUser(storedUser)
-        setLoading(false)
-        return
-      } else {
-        console.error('❌ 관리자 권한 없음')
-        router.push('/user')
-        return
-      }
-    }
-    
-    // 2. localStorage에 없으면 Supabase 세션 확인
+    // 쿠키 기반 세션에서 사용자 정보 확인
     const fetchUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      console.log('🔐 Supabase 세션:', session)
-      
-      if (session) {
-        const currentUser = getCurrentUser() // localStorage에서 상세 프로필 가져오기
-        if (currentUser && checkPermission(currentUser, 'admin')) {
-          setUser(currentUser)
+      try {
+        const currentUser = await getCurrentUser()
+        console.log('👤 현재 사용자:', currentUser)
+        
+        if (currentUser) {
+          if (checkPermission(currentUser, 'admin')) {
+            setUser(currentUser)
+            setLoading(false)
+            return
+          } else {
+            console.error('❌ 관리자 권한 없음')
+            router.push('/user')
+            return
+          }
         } else {
-          // 세션은 있지만 프로필이 없거나 권한이 없는 경우
-          router.replace('/user')
+          console.log('❌ 사용자 세션 없음')
+          router.replace('/auth/login')
         }
-      } else {
+      } catch (error) {
+        console.error('사용자 정보 확인 오류:', error)
         router.replace('/auth/login')
       }
       setLoading(false)
     }
 
     fetchUser()
-
-    // 2. 인증 상태 변경 감지 (다른 탭에서 로그아웃 등)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (event === 'SIGNED_OUT' || !session) {
-          router.replace('/auth/login')
-        }
-      }
-    )
-
-    return () => subscription.unsubscribe()
   }, [router, supabase])
 
   const handleProfileUpdate = (updatedUser: User) => {
     setUser(updatedUser)
-    saveUserSession(updatedUser)
   }
 
   const handleOpenFormModal = (formType: string | null, defaultValues: Record<string, string> = {}) => {

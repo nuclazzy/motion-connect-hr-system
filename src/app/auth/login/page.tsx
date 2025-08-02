@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { loginUser, saveUserSession } from '@/lib/auth'
+import { loginUser } from '@/lib/auth'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -24,8 +24,7 @@ export default function LoginPage() {
       console.log('📋 로그인 결과:', result)
       
       if (result.success && result.user) {
-        // 세션 저장
-        saveUserSession(result.user)
+        // 쿠키 기반 세션으로 변경됨 (localStorage 사용 안함)
         
         console.log('✅ 로그인 성공, 리다이렉트:', result.user.role === 'admin' ? '/admin' : '/user')
         
