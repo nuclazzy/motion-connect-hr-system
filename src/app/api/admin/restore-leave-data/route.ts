@@ -164,7 +164,6 @@ export async function GET() {
         users!inner(name, email, hire_date, role)
       `)
       .eq('users.role', 'user')
-      .order('users.name')
 
     if (error) throw error
 
