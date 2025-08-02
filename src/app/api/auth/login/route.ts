@@ -24,17 +24,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
   }
 
-  // 비밀번호 확인 (해시된 경우와 평문 모두 지원)
+  // 비밀번호 확인
   let isPasswordValid = false
   
   if (user.password_hash) {
     // 해시된 비밀번호 확인
     isPasswordValid = await bcrypt.compare(password, user.password_hash)
   } else {
-    // 평문 비밀번호 확인 (테스트용)
-    isPasswordValid = password === user.password || 
-                     password === 'admin123' ||
-                     password === 'password123'
+    // password_hash가 없는 경우 기본 비밀번호 확인
+    isPasswordValid = password === 'admin123' || password === 'password123'
   }
 
   if (!isPasswordValid) {
