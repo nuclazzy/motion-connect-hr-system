@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import GoogleServiceAccountClient from '@/lib/googleServiceAccount';
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const client = new GoogleServiceAccountClient();

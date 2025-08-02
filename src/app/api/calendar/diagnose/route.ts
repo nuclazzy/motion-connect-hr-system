@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import GoogleServiceAccountClient from '@/lib/googleServiceAccount';
 import { ADMIN_WEEKLY_CALENDARS, ADMIN_TEAM_CALENDARS } from '@/lib/calendarMapping';
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   try {
     const client = new GoogleServiceAccountClient();

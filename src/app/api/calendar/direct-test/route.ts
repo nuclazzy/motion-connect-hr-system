@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import GoogleServiceAccountClient from '@/lib/googleServiceAccount';
 
+export const dynamic = 'force-dynamic'
+
 export async function GET() {
   const CALENDAR_ID = 'c_rb1oser82snsqf9vdkr7jgr9r8@group.calendar.google.com';
   
