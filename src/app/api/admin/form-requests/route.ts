@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export async function GET(request: NextRequest) {
-  const cookieStore = cookies()
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
-
-  // 1. Check for admin role
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
+  // 1. 쿠키에서 사용자 확인
+  const userId = request.cookies.get('motion-connect-user-id')?.value
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: userProfile } = await supabase
+  // 2. 사용자 정보 및 권한 확인
+  const { data: userProfile, error: userError } = await supabase
     .from('users')
     .select('role')
-    .eq('id', session.user.id)
+    .eq('id', userId)
     .single()
 
-  if (userProfile?.role !== 'admin') {
+  if (userError || userProfile?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
   }
 
