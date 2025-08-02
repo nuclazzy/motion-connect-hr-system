@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getLocalLeaveData, updateLocalLeaveData } from '@/lib/localLeaveData'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,11 +34,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 직원 휴가 데이터 조회
-    const localLeaveData = getLocalLeaveData()
-    const employeeLeaveData = localLeaveData[employeeId]
+    // Supabase에서 직원 휴가 데이터 조회
+    const { data: leaveData, error: leaveError } = await supabase
+      .from('leave_days')
+      .select('*')
+      .eq('user_id', employeeId)
+      .single()
     
-    if (!employeeLeaveData) {
+    if (leaveError || !leaveData) {
+      console.error('휴가 데이터 조회 오류:', leaveError)
       return NextResponse.json({ 
         success: false, 
         error: '직원의 휴가 데이터를 찾을 수 없습니다.' 
@@ -42,18 +51,28 @@ export async function POST(request: NextRequest) {
 
     // 시간 추가
     const fieldName = leaveType === 'substitute' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
-    const currentHours = employeeLeaveData.leave_types[fieldName] || 0
+    const currentHours = leaveData.leave_types[fieldName] || 0
     const newHours = currentHours + hours
 
-    // 데이터 업데이트
-    updateLocalLeaveData(employeeId, {
-      ...employeeLeaveData,
-      leave_types: {
-        ...employeeLeaveData.leave_types,
-        [fieldName]: newHours
-      },
-      updated_at: new Date().toISOString()
-    })
+    // Supabase 데이터 업데이트
+    const { error: updateError } = await supabase
+      .from('leave_days')
+      .update({
+        leave_types: {
+          ...leaveData.leave_types,
+          [fieldName]: newHours
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', employeeId)
+
+    if (updateError) {
+      console.error('휴가 데이터 업데이트 오류:', updateError)
+      return NextResponse.json({ 
+        success: false, 
+        error: '휴가 데이터 업데이트에 실패했습니다.' 
+      }, { status: 500 })
+    }
 
     const leaveTypeName = leaveType === 'substitute' ? '대체휴가' : '보상휴가'
 

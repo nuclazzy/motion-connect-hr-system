@@ -46,5 +46,16 @@ export async function POST(request: Request) {
   const { password_hash, password: _, ...userWithoutPassword } = user
 
   console.log('✅ 로그인 성공:', userWithoutPassword.name)
-  return NextResponse.json({ success: true, user: userWithoutPassword })
+  
+  // 쿠키에 사용자 ID 저장 (세션 생성)
+  const response = NextResponse.json({ success: true, user: userWithoutPassword })
+  response.cookies.set('motion-connect-user-id', user.id, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 60 * 60 * 24 * 7, // 7일
+    path: '/'
+  })
+  
+  return response
 }

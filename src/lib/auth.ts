@@ -51,11 +51,7 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
       }
     }
 
-    // 로그인 성공 시, localStorage에 사용자 정보 저장
-    if (result.success && result.user) {
-      saveUserSession(result.user)
-    }
-
+    // 로그인 성공 시, 쿠키 기반 세션 사용 (localStorage 제거)
     return result
     
   } catch (error) {
@@ -68,17 +64,25 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
 }
 
 /**
- * 현재 로그인된 사용자 정보 조회
+ * 현재 로그인된 사용자 정보 조회 (서버에서 세션 확인)
  */
-export function getCurrentUser(): User | null {
-  if (typeof window === 'undefined') {
+export async function getCurrentUser(): Promise<User | null> {
+  try {
+    const response = await fetch('/api/auth/me', {
+      method: 'GET',
+      credentials: 'include', // 쿠키 포함
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const result = await response.json()
+    return result.user || null
+  } catch (error) {
+    console.error('getCurrentUser error:', error)
     return null
   }
-  const userString = localStorage.getItem('motion-connect-user')
-  if (!userString) {
-    return null
-  }
-  return JSON.parse(userString)
 }
 
 /**
@@ -88,23 +92,9 @@ export async function logoutUser() {
   // API를 호출하여 서버 세션(쿠키) 지우기
   await fetch('/api/auth/logout', { method: 'POST' })
 
-  // 로컬 스토리지 비우기
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem('motion-connect-user')
-  }
-
   // 로그인 페이지로 리디렉션
   if (typeof window !== 'undefined') {
     window.location.href = '/auth/login'
-  }
-}
-
-/**
- * 사용자 세션 저장
- */
-export function saveUserSession(user: User): void {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('motion-connect-user', JSON.stringify(user))
   }
 }
 
@@ -140,11 +130,6 @@ export async function updateUserProfile(userId: string, updateData: { phone?: st
     const result = await response.json()
 
     if (result.success && result.user) {
-      // localStorage의 사용자 정보도 업데이트
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('motion-connect-user', JSON.stringify(result.user))
-      }
-      
       return {
         success: true,
         user: result.user
