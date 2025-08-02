@@ -95,9 +95,9 @@ export default function UserDashboard() {
     return null
   }
 
-  // 현재 월이 1월 또는 7월인지 확인 (반기 리뷰)
+  // 현재 월이 1-2월 또는 7-8월인지 확인 (반기 리뷰)
   const currentMonth = new Date().getMonth() + 1
-  const isReviewSeason = currentMonth === 1 || currentMonth === 7
+  const isReviewSeason = (currentMonth >= 1 && currentMonth <= 2) || (currentMonth >= 7 && currentMonth <= 8)
 
   // 팀장인지 확인
   const isTeamLeader = user.position.includes('팀장') || user.position.includes('대표')
@@ -265,7 +265,7 @@ export default function UserDashboard() {
                           반기 리뷰
                         </dt>
                         <dd className="text-lg font-medium text-orange-900">
-                          {currentMonth === 1 ? '상반기' : '하반기'} 리뷰 시즌
+                          {(currentMonth >= 1 && currentMonth <= 2) ? '상반기' : '하반기'} 리뷰 시즌
                         </dd>
                       </dl>
                     </div>
@@ -302,7 +302,7 @@ export default function UserDashboard() {
                           반기 리뷰
                         </dt>
                         <dd className="text-lg font-medium text-gray-900">
-                          {currentMonth === 1 ? '상반기' : '하반기'} 리뷰 시즌
+                          {(currentMonth >= 1 && currentMonth <= 2) ? '상반기' : '하반기'} 리뷰 시즌
                         </dd>
                       </dl>
                     </div>

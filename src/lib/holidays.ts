@@ -68,9 +68,12 @@ export const isHolidaySync = (dateString: string): string | undefined => {
   return holidayCache[dateString]
 }
 
-// 날짜를 YYYY-MM-DD 형식으로 변환
+// 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 해결)
 export const formatDateForHoliday = (date: Date): string => {
-  return date.toISOString().split('T')[0]
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 // 공휴일인지 확인하고 공휴일 이름 반환 (비동기)

@@ -169,8 +169,34 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
   }
 
   const getEventsForDate = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
-    return calendarEvents.filter(event => (event.start || '').startsWith(dateStr))
+    // 로컬 날짜를 YYYY-MM-DD 형식으로 변환 (타임존 문제 해결)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const localDateStr = `${year}-${month}-${day}`
+    
+    return calendarEvents.filter(event => {
+      if (!event.start || !event.end) return false
+      
+      // 이벤트 시작일과 종료일 추출
+      const eventStartDate = event.start.split('T')[0]
+      const eventEndDate = event.end.split('T')[0]
+      
+      // 종일 이벤트의 경우 Google Calendar는 종료일을 하루 뒤로 설정하므로 하루 빼기
+      let actualEndDate = eventEndDate
+      if (!event.start.includes('T') && !event.end.includes('T')) {
+        // 종일 이벤트인 경우
+        const endDateObj = new Date(eventEndDate)
+        endDateObj.setDate(endDateObj.getDate() - 1)
+        const endYear = endDateObj.getFullYear()
+        const endMonth = String(endDateObj.getMonth() + 1).padStart(2, '0')
+        const endDay = String(endDateObj.getDate()).padStart(2, '0')
+        actualEndDate = `${endYear}-${endMonth}-${endDay}`
+      }
+      
+      // 현재 날짜가 이벤트 기간 내에 있는지 확인
+      return localDateStr >= eventStartDate && localDateStr <= actualEndDate
+    })
   }
 
   const navigateWeek = (direction: 'prev' | 'next') => {

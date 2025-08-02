@@ -32,6 +32,8 @@ export default function AdminEmployeeManagement() {
   const [submitting, setSubmitting] = useState(false)
   const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'management'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState<string>('')
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
@@ -118,7 +120,42 @@ export default function AdminEmployeeManagement() {
     }
   }
 
-  const handleLeaveAdjustment = async (leaveType: string, amount: number) => {
+  const handleFieldEdit = (fieldKey: string, currentValue: number) => {
+    setEditingField(fieldKey)
+    setEditValue(currentValue.toString())
+  }
+
+  const handleFieldSave = async (fieldKey: string, leaveType: string, adjustmentType: 'granted' | 'used') => {
+    const newValue = parseFloat(editValue)
+    if (isNaN(newValue) || newValue < 0) {
+      alert('유효한 숫자를 입력해주세요 (0 이상)')
+      return
+    }
+
+    if (!selectedEmployee) return
+
+    // 현재 값과 새 값의 차이 계산
+    const currentData = (selectedEmployee as any)?.leave_data || {}
+    const targetField = leaveType === 'annual_leave' 
+      ? (adjustmentType === 'granted' ? 'annual_days' : 'used_annual_days')
+      : (adjustmentType === 'granted' ? 'sick_days' : 'used_sick_days')
+    
+    const currentValue = currentData[targetField] || 0
+    const difference = newValue - currentValue
+
+    // 직접 값 설정이므로 차이값을 이용해 조정
+    await handleLeaveAdjustment(leaveType, adjustmentType, difference)
+    
+    setEditingField(null)
+    setEditValue('')
+  }
+
+  const handleFieldCancel = () => {
+    setEditingField(null)
+    setEditValue('')
+  }
+
+  const handleLeaveAdjustment = async (leaveType: string, adjustmentType: 'granted' | 'used', amount: number) => {
     if (!selectedEmployee) return
 
     setSubmitting(true)
@@ -128,7 +165,7 @@ export default function AdminEmployeeManagement() {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/adjust-leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ leaveType, amount }),
+        body: JSON.stringify({ leaveType, adjustmentType, amount }),
       })
 
       if (!response.ok) {
@@ -329,108 +366,200 @@ export default function AdminEmployeeManagement() {
               {activeTab === 'leave' && (
                 <div className="space-y-6">
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-4">현재 휴가 잔여 현황</h4>
+                    <h4 className="font-medium text-gray-900 mb-4">현재 휴가 현황</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="bg-white p-3 rounded border">
                         <div className="text-sm text-gray-600">연차</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.annual_leave || 0}일</div>
+                        <div className="text-lg font-semibold">{selectedEmployee.annual_leave || 0}일 잔여</div>
+                        {/* Leave data에서 실제 값 계산 필요 */}
                         <div className="text-xs text-gray-500 mt-1">
-                          (사용: {(15 - (selectedEmployee.annual_leave || 0))}일 / 전체: 15일)
+                          총 지급: {(selectedEmployee as any)?.leave_data?.annual_days || 0}일 / 사용: {(selectedEmployee as any)?.leave_data?.used_annual_days || 0}일
                         </div>
                       </div>
                       <div className="bg-white p-3 rounded border">
                         <div className="text-sm text-gray-600">병가</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.sick_leave || 0}일</div>
+                        <div className="text-lg font-semibold">{selectedEmployee.sick_leave || 0}일 잔여</div>
                         <div className="text-xs text-gray-500 mt-1">
-                          (사용: {(60 - (selectedEmployee.sick_leave || 0))}일 / 전체: 60일)
+                          총 지급: {(selectedEmployee as any)?.leave_data?.sick_days || 0}일 / 사용: {(selectedEmployee as any)?.leave_data?.used_sick_days || 0}일
                         </div>
                       </div>
                       <div className="bg-white p-3 rounded border">
                         <div className="text-sm text-gray-600">대체휴가</div>
                         <div className="text-lg font-semibold">{selectedEmployee.substitute_leave_hours || 0}시간</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {selectedEmployee.is_active ? '재직중' : '퇴사'}
+                        </div>
                       </div>
                       <div className="bg-white p-3 rounded border">
                         <div className="text-sm text-gray-600">보상휴가</div>
                         <div className="text-lg font-semibold">{selectedEmployee.compensatory_leave_hours || 0}시간</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {selectedEmployee.resignation_date ? `퇴사일: ${selectedEmployee.resignation_date}` : '재직중'}
+                        </div>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <h4 className="font-medium text-gray-900">휴가 일수 조정</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">연차 조정</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            placeholder="일수 (예: 5, -2.5)"
-                            className="flex-1 border-gray-300 rounded-md shadow-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const input = e.target as HTMLInputElement
-                                const amount = parseFloat(input.value)
-                                if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('annual_leave', amount)
-                                  input.value = ''
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                              const amount = parseFloat(input.value)
-                              if (!isNaN(amount)) {
-                                handleLeaveAdjustment('annual_leave', amount)
-                                input.value = ''
-                              }
-                            }}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                          >
-                            조정
-                          </button>
+                    <div className="space-y-6">
+                      {/* 연차 조정 */}
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">연차 조정</h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">지급 일수 조정</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.5"
+                                placeholder="일수 (예: 5, -2.5)"
+                                className="flex-1 border-gray-300 rounded-md shadow-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const input = e.target as HTMLInputElement
+                                    const amount = parseFloat(input.value)
+                                    if (!isNaN(amount)) {
+                                      handleLeaveAdjustment('annual_leave', 'granted', amount)
+                                      input.value = ''
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
+                                  const amount = parseFloat(input.value)
+                                  if (!isNaN(amount)) {
+                                    handleLeaveAdjustment('annual_leave', 'granted', amount)
+                                    input.value = ''
+                                  }
+                                }}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                              >
+                                조정
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">사용 일수 조정</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.5"
+                                placeholder="일수 (예: 5, -2.5)"
+                                className="flex-1 border-gray-300 rounded-md shadow-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const input = e.target as HTMLInputElement
+                                    const amount = parseFloat(input.value)
+                                    if (!isNaN(amount)) {
+                                      handleLeaveAdjustment('annual_leave', 'used', amount)
+                                      input.value = ''
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
+                                  const amount = parseFloat(input.value)
+                                  if (!isNaN(amount)) {
+                                    handleLeaveAdjustment('annual_leave', 'used', amount)
+                                    input.value = ''
+                                  }
+                                }}
+                                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                              >
+                                조정
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">병가 조정</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            placeholder="일수 (예: 5, -2.5)"
-                            className="flex-1 border-gray-300 rounded-md shadow-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const input = e.target as HTMLInputElement
-                                const amount = parseFloat(input.value)
-                                if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('sick_leave', amount)
-                                  input.value = ''
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                              const amount = parseFloat(input.value)
-                              if (!isNaN(amount)) {
-                                handleLeaveAdjustment('sick_leave', amount)
-                                input.value = ''
-                              }
-                            }}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                          >
-                            조정
-                          </button>
+
+                      {/* 병가 조정 */}
+                      <div className="bg-red-50 p-4 rounded-lg">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">병가 조정</h5>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">지급 일수 조정</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.5"
+                                placeholder="일수 (예: 5, -2.5)"
+                                className="flex-1 border-gray-300 rounded-md shadow-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const input = e.target as HTMLInputElement
+                                    const amount = parseFloat(input.value)
+                                    if (!isNaN(amount)) {
+                                      handleLeaveAdjustment('sick_leave', 'granted', amount)
+                                      input.value = ''
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
+                                  const amount = parseFloat(input.value)
+                                  if (!isNaN(amount)) {
+                                    handleLeaveAdjustment('sick_leave', 'granted', amount)
+                                    input.value = ''
+                                  }
+                                }}
+                                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                              >
+                                조정
+                              </button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">사용 일수 조정</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="number"
+                                step="0.5"
+                                placeholder="일수 (예: 5, -2.5)"
+                                className="flex-1 border-gray-300 rounded-md shadow-sm"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const input = e.target as HTMLInputElement
+                                    const amount = parseFloat(input.value)
+                                    if (!isNaN(amount)) {
+                                      handleLeaveAdjustment('sick_leave', 'used', amount)
+                                      input.value = ''
+                                    }
+                                  }
+                                }}
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
+                                  const amount = parseFloat(input.value)
+                                  if (!isNaN(amount)) {
+                                    handleLeaveAdjustment('sick_leave', 'used', amount)
+                                    input.value = ''
+                                  }
+                                }}
+                                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                              >
+                                조정
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">대체휴가 조정 (시간)</label>
+
+                      {/* 대체휴가 조정 */}
+                      <div className="bg-purple-50 p-4 rounded-lg">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">대체휴가 조정 (시간)</h5>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -442,7 +571,7 @@ export default function AdminEmployeeManagement() {
                                 const input = e.target as HTMLInputElement
                                 const amount = parseFloat(input.value)
                                 if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('substitute_leave_hours', amount)
+                                  handleLeaveAdjustment('substitute_leave_hours', 'granted', amount)
                                   input.value = ''
                                 }
                               }
@@ -454,18 +583,20 @@ export default function AdminEmployeeManagement() {
                               const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
                               const amount = parseFloat(input.value)
                               if (!isNaN(amount)) {
-                                handleLeaveAdjustment('substitute_leave_hours', amount)
+                                handleLeaveAdjustment('substitute_leave_hours', 'granted', amount)
                                 input.value = ''
                               }
                             }}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
                           >
                             조정
                           </button>
                         </div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">보상휴가 조정 (시간)</label>
+
+                      {/* 보상휴가 조정 */}
+                      <div className="bg-orange-50 p-4 rounded-lg">
+                        <h5 className="text-sm font-medium text-gray-900 mb-3">보상휴가 조정 (시간)</h5>
                         <div className="flex gap-2">
                           <input
                             type="number"
@@ -477,7 +608,7 @@ export default function AdminEmployeeManagement() {
                                 const input = e.target as HTMLInputElement
                                 const amount = parseFloat(input.value)
                                 if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('compensatory_leave_hours', amount)
+                                  handleLeaveAdjustment('compensatory_leave_hours', 'granted', amount)
                                   input.value = ''
                                 }
                               }
@@ -489,11 +620,11 @@ export default function AdminEmployeeManagement() {
                               const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
                               const amount = parseFloat(input.value)
                               if (!isNaN(amount)) {
-                                handleLeaveAdjustment('compensatory_leave_hours', amount)
+                                handleLeaveAdjustment('compensatory_leave_hours', 'granted', amount)
                                 input.value = ''
                               }
                             }}
-                            className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            className="px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
                           >
                             조정
                           </button>

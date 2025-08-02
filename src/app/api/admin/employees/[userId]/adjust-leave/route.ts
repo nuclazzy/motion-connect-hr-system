@@ -11,15 +11,23 @@ export async function POST(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
-    const { leaveType, amount } = await request.json()
+    const { leaveType, adjustmentType, amount } = await request.json()
     const { userId } = await params
     const employeeId = userId
 
-    console.log('🔧 휴가 일수 조정 요청:', { employeeId, leaveType, amount })
+    console.log('🔧 휴가 일수 조정 요청:', { employeeId, leaveType, adjustmentType, amount })
 
     if (!leaveType || typeof amount !== 'number') {
       return NextResponse.json(
         { error: '휴가 유형과 조정 일수가 필요합니다.' },
+        { status: 400 }
+      )
+    }
+
+    // adjustmentType 유효성 검사 (연차/병가의 경우)
+    if (['annual_leave', 'sick_leave'].includes(leaveType) && adjustmentType && !['granted', 'used'].includes(adjustmentType)) {
+      return NextResponse.json(
+        { error: '조정 유형은 granted 또는 used여야 합니다.' },
         { status: 400 }
       )
     }
@@ -48,22 +56,51 @@ export async function POST(
       )
     }
 
-    // 현재 값 조회 및 새 값 계산
-    const currentValue = userLeaveData.leave_types[leaveType] || 0
-    const newValue = currentValue + amount
+    // 조정 로직 분기
+    let updatedLeaveTypes = { ...userLeaveData.leave_types }
+    let adjustmentDetails = {}
 
-    // 음수 방지 (휴가 일수/시간은 0 이하로 내려갈 수 없음)
-    if (newValue < 0) {
-      return NextResponse.json(
-        { error: `휴가 잔여량이 부족합니다. 현재: ${currentValue}, 조정 요청: ${amount}` },
-        { status: 400 }
-      )
-    }
-
-    // Supabase 데이터 업데이트
-    const updatedLeaveTypes = {
-      ...userLeaveData.leave_types,
-      [leaveType]: newValue
+    if (['annual_leave', 'sick_leave'].includes(leaveType) && adjustmentType) {
+      // 연차/병가의 경우 granted 또는 used 별도 조정
+      const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
+      const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
+      
+      const currentValue = updatedLeaveTypes[targetField] || 0
+      const newValue = currentValue + amount
+      
+      // 음수 방지
+      if (newValue < 0) {
+        return NextResponse.json(
+          { error: `${targetField} 값이 음수가 될 수 없습니다. 현재: ${currentValue}, 조정 요청: ${amount}` },
+          { status: 400 }
+        )
+      }
+      
+      updatedLeaveTypes[targetField] = newValue
+      adjustmentDetails = {
+        field: targetField,
+        previousValue: currentValue,
+        newValue
+      }
+    } else {
+      // 대체휴가/보상휴가의 경우 기존 로직 유지
+      const currentValue = userLeaveData.leave_types[leaveType] || 0
+      const newValue = currentValue + amount
+      
+      // 음수 방지
+      if (newValue < 0) {
+        return NextResponse.json(
+          { error: `휴가 잔여량이 부족합니다. 현재: ${currentValue}, 조정 요청: ${amount}` },
+          { status: 400 }
+        )
+      }
+      
+      updatedLeaveTypes[leaveType] = newValue
+      adjustmentDetails = {
+        field: leaveType,
+        previousValue: currentValue,
+        newValue
+      }
     }
     
     const { error: updateError } = await supabase
@@ -82,9 +119,9 @@ export async function POST(
     console.log('✅ 휴가 일수 조정 완료:', {
       employeeId,
       leaveType,
-      before: currentValue,
-      adjustment: amount,
-      after: newValue
+      adjustmentType,
+      adjustmentDetails,
+      adjustment: amount
     })
 
     return NextResponse.json({
@@ -92,9 +129,9 @@ export async function POST(
       message: '휴가 일수가 성공적으로 조정되었습니다.',
       data: {
         leaveType,
-        previousValue: currentValue,
+        adjustmentType,
         adjustment: amount,
-        newValue
+        ...adjustmentDetails
       }
     })
 
