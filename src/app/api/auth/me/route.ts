@@ -1,22 +1,22 @@
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // Supabase 세션에서 현재 사용자 확인
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
     }
 
+    const userId = authorization.replace('Bearer ', '')
+    const serviceRoleSupabase = await createServiceRoleClient()
+
     // Supabase에서 사용자 정보 조회
-    const { data: user, error: userError } = await supabase
+    const { data: user, error: userError } = await serviceRoleSupabase
       .from('users')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single()
 
     if (userError || !user) {

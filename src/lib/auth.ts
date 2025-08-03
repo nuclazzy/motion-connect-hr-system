@@ -30,10 +30,11 @@ export interface AuthResult {
 }
 
 /**
- * 사용자 로그인 (API Route 사용)
+ * 사용자 로그인 (localStorage 기반)
  */
 export async function loginUser(credentials: LoginCredentials): Promise<AuthResult> {
- try {
+  try {
+    // API를 통해 비밀번호 검증 및 사용자 정보 조회
     const response = await fetch('/api/auth/login', {
       method: 'POST',
       headers: {
@@ -51,7 +52,12 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
       }
     }
 
-    // 로그인 성공 시, 쿠키 기반 세션 사용 (localStorage 제거)
+    // 로그인 성공 시 localStorage에 사용자 정보 저장
+    if (result.success && result.user) {
+      localStorage.setItem('motion-connect-user', JSON.stringify(result.user))
+      console.log('✅ localStorage에 사용자 정보 저장:', result.user.name)
+    }
+
     return result
     
   } catch (error) {
@@ -64,21 +70,40 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
 }
 
 /**
- * 현재 로그인된 사용자 정보 조회 (서버에서 세션 확인)
+ * 현재 로그인된 사용자 정보 조회 (localStorage + API 검증)
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const response = await fetch('/api/auth/me', {
-      method: 'GET',
-      credentials: 'include', // 쿠키 포함
-    })
-
-    if (!response.ok) {
+    // localStorage에서 사용자 정보 조회
+    const userStr = localStorage.getItem('motion-connect-user')
+    if (!userStr) {
       return null
     }
-
-    const result = await response.json()
-    return result.user || null
+    
+    const user = JSON.parse(userStr)
+    
+    // 선택적으로 서버에서 최신 정보 가져오기 (API 호출)
+    try {
+      const response = await fetch('/api/auth/me', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${user.id}`
+        }
+      })
+      
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success && result.user) {
+          // localStorage 업데이트
+          localStorage.setItem('motion-connect-user', JSON.stringify(result.user))
+          return result.user
+        }
+      }
+    } catch (apiError) {
+      console.log('API 호출 실패, localStorage 데이터 사용:', apiError)
+    }
+    
+    return user
   } catch (error) {
     console.error('getCurrentUser error:', error)
     return null
@@ -86,15 +111,20 @@ export async function getCurrentUser(): Promise<User | null> {
 }
 
 /**
- * 사용자 로그아웃
+ * 사용자 로그아웃 (localStorage 기반)
  */
 export async function logoutUser() {
-  // API를 호출하여 서버 세션(쿠키) 지우기
-  await fetch('/api/auth/logout', { method: 'POST' })
-
-  // 로그인 페이지로 리디렉션
-  if (typeof window !== 'undefined') {
-    window.location.href = '/auth/login'
+  try {
+    // localStorage에서 사용자 정보 제거
+    localStorage.removeItem('motion-connect-user')
+    console.log('✅ localStorage에서 사용자 정보 제거')
+    
+    // 로그인 페이지로 리디렉션
+    if (typeof window !== 'undefined') {
+      window.location.href = '/auth/login'
+    }
+  } catch (error) {
+    console.error('Logout error:', error)
   }
 }
 

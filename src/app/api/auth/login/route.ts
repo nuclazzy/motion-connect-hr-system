@@ -1,4 +1,4 @@
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 
@@ -8,10 +8,9 @@ export async function POST(request: Request) {
 
     console.log('🔐 로그인 시도:', { email, password: '***' })
 
-    const supabase = await createClient()
     const serviceRoleSupabase = await createServiceRoleClient()
 
-    // public.users 테이블에서 사용자 조회 (Service Role 사용)
+    // public.users 테이블에서 사용자 조회
     const { data: user, error: userError } = await serviceRoleSupabase
       .from('users')
       .select('*')
@@ -39,38 +38,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
     }
 
-    // Supabase Auth에 사용자 로그인 세션 생성
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password
-    })
-
-    if (authError) {
-      // Supabase Auth에 사용자가 없는 경우, 먼저 생성
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-          data: {
-            name: user.name,
-            role: user.role
-          }
-        }
-      })
-
-      if (signUpError) {
-        console.error('❌ Supabase Auth 사용자 생성 실패:', signUpError)
-        return NextResponse.json({ error: '로그인 처리 중 오류가 발생했습니다.' }, { status: 500 })
-      }
-
-      console.log('✅ Supabase Auth 사용자 생성 및 로그인 성공:', user.name)
-    } else {
-      console.log('✅ Supabase Auth 로그인 성공:', user.name)
-    }
-
     // 비밀번호 필드 제거
     const { password_hash, password: _, ...userWithoutPassword } = user
 
+    console.log('✅ 로그인 성공:', user.name)
+    
     return NextResponse.json({ success: true, user: userWithoutPassword })
 
   } catch (error) {

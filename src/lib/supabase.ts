@@ -6,14 +6,9 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 // 클라이언트용 Supabase 클라이언트
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false
-  },
-  global: {
-    headers: {
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    }
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
   }
 })
 
