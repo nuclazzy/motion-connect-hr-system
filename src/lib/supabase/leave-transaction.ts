@@ -11,6 +11,12 @@ export async function submitLeaveRequestWithTransaction(
   formType: string,
   requestData: any
 ) {
+  // 개발환경에서는 강제로 fallback 사용 (함수가 없는 경우가 많음)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔧 개발환경에서 fallback 직접 사용')
+    return await submitLeaveRequestFallback(supabase, userId, formType, requestData)
+  }
+
   // PostgreSQL 함수를 우선 시도, 실패하면 fallback 사용
   const { data, error } = await supabase.rpc('submit_leave_request_safe', {
     p_user_id: userId,
@@ -18,8 +24,13 @@ export async function submitLeaveRequestWithTransaction(
     p_request_data: requestData
   })
 
-  // 함수가 없으면 직접 처리
-  if (error && error.message.includes('function') && error.message.includes('not found')) {
+  // 함수가 없으면 직접 처리 (여러 에러 패턴 감지)
+  if (error && (
+    error.message.includes('function') ||
+    error.message.includes('not found') ||
+    error.message.includes('schema cache') ||
+    error.code === 'PGRST202'
+  )) {
     console.log('⚠️ Supabase 함수를 찾을 수 없어 직접 처리합니다:', error.message)
     return await submitLeaveRequestFallback(supabase, userId, formType, requestData)
   }
@@ -93,34 +104,70 @@ async function submitLeaveRequestFallback(
 
     const leaveTypes = leaveData.leave_types || {}
 
+    console.log('🔍 전체 휴가 데이터 확인:', {
+      userId,
+      leaveData,
+      leaveTypes,
+      formType,
+      leaveType
+    })
+
     // 시간 단위 휴가 처리 (대체휴가, 보상휴가)
     if (leaveType === '대체휴가' || leaveType === '보상휴가') {
       const hoursToDeduct = daysToDeduct * 8
       const fieldName = leaveType === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
+      
+      // 여러 방법으로 값 확인
       const availableHours = leaveTypes[fieldName] || 0
-
-      console.log(`🔍 ${leaveType} 검증:`, {
+      const rawValue = leaveTypes[fieldName]
+      
+      console.log(`🔍 ${leaveType} 상세 검증:`, {
         fieldName,
+        rawValue,
         availableHours,
         hoursToDeduct,
         daysToDeduct,
-        leaveTypes
+        hasProperty: leaveTypes.hasOwnProperty(fieldName),
+        typeOfValue: typeof rawValue,
+        leaveTypesKeys: Object.keys(leaveTypes),
+        fullLeaveTypes: leaveTypes
       })
 
       // 필드가 존재하지 않는 경우
       if (!leaveTypes.hasOwnProperty(fieldName)) {
+        console.error(`❌ ${leaveType} 필드 누락:`, fieldName)
         return {
           success: false,
-          error: `${leaveType} 데이터가 초기화되지 않았습니다. 관리자에게 문의하여 휴가 데이터를 초기화해주세요.`
+          error: `${leaveType} 데이터가 초기화되지 않았습니다. 관리자가 [시간 단위 휴가 지급] 기능으로 먼저 시간을 지급해주세요.`
         }
       }
 
-      if (availableHours < hoursToDeduct) {
+      // null, undefined, NaN 체크
+      if (rawValue === null || rawValue === undefined || isNaN(Number(rawValue))) {
+        console.error(`❌ ${leaveType} 값이 유효하지 않음:`, rawValue)
         return {
           success: false,
-          error: `잔여 ${leaveType}가 부족합니다. (잔여: ${availableHours}시간, 필요: ${hoursToDeduct}시간)`
+          error: `${leaveType} 값이 올바르지 않습니다. 관리자에게 문의해주세요. (현재값: ${rawValue})`
         }
       }
+
+      const numericHours = Number(availableHours)
+      if (numericHours < hoursToDeduct) {
+        console.error(`❌ ${leaveType} 부족:`, { 
+          available: numericHours, 
+          required: hoursToDeduct 
+        })
+        return {
+          success: false,
+          error: `잔여 ${leaveType}가 부족합니다. (잔여: ${numericHours}시간, 필요: ${hoursToDeduct}시간)`
+        }
+      }
+
+      console.log(`✅ ${leaveType} 검증 통과:`, {
+        available: numericHours,
+        required: hoursToDeduct,
+        remaining: numericHours - hoursToDeduct
+      })
     } else {
       // 일반 휴가 처리 (연차, 병가)
       let leaveTypeKey = 'annual_days'
@@ -183,8 +230,13 @@ export async function approveLeaveRequestWithTransaction(
     p_admin_note: adminNote
   })
 
-  // 함수가 없으면 직접 처리
-  if (error && error.message.includes('function') && error.message.includes('not found')) {
+  // 함수가 없으면 직접 처리 (여러 에러 패턴 감지)
+  if (error && (
+    error.message.includes('function') ||
+    error.message.includes('not found') ||
+    error.message.includes('schema cache') ||
+    error.code === 'PGRST202'
+  )) {
     console.log('⚠️ Supabase 승인 함수를 찾을 수 없어 직접 처리합니다:', error.message)
     return await approveLeaveRequestFallback(supabase, requestId, adminUserId, adminNote)
   }
