@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function PATCH(
   request: NextRequest, 
@@ -26,9 +21,13 @@ export async function PATCH(
       )
     }
     
-    // 권한 확인을 위해 요청한 사용자 확인
-    const userId = request.cookies.get('motion-connect-user-id')?.value
-    if (!userId) {
+    const supabase = await createClient()
+    const serviceRoleSupabase = await createServiceRoleClient()
+
+    // Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -36,20 +35,20 @@ export async function PATCH(
     const { data: userProfile, error: userError } = await supabase
       .from('users')
       .select('role')
-      .eq('id', userId)
+      .eq('id', session.user.id)
       .single()
 
     if (userError || userProfile?.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
     }
 
-    // 실제 데이터베이스 업데이트
-    const { error: updateError } = await supabase
+    // 실제 데이터베이스 업데이트 (Service Role 사용)
+    const { error: updateError } = await serviceRoleSupabase
       .from('form_requests')
       .update({ 
         status: finalAction, 
         processed_at: new Date().toISOString(),
-        processed_by: userId,
+        processed_by: session.user.id,
         admin_notes: adminNotes || null
       })
       .eq('id', requestId)

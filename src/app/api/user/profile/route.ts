@@ -1,35 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-// 런타임에 Supabase 클라이언트 생성
-function getAuthSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error(`Missing environment variables: URL=${!!supabaseUrl}, KEY=${!!supabaseServiceKey}`)
-  }
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  })
-}
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId, phone, dob, address } = await request.json()
+    const { phone, dob, address } = await request.json()
 
-    if (!userId) {
+    const supabase = await createClient()
+    const serviceRoleSupabase = await createServiceRoleClient()
+
+    // Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
       return NextResponse.json(
-        { success: false, error: '사용자 ID가 필요합니다.' },
-        { status: 400 }
+        { success: false, error: '인증이 필요합니다.' },
+        { status: 401 }
       )
     }
 
-    const authSupabase = getAuthSupabase()
+    const userId = session.user.id
 
     // 직원이 수정 가능한 필드만 업데이트
     const updateData = {
@@ -38,8 +27,8 @@ export async function PUT(request: NextRequest) {
       address: address || null
     }
 
-    // 사용자 정보 업데이트
-    const { data: updatedUser, error: updateError } = await authSupabase
+    // 사용자 정보 업데이트 (Service Role 사용)
+    const { data: updatedUser, error: updateError } = await serviceRoleSupabase
       .from('users')
       .update(updateData)
       .eq('id', userId)

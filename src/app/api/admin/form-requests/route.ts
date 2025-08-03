@@ -1,32 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  // 1. 쿠키에서 사용자 확인
-  const userId = request.cookies.get('motion-connect-user-id')?.value
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try {
+    const supabase = await createClient()
 
-  // 2. 사용자 정보 및 권한 확인
-  const { data: userProfile, error: userError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', userId)
-    .single()
+    // 1. Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  if (userError || userProfile?.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
-  }
+    // 2. 사용자 정보 및 권한 확인
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
 
-  // 2. Fetch all form requests with user info
-  const { searchParams } = new URL(request.url)
-  const filter = searchParams.get('filter')
+    if (userError || userProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
+    }
+
+    // 3. Fetch all form requests with user info
+    const { searchParams } = new URL(request.url)
+    const filter = searchParams.get('filter')
 
   console.log('🔍 관리자 서식 신청 내역 조회:', { filter })
 
@@ -59,7 +58,11 @@ export async function GET(request: NextRequest) {
     }
   })) || []
 
-  console.log('✅ 관리자 서식 신청 내역 조회 완료:', formattedRequests.length, '건')
+    console.log('✅ 관리자 서식 신청 내역 조회 완료:', formattedRequests.length, '건')
 
-  return NextResponse.json({ success: true, requests: formattedRequests })
+    return NextResponse.json({ success: true, requests: formattedRequests })
+  } catch (error) {
+    console.error('서식 신청 내역 조회 오류:', error)
+    return NextResponse.json({ error: '서식 신청 내역 조회 중 오류가 발생했습니다.' }, { status: 500 })
+  }
 }

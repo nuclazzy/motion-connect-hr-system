@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 
 // Helper function to calculate leave days
 function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -26,14 +21,17 @@ export async function POST(request: NextRequest) {
   try {
     const { formType, requestData } = await request.json()
 
-    // 로컬 테스트용 가짜 인증 (localStorage에서 사용자 정보 가져올 것으로 가정)
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
+    const supabase = await createClient()
+    const serviceRoleSupabase = await createServiceRoleClient()
+
+    // Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // authHeader에서 userId 파싱 (Bearer userId 형식)
-    const userId = authHeader.replace('Bearer ', '')
+    const userId = session.user.id
     
     console.log('🔍 추출된 userId:', userId)
 
@@ -44,7 +42,7 @@ export async function POST(request: NextRequest) {
       console.log('🔍 Supabase 휴가 데이터 조회:', userId)
       
       // Supabase에서 휴가 데이터 조회
-      const { data: userLeaveData, error: leaveError } = await supabase
+      const { data: userLeaveData, error: leaveError } = await serviceRoleSupabase
         .from('leave_days')
         .select('leave_types')
         .eq('user_id', userId)
@@ -104,8 +102,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Supabase에 신청 저장
-    const { data: newRequest, error: saveError } = await supabase
+    // Supabase에 신청 저장 (Service Role 사용)
+    const { data: newRequest, error: saveError } = await serviceRoleSupabase
       .from('form_requests')
       .insert({
         user_id: userId,

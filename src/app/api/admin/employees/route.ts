@@ -1,34 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
-  // 1. 쿠키에서 사용자 확인
-  const userId = request.cookies.get('motion-connect-user-id')?.value
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  try {
+    const supabase = await createClient()
 
-  // 2. 사용자 정보 및 권한 확인
-  const { data: userProfile, error: userError } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', userId)
-    .single()
+    // 1. Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
-  if (userError || userProfile?.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
-  }
+    // 2. 사용자 정보 및 권한 확인
+    const { data: userProfile, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
 
-  // 2. Fetch all users
-  const { data: employees, error } = await supabase
+    if (userError || userProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
+    }
+
+    // 3. Fetch all users (입사일 기준으로 정렬 - 연차순)
+    const { data: employees, error } = await supabase
     .from('users')
     .select('*')
-    .order('name', { ascending: true })
+    .order('hire_date', { ascending: true })
 
   if (error) {
     console.error('Error fetching employees:', error)
@@ -62,7 +61,11 @@ export async function GET(request: NextRequest) {
     })
   )
 
-  console.log('👥 Supabase 직원 목록 조회 완료:', employeesWithLeaveData.length, '명')
+    console.log('👥 Supabase 직원 목록 조회 완료:', employeesWithLeaveData.length, '명')
 
-  return NextResponse.json({ success: true, employees: employeesWithLeaveData })
+    return NextResponse.json({ success: true, employees: employeesWithLeaveData })
+  } catch (error) {
+    console.error('직원 목록 조회 오류:', error)
+    return NextResponse.json({ error: '직원 목록 조회 중 오류가 발생했습니다.' }, { status: 500 })
+  }
 }

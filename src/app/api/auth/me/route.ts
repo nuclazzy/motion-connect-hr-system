@@ -1,17 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 
 export async function GET(request: NextRequest) {
   try {
-    // 쿠키에서 사용자 ID 가져오기
-    const userId = request.cookies.get('motion-connect-user-id')?.value
+    const supabase = await createClient()
 
-    if (!userId) {
+    // Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
       return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
     }
 
@@ -19,22 +16,12 @@ export async function GET(request: NextRequest) {
     const { data: user, error: userError } = await supabase
       .from('users')
       .select('*')
-      .eq('id', userId)
+      .eq('id', session.user.id)
       .single()
 
     if (userError || !user) {
       console.log('❌ 사용자 조회 실패:', userError)
-      // 잘못된 쿠키 제거
-      const response = NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 })
-      response.cookies.set('motion-connect-user-id', '', { 
-        httpOnly: true, 
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 0, // 즉시 만료
-        path: '/',
-        domain: process.env.NODE_ENV === 'production' ? '.motionsense.co.kr' : undefined
-      })
-      return response
+      return NextResponse.json({ error: '사용자를 찾을 수 없습니다.' }, { status: 404 })
     }
 
     // 비밀번호 필드 제거
