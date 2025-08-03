@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 
 // 관리자 전용 사용자 생성 API
 export async function POST(request: NextRequest) {
@@ -60,11 +61,15 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // 4. leave_days 테이블에 기본 휴가 데이터 생성
+    // 4. leave_days 테이블에 기본 휴가 데이터 생성 - 입사일 기준으로 계산
+    const calculatedAnnualDays = userData.hire_date ? 
+      calculateAnnualLeave(userData.hire_date) : 
+      15 // 입사일이 없으면 기본값 15일
+    
     const defaultLeaveTypes = {
-      annual_days: userData.role === 'admin' ? 20 : 15,
+      annual_days: calculatedAnnualDays,
       used_annual_days: 0,
-      sick_days: 60,
+      sick_days: 60, // 회사 정책에 따른 병가 기본값
       used_sick_days: 0,
       substitute_leave_hours: 0,
       compensatory_leave_hours: 0

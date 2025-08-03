@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
-// 로컬 테스트용 폼 템플릿 데이터
+/* 로컬 테스트용 폼 템플릿 데이터 - 사용 중단
 const LOCAL_FORM_TEMPLATES = [
   {
     id: 'template-leave',
@@ -97,13 +98,30 @@ const LOCAL_FORM_TEMPLATES = [
     ]
   }
 ]
+*/
 
 export async function GET() {
   try {
-    console.log('📋 로컬 폼 템플릿 조회');
+    console.log('📋 Supabase 폼 템플릿 조회 시작');
+    
+    const supabase = await createServiceRoleClient()
+    
+    // Supabase에서 활성화된 폼 템플릿만 조회
+    const { data: templates, error } = await supabase
+      .from('form_templates')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+
+    if (error) {
+      console.error('❌ 폼 템플릿 조회 실패:', error)
+      return NextResponse.json({ error: '폼 템플릿을 불러오는데 실패했습니다.' }, { status: 500 })
+    }
+
+    console.log('✅ Supabase 폼 템플릿 조회 완료:', templates?.length, '개')
 
     return NextResponse.json({ 
-      templates: LOCAL_FORM_TEMPLATES 
+      templates: templates || [] 
     })
   } catch (error) {
     console.error('Form templates API error:', error)
