@@ -176,9 +176,6 @@ export default function AdminEmployeeManagement() {
   const handleLeaveAdjustment = async (leaveType: string, adjustmentType: 'granted' | 'used', amount: number) => {
     if (!selectedEmployee) return
 
-    setSubmitting(true)
-    setError(null)
-
     try {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/adjust-leave`, {
         method: 'POST',
@@ -191,13 +188,40 @@ export default function AdminEmployeeManagement() {
         throw new Error(result.error || '휴가 일수 조정에 실패했습니다.')
       }
       
-      alert('휴가 일수가 성공적으로 조정되었습니다.')
-      // 직원 목록 새로고침 (선택된 직원도 자동 업데이트됨)
-      fetchEmployees()
+      // 로컬 상태 즉시 업데이트
+      const updatedEmployee = { ...selectedEmployee }
+      
+      if (['substitute_leave_hours', 'compensatory_leave_hours'].includes(leaveType)) {
+        // 대체휴가/보상휴가 업데이트
+        updatedEmployee[leaveType as keyof Employee] = (selectedEmployee[leaveType as keyof Employee] as number || 0) + amount
+      } else {
+        // 연차/병가 업데이트
+        const leaveData = (updatedEmployee as any).leave_data || {}
+        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
+        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
+        
+        leaveData[targetField] = (leaveData[targetField] || 0) + amount
+        
+        // 잔여 일수 재계산
+        if (leaveType === 'annual_leave') {
+          updatedEmployee.annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0)
+        } else {
+          updatedEmployee.sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0)
+        }
+        
+        (updatedEmployee as any).leave_data = leaveData
+      }
+      
+      // 직원 목록에서도 업데이트
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp)
+      )
+      setSelectedEmployee(updatedEmployee)
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : '휴가 일수 조정 중 오류가 발생했습니다.')
-    } finally {
-      setSubmitting(false)
+      // 오류 발생 시에만 새로고침
+      fetchEmployees()
     }
   }
 
