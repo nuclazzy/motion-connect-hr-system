@@ -151,8 +151,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   
   // 시간 단위 휴가 상태 계산 (관리자 대시보드와 동일한 방식으로 조회)
   // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 조회 (관리자 API와 동일한 로직)
-  const substituteHours = leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0
-  const compensatoryHours = leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0
+  const substituteHours = leaveData.substitute_leave_hours ?? leaveData.leave_types.substitute_leave_hours ?? 0
+  const compensatoryHours = leaveData.compensatory_leave_hours ?? leaveData.leave_types.compensatory_leave_hours ?? 0
   
   console.log('🔍 직원 대시보드 휴가 시간 확인 (관리자와 동일한 로직):', {
     userId: user.id,

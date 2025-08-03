@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
         updatedLeaveTypes.used_sick_days = currentUsed + daysToDeduct
         console.log('📊 병가 사용일수 업데이트:', currentUsed, '→', currentUsed + daysToDeduct)
         
-      } else if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
+      } else if (leaveType === '대체휴가' || leaveType === '대체휴가 반차' || leaveType?.includes('대체휴가')) {
         // 대체휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
         const currentHours = updatedLeaveTypes.substitute_leave_hours || 0
@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
           업데이트후: currentHours - hoursToDeduct
         })
         
-      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
+      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차' || leaveType?.includes('보상휴가')) {
         // 보상휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
         const currentHours = updatedLeaveTypes.compensatory_leave_hours || 0

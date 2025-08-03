@@ -372,19 +372,45 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     
     const leaveType = formData.휴가형태
     const days = parseFloat(formData.휴가일수 || '0')
+    
+    // 휴가 데이터가 로드되지 않은 경우 대기 요청
+    if (!leaveData) {
+      return '휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+    }
+    
     console.log('🔍 클라이언트 휴가 검증:', { 
       leaveType, 
       days, 
       시작일: formData.시작일, 
       종료일: formData.종료일,
       휴가일수: formData.휴가일수,
-      leaveData 
+      leaveData,
+      // 디버깅을 위한 상세 정보
+      substitute_separate: leaveData?.substitute_leave_hours,
+      substitute_json: leaveData?.leave_types?.substitute_leave_hours,
+      compensatory_separate: leaveData?.compensatory_leave_hours,
+      compensatory_json: leaveData?.leave_types?.compensatory_leave_hours
     })
     
-    if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
-      // 잔여 시간 확인 (시간을 일수로 변환)
-      const availableHours = leaveData?.substitute_leave_hours || leaveData?.leave_types?.substitute_leave_hours || 0
+    if (leaveType === '대체휴가' || leaveType === '대체휴가 반차' || leaveType?.includes('대체휴가')) {
+      // 잔여 시간 확인 (시간을 일수로 변환) - 별도 컬럼 우선, 없으면 JSON 필드
+      const availableHours = leaveData?.substitute_leave_hours ?? leaveData?.leave_types?.substitute_leave_hours ?? 0
       const availableDays = availableHours / 8 // 8시간 = 1일
+      
+      console.log('🔍 대체휴가 검증 상세:', {
+        leaveType,
+        days,
+        availableHours,
+        availableDays,
+        separate_field: leaveData?.substitute_leave_hours,
+        json_field: leaveData?.leave_types?.substitute_leave_hours,
+        leaveData_exists: !!leaveData
+      })
+      
+      // 휴가 데이터가 로드되지 않은 경우
+      if (!leaveData) {
+        return '휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+      }
       
       if (days < 0.5) {
         return '대체휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
@@ -395,16 +421,31 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         return '대체휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
       }
       
-      // 보유 시간이 부족한 경우
+      // 보유 시간이 부족한 경우 (더 자세한 디버그 정보 포함)
       if (days > availableDays) {
-        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
+        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일) [디버그: ${availableHours}시간 보유]`
       }
     }
     
-    if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
-      // 잔여 시간 확인 (시간을 일수로 변환)
-      const availableHours = leaveData?.compensatory_leave_hours || leaveData?.leave_types?.compensatory_leave_hours || 0
+    if (leaveType === '보상휴가' || leaveType === '보상휴가 반차' || leaveType?.includes('보상휴가')) {
+      // 잔여 시간 확인 (시간을 일수로 변환) - 별도 컬럼 우선, 없으면 JSON 필드
+      const availableHours = leaveData?.compensatory_leave_hours ?? leaveData?.leave_types?.compensatory_leave_hours ?? 0
       const availableDays = availableHours / 8 // 8시간 = 1일
+      
+      console.log('🔍 보상휴가 검증 상세:', {
+        leaveType,
+        days,
+        availableHours,
+        availableDays,
+        separate_field: leaveData?.compensatory_leave_hours,
+        json_field: leaveData?.leave_types?.compensatory_leave_hours,
+        leaveData_exists: !!leaveData
+      })
+      
+      // 휴가 데이터가 로드되지 않은 경우
+      if (!leaveData) {
+        return '휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.'
+      }
       
       if (days < 0.5) {
         return '보상휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
@@ -415,9 +456,9 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         return '보상휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
       }
       
-      // 보유 시간이 부족한 경우
+      // 보유 시간이 부족한 경우 (더 자세한 디버그 정보 포함)
       if (days > availableDays) {
-        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
+        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일) [디버그: ${availableHours}시간 보유]`
       }
     }
     
@@ -427,6 +468,12 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedTemplate) return
+
+    // 휴가 신청서인 경우 휴가 데이터 로딩 완료까지 대기
+    if (selectedTemplate.name === '휴가 신청서' && !leaveData) {
+      setError('휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
 
     setSubmitting(true)
     setError('')

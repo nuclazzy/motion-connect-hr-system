@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       // 대체휴가 우선 사용 독려 메시지 비활성화
       
       // 휴가 유형별 잔여량 확인
-      if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
+      if (leaveType === '대체휴가' || leaveType === '대체휴가 반차' || leaveType?.includes('대체휴가')) {
         const hoursToRequest = daysToRequest * 8
         const availableHours = leaveTypes.substitute_leave_hours || 0
         
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           }, { status: 400 })
         }
         
-      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
+      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차' || leaveType?.includes('보상휴가')) {
         const hoursToRequest = daysToRequest * 8
         const availableHours = leaveTypes.compensatory_leave_hours || 0
         
