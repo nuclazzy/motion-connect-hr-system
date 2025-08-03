@@ -396,10 +396,15 @@ export default function UserDashboard() {
             setDefaultFormValues(null)
           }}
           onSuccess={() => {
-            // 폼 제출 성공 시 서식 신청 내역을 새로고침하도록 시간차를 둔 새로고침
-            setTimeout(() => {
-              window.location.reload()
-            }, 1000)
+            // 폼 제출 성공 시 모달만 닫고 페이지는 새로고침하지 않음
+            setIsFormModalOpen(false)
+            setSelectedFormType(null)
+            setDefaultFormValues(null)
+            
+            // 서식 신청 내역과 휴가 현황을 갱신하도록 이벤트 트리거
+            // (각 컴포넌트가 자체적으로 갱신하도록 처리)
+            const refreshEvent = new CustomEvent('formSubmitSuccess')
+            window.dispatchEvent(refreshEvent)
           }}
           defaultFormType={selectedFormType}
           defaultValues={defaultFormValues}

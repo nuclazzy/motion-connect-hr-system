@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { type User, authenticatedFetch } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
 
@@ -45,8 +45,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchLeaveData = async () => {
+  const fetchLeaveData = useCallback(async () => {
       try {
         setLoading(true)
         console.log('휴가 데이터 조회 시작:', { userId: user.id, userName: user.name })
@@ -79,9 +78,22 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
         setLoading(false)
       }
     }
-
-    fetchLeaveData()
   }, [user.id, user.name])
+
+  useEffect(() => {
+    fetchLeaveData()
+    
+    // 폼 제출 성공 이벤트 리스너 추가
+    const handleFormSubmitSuccess = () => {
+      fetchLeaveData()
+    }
+    
+    window.addEventListener('formSubmitSuccess', handleFormSubmitSuccess)
+    
+    return () => {
+      window.removeEventListener('formSubmitSuccess', handleFormSubmitSuccess)
+    }
+  }, [user.id, user.name, fetchLeaveData])
 
   if (loading) {
     return (

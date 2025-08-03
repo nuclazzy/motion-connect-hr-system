@@ -21,9 +21,9 @@ export async function POST(request: NextRequest) {
   try {
     // 1. 기본 파라미터 파싱
     const body = await request.json()
-    const { requestId, action } = body
+    const { requestId, action, adminNote } = body
     
-    console.log('📋 Parameters:', { requestId, action })
+    console.log('📋 Parameters:', { requestId, action, adminNote })
     
     // 2. 기본 검증
     if (!requestId || !action) {
@@ -152,13 +152,20 @@ export async function POST(request: NextRequest) {
     // 7. 상태 업데이트
     const newStatus = action === 'approve' ? 'approved' : 'rejected'
     
+    const updateData: any = {
+      status: newStatus,
+      processed_at: new Date().toISOString(),
+      processed_by: adminUserId
+    }
+    
+    // 거절 시 사유 저장
+    if (action === 'reject' && adminNote) {
+      updateData.admin_note = adminNote
+    }
+    
     const { error: updateError } = await supabase
       .from('form_requests')
-      .update({
-        status: newStatus,
-        processed_at: new Date().toISOString(),
-        processed_by: adminUserId
-      })
+      .update(updateData)
       .eq('id', requestId)
 
     if (updateError) {

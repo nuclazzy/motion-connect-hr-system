@@ -13,6 +13,7 @@ interface FormRequest {
   request_data: any
   processed_at?: string
   processed_by?: string
+  admin_note?: string
   user?: {
     name: string
     department: string
@@ -47,6 +48,17 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
 
   useEffect(() => {
     fetchMyFormRequests()
+    
+    // 폼 제출 성공 이벤트 리스너 추가
+    const handleFormSubmitSuccess = () => {
+      fetchMyFormRequests()
+    }
+    
+    window.addEventListener('formSubmitSuccess', handleFormSubmitSuccess)
+    
+    return () => {
+      window.removeEventListener('formSubmitSuccess', handleFormSubmitSuccess)
+    }
   }, [fetchMyFormRequests])
 
   const getStatusBadge = (status: string) => {
@@ -207,7 +219,14 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                           <span className="text-green-600">승인 완료</span>
                         )}
                         {request.status === 'rejected' && (
-                          <span className="text-red-600">거절됨</span>
+                          <div>
+                            <span className="text-red-600">거절됨</span>
+                            {request.admin_note && (
+                              <div className="mt-1 text-xs text-red-500">
+                                사유: {request.admin_note}
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
