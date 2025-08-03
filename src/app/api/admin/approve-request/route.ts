@@ -1,41 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
+import { calculateOvertimeLeave, getLeaveTypeName } from '@/lib/calculateOvertimeLeave'
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
+import { createServiceRoleGoogleCalendarService } from '@/services/googleCalendarServiceAccount'
+import { AuditLogger, extractRequestContext } from '@/lib/audit/audit-logger'
+import { approveLeaveRequestWithTransaction } from '@/lib/supabase/leave-transaction'
 
 export const dynamic = 'force-dynamic'
-
-// Helper function to safely import dependencies
-async function importDependencies() {
-  try {
-    const [
-      { createServiceRoleClient },
-      { calculateOvertimeLeave, getLeaveTypeName },
-      { CALENDAR_IDS },
-      { createServiceRoleGoogleCalendarService },
-      { AuditLogger, extractRequestContext },
-      { approveLeaveRequestWithTransaction }
-    ] = await Promise.all([
-      import('@/lib/supabase/server'),
-      import('@/lib/calculateOvertimeLeave'),
-      import('@/lib/calendarMapping'),
-      import('@/services/googleCalendarServiceAccount'),
-      import('@/lib/audit/audit-logger'),
-      import('@/lib/supabase/leave-transaction')
-    ])
-
-    return {
-      createServiceRoleClient,
-      calculateOvertimeLeave,
-      getLeaveTypeName,
-      CALENDAR_IDS,
-      createServiceRoleGoogleCalendarService,
-      AuditLogger,
-      extractRequestContext,
-      approveLeaveRequestWithTransaction
-    }
-  } catch (error) {
-    console.error('❌ Failed to import dependencies:', error)
-    throw new Error(`Import failed: ${(error as Error).message}`)
-  }
-}
+export const runtime = 'nodejs'
+export const maxDuration = 30
 
 // Simple test GET endpoint
 export async function GET() {
@@ -101,12 +74,10 @@ export async function POST(request: NextRequest) {
     }
     const adminUserId = authorization.replace('Bearer ', '')
 
-    // Lazy load dependencies
-    console.log('📦 Loading dependencies...')
-    const deps = await importDependencies()
-    console.log('✅ Dependencies loaded successfully')
-
-    const serviceRoleSupabase = await deps.createServiceRoleClient()
+    // Use direct imports instead of lazy loading
+    console.log('📦 Using direct imports...')
+    const serviceRoleSupabase = await createServiceRoleClient()
+    console.log('✅ Supabase client created successfully')
 
     // Check admin permissions
     const { data: adminUser } = await serviceRoleSupabase
@@ -148,9 +119,9 @@ export async function POST(request: NextRequest) {
 
     // Process the request based on action
     if (action === 'approve') {
-      await handleApproval(formRequest, adminUserId, adminNote, deps, serviceRoleSupabase)
+      await handleApproval(formRequest, adminUserId, adminNote, serviceRoleSupabase)
     } else if (action === 'reject') {
-      await handleRejection(formRequest, adminUserId, adminNote, deps, serviceRoleSupabase)
+      await handleRejection(formRequest, adminUserId, adminNote, serviceRoleSupabase)
     }
 
     return NextResponse.json({ 
@@ -168,12 +139,12 @@ export async function POST(request: NextRequest) {
 }
 
 // Separate approval handler
-async function handleApproval(formRequest: any, adminUserId: string, adminNote: string | undefined, deps: any, supabase: any) {
+async function handleApproval(formRequest: any, adminUserId: string, adminNote: string | undefined, supabase: any) {
   console.log('✅ Processing approval for:', formRequest.form_type)
 
   if (formRequest.form_type === '휴가 신청서') {
     // Use transaction function for leave requests
-    const approvalResult = await deps.approveLeaveRequestWithTransaction(
+    const approvalResult = await approveLeaveRequestWithTransaction(
       supabase,
       formRequest.id,
       adminUserId,
@@ -181,14 +152,14 @@ async function handleApproval(formRequest: any, adminUserId: string, adminNote: 
     )
     
     if (!approvalResult.success) {
-      throw new Error(approvalResult.error || '휴가 승인 처리에 실패했습니다.')
+      throw new Error('error' in approvalResult ? approvalResult.error : '휴가 승인 처리에 실패했습니다.')
     }
     
     console.log('✅ Leave approval completed via transaction')
     
   } else if (formRequest.form_type === '초과근무 신청서') {
     // Handle overtime approval with compensation leave
-    await handleOvertimeApproval(formRequest, deps, supabase)
+    await handleOvertimeApproval(formRequest, supabase)
     
     // Update form request status
     const { error: approveError } = await supabase
@@ -231,7 +202,7 @@ async function handleApproval(formRequest: any, adminUserId: string, adminNote: 
   )
 
   // Log audit event
-  await deps.AuditLogger.logFormApproval(
+  await AuditLogger.logFormApproval(
     'APPROVE',
     adminUserId,
     formRequest,
@@ -240,7 +211,7 @@ async function handleApproval(formRequest: any, adminUserId: string, adminNote: 
 }
 
 // Separate rejection handler
-async function handleRejection(formRequest: any, adminUserId: string, adminNote: string | undefined, deps: any, supabase: any) {
+async function handleRejection(formRequest: any, adminUserId: string, adminNote: string | undefined, supabase: any) {
   console.log('❌ Processing rejection for:', formRequest.form_type)
 
   const { error: rejectError } = await supabase
@@ -266,7 +237,7 @@ async function handleRejection(formRequest: any, adminUserId: string, adminNote:
   )
 
   // Log audit event
-  await deps.AuditLogger.logFormApproval(
+  await AuditLogger.logFormApproval(
     'REJECT',
     adminUserId,
     formRequest,
@@ -275,12 +246,12 @@ async function handleRejection(formRequest: any, adminUserId: string, adminNote:
 }
 
 // Handle overtime approval with compensation leave
-async function handleOvertimeApproval(formRequest: any, deps: any, supabase: any) {
+async function handleOvertimeApproval(formRequest: any, supabase: any) {
   const requestData = formRequest.request_data
   
   try {
     // Calculate compensation leave
-    const overtimeResult = deps.calculateOvertimeLeave(
+    const overtimeResult = calculateOvertimeLeave(
       requestData.근무일,
       requestData.시작시간,
       requestData.종료시간,
@@ -318,7 +289,7 @@ async function handleOvertimeApproval(formRequest: any, deps: any, supabase: any
       throw new Error('보상휴가 지급에 실패했습니다.')
     }
 
-    const leaveTypeName = deps.getLeaveTypeName(overtimeResult.leaveType)
+    const leaveTypeName = getLeaveTypeName(overtimeResult.leaveType)
     
     // Send compensation leave notification
     await sendNotification(
