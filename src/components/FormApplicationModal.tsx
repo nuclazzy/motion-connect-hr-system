@@ -381,7 +381,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       leaveData 
     })
     
-    if (leaveType === '대체휴가') {
+    if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
       // 잔여 시간 확인 (시간을 일수로 변환) - 새 필드 또는 기존 필드에서 조회
       const availableHours = leaveData?.substitute_leave_hours || leaveData?.leave_types?.substitute_leave_hours || 0
       const availableDays = availableHours / 8 // 8시간 = 1일
@@ -401,7 +401,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       }
     }
     
-    if (leaveType === '보상휴가') {
+    if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
       // 잔여 시간 확인 (시간을 일수로 변환) - 새 필드 또는 기존 필드에서 조회
       const availableHours = leaveData?.compensatory_leave_hours || leaveData?.leave_types?.compensatory_leave_hours || 0
       const availableDays = availableHours / 8 // 8시간 = 1일
@@ -636,7 +636,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
               )}
 
               {/* 대체휴가 사용 규칙 안내 */}
-              {selectedTemplate.name === '휴가 신청서' && formData.휴가형태 === '대체휴가' && (
+              {selectedTemplate.name === '휴가 신청서' && (formData.휴가형태 === '대체휴가' || formData.휴가형태 === '대체휴가 반차') && (
                 <div className="mb-4 bg-purple-50 border border-purple-200 rounded-md p-4">
                   <h5 className="text-sm font-medium text-purple-900 mb-2">🔄 대체휴가 사용 규칙</h5>
                   <div className="text-sm text-purple-800 space-y-1">
@@ -649,7 +649,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
               )}
 
               {/* 보상휴가 사용 규칙 안내 */}
-              {selectedTemplate.name === '휴가 신청서' && formData.휴가형태 === '보상휴가' && (
+              {selectedTemplate.name === '휴가 신청서' && (formData.휴가형태 === '보상휴가' || formData.휴가형태 === '보상휴가 반차') && (
                 <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
                   <h5 className="text-sm font-medium text-green-900 mb-2">⭐ 보상휴가 사용 규칙</h5>
                   <div className="text-sm text-green-800 space-y-1">
