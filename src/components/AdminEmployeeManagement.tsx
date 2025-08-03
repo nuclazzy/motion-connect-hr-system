@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, FormEvent } from 'react'
+import { getAuthHeaders } from '@/lib/auth'
 
 // Assuming a more complete User type
 interface Employee {
@@ -37,19 +38,6 @@ export default function AdminEmployeeManagement() {
   const [editValue, setEditValue] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
 
-  const getAuthHeaders = () => {
-    const userStr = localStorage.getItem('motion-connect-user')
-    if (!userStr) return {}
-    try {
-      const user = JSON.parse(userStr)
-      return {
-        'Authorization': `Bearer ${user.id}`,
-        'Content-Type': 'application/json'
-      }
-    } catch {
-      return {}
-    }
-  }
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
