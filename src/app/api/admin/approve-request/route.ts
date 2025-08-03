@@ -9,6 +9,14 @@ import { approveLeaveRequestWithTransaction } from '@/lib/supabase/leave-transac
 
 export const dynamic = 'force-dynamic'
 
+// 테스트용 GET 메서드
+export async function GET() {
+  return NextResponse.json({ 
+    message: 'approve-request API is working',
+    timestamp: new Date().toISOString()
+  })
+}
+
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
   if (isHalfDay) {
@@ -145,9 +153,18 @@ async function sendNotification(supabase: any, userId: string, message: string, 
 }
 
 export async function POST(request: NextRequest) {
+  console.log('🔍 approve-request POST 요청 수신:', {
+    url: request.url,
+    method: request.method,
+    headers: Object.fromEntries(request.headers.entries()),
+    timestamp: new Date().toISOString()
+  })
+  
   try {
     const { requestId, action, adminNote } = await request.json()
     const requestContext = extractRequestContext(request)
+    
+    console.log('📋 요청 파라미터:', { requestId, action, adminNote })
     
     // Authorization header validation
     const authorization = request.headers.get('authorization')

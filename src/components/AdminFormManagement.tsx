@@ -75,8 +75,11 @@ export default function AdminFormManagement() {
       
       console.log('🔍 관리자 승인 API 호출:', {
         url: '/api/admin/approve-request',
+        fullUrl: `${window.location.origin}/api/admin/approve-request`,
+        method: 'POST',
         headers,
-        body: requestBody
+        body: requestBody,
+        timestamp: new Date().toISOString()
       })
       
       const response = await fetch('/api/admin/approve-request', {
