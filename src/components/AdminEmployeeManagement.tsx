@@ -443,19 +443,6 @@ export default function AdminEmployeeManagement() {
                       <input type="date" name="hire_date" id="hire_date" value={formData.hire_date || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    <input
-                        id="is_active"
-                        name="is_active"
-                        type="checkbox"
-                        checked={formData.is_active ?? true}
-                        onChange={handleInputChange}
-                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
-                    />
-                    <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-                        재직 중
-                    </label>
-                  </div>
                   <div className="text-right">
                     <button
                       type="submit"

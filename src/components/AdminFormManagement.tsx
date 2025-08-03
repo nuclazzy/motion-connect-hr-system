@@ -184,7 +184,24 @@ export default function AdminFormManagement() {
                       <div className="font-medium text-gray-900">{request.user.name}</div>
                       <div className="text-gray-500">{request.user.department}</div>
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{request.form_type}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                      <div>{request.form_type}</div>
+                      {request.form_type === '휴가 신청서' && request.request_data && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          <span className="font-medium">{request.request_data['휴가형태']}</span>
+                          {request.request_data['시작일'] && request.request_data['종료일'] && (
+                            <span className="ml-1">
+                              ({request.request_data['시작일']} ~ {request.request_data['종료일']})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {request.form_type === '초과근무 신청서' && request.request_data && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {request.request_data['근무일']} {request.request_data['시작시간']} ~ {request.request_data['종료시간']}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{formatDate(request.submitted_at)}</td>
                     <td className="px-4 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
