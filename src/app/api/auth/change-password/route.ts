@@ -1,52 +1,67 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import bcrypt from 'bcryptjs'
-
-// 런타임에 Supabase 클라이언트 생성
-function getAuthSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error(`Missing environment variables: URL=${!!supabaseUrl}, KEY=${!!supabaseServiceKey}`)
-  }
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  })
-}
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, currentPassword, newPassword } = await request.json()
+    const { currentPassword, newPassword } = await request.json()
 
-    if (!userId || !currentPassword || !newPassword) {
+    if (!currentPassword || !newPassword) {
       return NextResponse.json(
-        { success: false, error: '필수 정보가 누락되었습니다.' },
+        { success: false, error: '현재 비밀번호와 새 비밀번호를 입력해주세요.' },
         { status: 400 }
       )
     }
 
-    const authSupabase = getAuthSupabase()
+    if (newPassword.length < 4) {
+      return NextResponse.json(
+        { success: false, error: '새 비밀번호는 최소 4자 이상이어야 합니다.' },
+        { status: 400 }
+      )
+    }
 
-    // 1. 현재 사용자 조회
-    const { data: user, error: userError } = await authSupabase
+    const supabase = await createClient()
+    const serviceRoleSupabase = await createServiceRoleClient()
+
+    // 1. Supabase 세션에서 현재 사용자 확인
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { success: false, error: '인증이 필요합니다. 다시 로그인해주세요.' },
+        { status: 401 }
+      )
+    }
+
+    const userId = session.user.id
+
+    console.log('🔐 비밀번호 변경 요청:', { 
+      userId: userId,
+      email: session.user.email
+    })
+
+    // 2. 현재 사용자의 비밀번호 해시 조회 (Service Role 사용)
+    const { data: user, error: userError } = await serviceRoleSupabase
       .from('users')
-      .select('password_hash')
+      .select('id, email, name, password_hash')
       .eq('id', userId)
       .single()
 
+    console.log('👤 사용자 조회 결과:', { 
+      found: !!user, 
+      userError: userError?.message,
+      userId: user?.id,
+      email: user?.email 
+    })
+
     if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: '사용자를 찾을 수 없습니다.' },
+        { success: false, error: '사용자 정보를 찾을 수 없습니다.' },
         { status: 404 }
       )
     }
 
-    // 2. 현재 비밀번호 확인
+    // 3. 현재 비밀번호 확인
     const passwordMatch = await bcrypt.compare(currentPassword, user.password_hash)
     
     if (!passwordMatch) {
@@ -56,11 +71,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 3. 새 비밀번호 해시 생성
+    // 4. 새 비밀번호 해시 생성
     const newPasswordHash = await bcrypt.hash(newPassword, 10)
 
-    // 4. 비밀번호 업데이트
-    const { error: updateError } = await authSupabase
+    // 5. 비밀번호 업데이트 (Service Role 사용)
+    const { error: updateError } = await serviceRoleSupabase
       .from('users')
       .update({ password_hash: newPasswordHash })
       .eq('id', userId)

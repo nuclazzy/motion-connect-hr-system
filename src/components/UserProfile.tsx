@@ -91,7 +91,6 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user.id,
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword
         }),
