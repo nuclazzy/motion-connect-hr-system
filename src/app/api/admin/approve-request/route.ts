@@ -3,6 +3,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server'
 import { calculateOvertimeLeave, getLeaveTypeName } from '@/lib/calculateOvertimeLeave'
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
+import { createServiceRoleGoogleCalendarService } from '@/services/googleCalendarServiceAccount'
 
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -103,33 +104,21 @@ async function createCalendarEvent(requestData: Record<string, any>, requestId: 
       }
     }
 
+    // Google Calendar Service 직접 사용
+    const googleCalendarService = await createServiceRoleGoogleCalendarService()
+    
     // 휴가 전용 캘린더에 이벤트 생성
-    const response = await fetch('/api/calendar/create-event-direct', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
-        eventData
-      })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`캘린더 이벤트 생성 실패: ${errorText}`)
-    }
-
-    const result = await response.json()
+    const event = await googleCalendarService.createEvent(CALENDAR_IDS.LEAVE_MANAGEMENT, eventData)
+    
     console.log('✅ 휴가 캘린더 이벤트 생성 완료:', {
-      eventId: result.event?.id,
+      eventId: event.id,
       calendar: '연차 및 경조사 현황',
       user: userName,
       leaveType: requestData.휴가형태,
       period: `${startDate} ~ ${endDate}`
     })
     
-    return result.event?.id
+    return event.id
   } catch (error) {
     console.error('❌ 휴가 캘린더 이벤트 생성 오류:', error)
     throw error
@@ -398,11 +387,9 @@ export async function POST(request: NextRequest) {
           // 승인 실패 시 생성된 캘린더 이벤트 삭제
           if (eventId) {
             try {
-              await fetch('/api/calendar/delete-event', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ eventId })
-              })
+              const googleCalendarService = await createServiceRoleGoogleCalendarService()
+              await googleCalendarService.deleteEvent(CALENDAR_IDS.LEAVE_MANAGEMENT, eventId)
+              console.log('✅ 롤백: 캘린더 이벤트 삭제 완료')
             } catch (deleteError) {
               console.error('캘린더 이벤트 삭제 실패:', deleteError)
             }

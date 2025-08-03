@@ -21,11 +21,16 @@ interface FormRequest {
 export default function AdminFormManagement() {
   const [requests, setRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
 
-  const fetchRequests = useCallback(async () => {
-    setLoading(true)
+  const fetchRequests = useCallback(async (isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setLoading(true)
+    } else {
+      setIsRefreshing(true)
+    }
     setError(null)
     try {
       const response = await fetch(`/api/admin/form-requests?filter=${filter}`, {
@@ -40,14 +45,19 @@ export default function AdminFormManagement() {
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }, [filter])
 
   useEffect(() => {
-    fetchRequests()
+    fetchRequests(true)
   }, [fetchRequests])
 
   const handleUpdateRequest = async (requestId: string, newStatus: 'approved' | 'rejected') => {
+    const adminNote = newStatus === 'rejected' ? prompt('거절 사유를 입력하세요:') : undefined
+    if (newStatus === 'rejected' && !adminNote) return
+
+    // Optimistic update
     const originalRequests = [...requests]
     setRequests(currentRequests =>
       currentRequests.map(req =>
@@ -56,21 +66,23 @@ export default function AdminFormManagement() {
     )
 
     try {
-      const response = await fetch(`/api/admin/form-requests/${requestId}`, {
-        method: 'PATCH',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ status: newStatus }),
+      const response = await fetch('/api/admin/approve-request', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ 
+          requestId, 
+          action: newStatus === 'approved' ? 'approve' : 'reject',
+          adminNote 
+        }),
       })
 
       if (!response.ok) {
         const result = await response.json()
         throw new Error(result.error || '상태 업데이트에 실패했습니다.')
       }
-      // 성공 시 목록을 다시 불러와 최신 상태 유지
-      fetchRequests()
+      
+      // 성공 시 부드럽게 목록 갱신
+      setTimeout(() => fetchRequests(false), 500)
     } catch (err) {
       alert(`처리 중 오류 발생: ${err instanceof Error ? err.message : 'Unknown error'}`)
       setRequests(originalRequests) // 실패 시 원래 상태로 롤백
@@ -107,7 +119,12 @@ export default function AdminFormManagement() {
   if (error) return <div className="p-4 text-red-500">오류: {error}</div>
 
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
+    <div className="bg-white overflow-hidden shadow rounded-lg relative">
+      {isRefreshing && (
+        <div className="absolute inset-0 bg-white bg-opacity-50 flex items-center justify-center z-10">
+          <div className="text-sm text-gray-500">새로고침 중...</div>
+        </div>
+      )}
       <div className="p-5">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-medium text-gray-900">전체 서식 신청 내역</h3>

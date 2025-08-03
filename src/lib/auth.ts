@@ -2,6 +2,8 @@
  * Supabase 인증 관련 유틸리티
  */
 
+import { saveToken, getToken, clearToken, getAuthHeaders as getTokenAuthHeaders, repairTokenStorage } from './auth/token-manager'
+
 // 클라이언트 사이드 인증 함수들
 
 export interface User {
@@ -52,9 +54,10 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
       }
     }
 
-    // 로그인 성공 시 localStorage에 사용자 정보 저장
+    // 로그인 성공 시 localStorage에 사용자 정보 저장 및 토큰 관리
     if (result.success && result.user) {
       localStorage.setItem('motion-connect-user', JSON.stringify(result.user))
+      saveToken(result.user.id, 3600) // 1시간 토큰
       console.log('✅ localStorage에 사용자 정보 저장:', result.user.name)
     }
 
@@ -74,6 +77,15 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
+    // 토큰 확인 (자동 갱신 포함)
+    const token = getToken()
+    if (!token) {
+      // 토큰 복구 시도
+      if (!repairTokenStorage()) {
+        return null
+      }
+    }
+    
     // localStorage에서 사용자 정보 조회
     const userStr = localStorage.getItem('motion-connect-user')
     if (!userStr) {
@@ -117,6 +129,7 @@ export async function logoutUser() {
   try {
     // localStorage에서 사용자 정보 제거
     localStorage.removeItem('motion-connect-user')
+    clearToken() // 토큰도 함께 제거
     console.log('✅ localStorage에서 사용자 정보 제거')
     
     // 로그인 페이지로 리디렉션
