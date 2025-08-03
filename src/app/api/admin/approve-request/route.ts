@@ -227,8 +227,10 @@ export async function POST(request: NextRequest) {
           
           // 휴가 타입별 처리
           if (requestData.휴가형태 === '대체휴가' || requestData.휴가형태 === '보상휴가') {
-            // 시간 단위 휴가 차감
-            const hoursToDeduct = calculateHoursToDeduct(daysToDeduct)
+            // 시간 단위 휴가 차감 - 시간 단위 휴가는 주말 관계없이 단순 계산
+            const simpleDays = requestData.시작일 === requestData.종료일 ? 1 : 
+              Math.ceil((new Date(requestData.종료일).getTime() - new Date(requestData.시작일).getTime()) / (1000 * 3600 * 24)) + 1
+            const hoursToDeduct = calculateHoursToDeduct(simpleDays)
             const fieldName = requestData.휴가형태 === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
             const availableHours = leaveTypes[fieldName] || 0
             

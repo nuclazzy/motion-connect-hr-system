@@ -10,6 +10,12 @@ function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boole
   
   const start = new Date(startDate)
   const end = new Date(endDate)
+  
+  // 같은 날짜면 1일
+  if (startDate === endDate) {
+    return 1
+  }
+  
   const timeDiff = end.getTime() - start.getTime()
   const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1 // 당일 포함
   
@@ -66,6 +72,8 @@ export async function POST(request: NextRequest) {
         
         console.log('🔍 시간 단위 휴가 검증:', {
           휴가형태: requestData.휴가형태,
+          시작일: requestData.시작일,
+          종료일: requestData.종료일,
           신청일수: daysToDeduct,
           필요시간: hoursToDeduct,
           잔여시간: availableHours,
