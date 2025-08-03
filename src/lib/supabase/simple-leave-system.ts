@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { LeaveCalendarIntegration, LeaveEventData } from './calendar-integration'
 
 // 단순하고 신뢰할 수 있는 휴가 시스템
 export class SimpleLeaveSystem {
@@ -136,7 +137,7 @@ export class SimpleLeaveSystem {
     }
   }
 
-  // 휴가 승인 처리
+  // 휴가 승인 처리 (구글 캘린더 연동 포함)
   async approveLeaveRequest(
     requestId: string,
     adminUserId: string,
@@ -144,6 +145,7 @@ export class SimpleLeaveSystem {
   ): Promise<{
     success: boolean
     message: string
+    eventId?: string
   }> {
     try {
       // 1. 신청서 조회
@@ -209,9 +211,13 @@ export class SimpleLeaveSystem {
         )
       }
 
+      // 5. 구글 캘린더 이벤트 생성
+      const calendarResult = await this.createCalendarEvent(request, leaveType, requestedHours)
+
       return {
         success: true,
-        message: '휴가 승인이 완료되었습니다.'
+        message: `휴가 승인이 완료되었습니다. ${calendarResult.message}`,
+        eventId: calendarResult.eventId
       }
 
     } catch (error) {
@@ -229,7 +235,7 @@ export class SimpleLeaveSystem {
     adminNote: string | undefined,
     leaveType: 'substitute' | 'compensatory',
     requestedHours: number
-  ): Promise<{ success: boolean; message: string }> {
+  ): Promise<{ success: boolean; message: string; eventId?: string }> {
     try {
       // 1. 휴가 잔량 차감
       const { data: leaveData, error: leaveError } = await this.supabase
@@ -317,9 +323,13 @@ export class SimpleLeaveSystem {
           is_read: false
         })
 
+      // 6. 구글 캘린더 이벤트 생성
+      const calendarResult = await this.createCalendarEvent(request, leaveType, requestedHours)
+
       return {
         success: true,
-        message: '휴가 승인이 완료되었습니다.'
+        message: `휴가 승인이 완료되었습니다. ${calendarResult.message}`,
+        eventId: calendarResult.eventId
       }
 
     } catch (error) {
@@ -373,6 +383,46 @@ export class SimpleLeaveSystem {
       return {
         success: false,
         message: `현황 조회 중 오류: ${(error as Error).message}`
+      }
+    }
+  }
+
+  // 구글 캘린더 이벤트 생성 (내부 메서드)
+  private async createCalendarEvent(
+    request: any,
+    leaveType: 'substitute' | 'compensatory',
+    requestedHours: number
+  ): Promise<{ success: boolean; message: string; eventId?: string }> {
+    try {
+      const requestData = request.request_data as any
+      const userName = (request.users as any)?.name || '알 수 없는 사용자'
+      
+      // 캘린더 이벤트 데이터 구성
+      const eventData: LeaveEventData = {
+        userId: request.user_id,
+        userName,
+        leaveType,
+        requestedHours,
+        startDate: requestData['시작일'] || new Date().toISOString().split('T')[0],
+        endDate: requestData['종료일'] || requestData['시작일'] || new Date().toISOString().split('T')[0],
+        reason: requestData['사유'] || '사유 없음',
+        requestId: request.id
+      }
+
+      console.log('📅 캘린더 이벤트 생성 시도:', eventData)
+
+      // 구글 캘린더 연동
+      const result = await LeaveCalendarIntegration.createLeaveEvent(eventData)
+      
+      return result
+
+    } catch (error) {
+      console.error('❌ 캘린더 이벤트 생성 오류:', error)
+      
+      // 캘린더 연동 실패는 전체 승인을 막지 않음
+      return {
+        success: false,
+        message: '캘린더 연동에 실패했지만 휴가는 정상 승인되었습니다.'
       }
     }
   }
