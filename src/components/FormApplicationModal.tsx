@@ -384,20 +384,20 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     if (leaveType === '대체휴가') {
       // 잔여 시간 확인 (시간을 일수로 변환) - 새 필드 또는 기존 필드에서 조회
       const availableHours = leaveData?.substitute_leave_hours || leaveData?.leave_types?.substitute_leave_hours || 0
-      const availableDays = availableHours / 8 // 8시간 = 1일 (소수점 허용으로 반차 처리)
+      const availableDays = availableHours / 8 // 8시간 = 1일
       
       if (days < 0.5) {
         return '대체휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
       }
       
-      // 보유 시간이 부족한 경우
-      if (days > availableDays) {
-        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(3)}일)`
+      // 0.5일 또는 1일 단위로만 사용 가능
+      if (days !== 0.5 && days !== Math.floor(days)) {
+        return '대체휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
       }
       
-      // 보유 시간 범위 내에서는 유연하게 사용 가능 (0.5일 단위 권장하지만 강제하지 않음)
-      if (days !== 0.5 && days !== Math.floor(days) && availableDays >= days) {
-        console.log(`🟡 대체휴가 소수점 사용: ${days}일 (보유: ${availableDays.toFixed(3)}일)`)
+      // 보유 시간이 부족한 경우
+      if (days > availableDays) {
+        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
       }
     }
     
@@ -410,14 +410,14 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         return '보상휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
       }
       
-      // 보유 시간이 부족한 경우
-      if (days > availableDays) {
-        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(3)}일)`
+      // 0.5일 또는 1일 단위로만 사용 가능
+      if (days !== 0.5 && days !== Math.floor(days)) {
+        return '보상휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
       }
       
-      // 보유 시간 범위 내에서는 유연하게 사용 가능 (0.5일 단위 권장하지만 강제하지 않음)
-      if (days !== 0.5 && days !== Math.floor(days) && availableDays >= days) {
-        console.log(`🟡 보상휴가 소수점 사용: ${days}일 (보유: ${availableDays.toFixed(3)}일)`)
+      // 보유 시간이 부족한 경우
+      if (days > availableDays) {
+        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
       }
     }
     
