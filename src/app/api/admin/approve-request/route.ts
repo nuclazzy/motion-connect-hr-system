@@ -66,7 +66,94 @@ export async function POST(request: NextRequest) {
 
     console.log('📄 Form request found:', formRequest.form_type)
 
-    // 6. 상태 업데이트 (가장 기본적인 처리)
+    // 6. 승인일 경우 휴가일수 차감 처리
+    if (action === 'approve' && formRequest.form_type === '휴가 신청서') {
+      console.log('🏖️ 휴가 신청서 승인 - 휴가일수 차감 시작')
+      
+      const requestData = formRequest.request_data
+      const leaveType = requestData['휴가형태']
+      const startDate = requestData['시작일']
+      const endDate = requestData['종료일']
+      
+      console.log('📊 휴가 정보:', { leaveType, startDate, endDate })
+      
+      // 휴가 일수 계산
+      let daysToDeduct = 1 // 기본값
+      if (startDate && endDate) {
+        if (startDate === endDate) {
+          daysToDeduct = leaveType?.includes('반차') ? 0.5 : 1
+        } else {
+          const start = new Date(startDate)
+          const end = new Date(endDate)
+          const timeDiff = end.getTime() - start.getTime()
+          daysToDeduct = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1
+        }
+      }
+      
+      console.log('📊 차감할 휴가일수:', daysToDeduct)
+      
+      // 사용자 휴가 데이터 조회
+      const { data: leaveData, error: leaveError } = await supabase
+        .from('leave_days')
+        .select('*')
+        .eq('user_id', formRequest.user_id)
+        .single()
+
+      if (leaveError || !leaveData) {
+        console.error('❌ 휴가 데이터 조회 실패:', leaveError)
+        return NextResponse.json({ error: '휴가 데이터를 찾을 수 없습니다.' }, { status: 404 })
+      }
+
+      console.log('📊 현재 휴가 데이터:', leaveData.leave_types)
+      
+      // 휴가 유형별 처리
+      let updatedLeaveTypes = { ...leaveData.leave_types }
+      
+      if (leaveType === '연차' || leaveType?.includes('반차')) {
+        // 연차 차감
+        const currentUsed = updatedLeaveTypes.used_annual_days || 0
+        updatedLeaveTypes.used_annual_days = currentUsed + daysToDeduct
+        console.log('📊 연차 사용일수 업데이트:', currentUsed, '→', currentUsed + daysToDeduct)
+        
+      } else if (leaveType === '병가') {
+        // 병가 차감
+        const currentUsed = updatedLeaveTypes.used_sick_days || 0
+        updatedLeaveTypes.used_sick_days = currentUsed + daysToDeduct
+        console.log('📊 병가 사용일수 업데이트:', currentUsed, '→', currentUsed + daysToDeduct)
+        
+      } else if (leaveType === '대체휴가') {
+        // 대체휴가 시간 차감
+        const hoursToDeduct = daysToDeduct * 8
+        const currentHours = updatedLeaveTypes.substitute_leave_hours || 0
+        updatedLeaveTypes.substitute_leave_hours = Math.max(0, currentHours - hoursToDeduct)
+        console.log('📊 대체휴가 시간 업데이트:', currentHours, '→', currentHours - hoursToDeduct)
+        
+      } else if (leaveType === '보상휴가') {
+        // 보상휴가 시간 차감
+        const hoursToDeduct = daysToDeduct * 8
+        const currentHours = updatedLeaveTypes.compensatory_leave_hours || 0
+        updatedLeaveTypes.compensatory_leave_hours = Math.max(0, currentHours - hoursToDeduct)
+        console.log('📊 보상휴가 시간 업데이트:', currentHours, '→', currentHours - hoursToDeduct)
+      }
+      
+      // 휴가 데이터 업데이트
+      const { error: leaveUpdateError } = await supabase
+        .from('leave_days')
+        .update({
+          leave_types: updatedLeaveTypes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', formRequest.user_id)
+
+      if (leaveUpdateError) {
+        console.error('❌ 휴가 데이터 업데이트 실패:', leaveUpdateError)
+        return NextResponse.json({ error: '휴가 데이터 업데이트에 실패했습니다.' }, { status: 500 })
+      }
+      
+      console.log('✅ 휴가일수 차감 완료')
+    }
+
+    // 7. 상태 업데이트
     const newStatus = action === 'approve' ? 'approved' : 'rejected'
     
     const { error: updateError } = await supabase
