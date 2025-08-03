@@ -22,16 +22,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '이메일 또는 비밀번호가 올바르지 않습니다.' }, { status: 401 })
     }
 
-    // 비밀번호 확인
-    let isPasswordValid = false
-    
-    if (user.password_hash) {
-      // 해시된 비밀번호 확인
-      isPasswordValid = await bcrypt.compare(password, user.password_hash)
-    } else {
-      // password_hash가 없는 경우 기본 비밀번호 확인
-      isPasswordValid = password === 'admin123' || password === 'password123' || password === 'test123' || password === '0000'
+    // 비밀번호 확인 - password_hash 필드가 반드시 필요
+    if (!user.password_hash) {
+      console.log('❌ password_hash 필드가 없음:', user.email)
+      return NextResponse.json({ error: '사용자 계정에 비밀번호가 설정되지 않았습니다. 관리자에게 문의하세요.' }, { status: 401 })
     }
+
+    // 해시된 비밀번호 확인
+    const isPasswordValid = await bcrypt.compare(password, user.password_hash)
 
     if (!isPasswordValid) {
       console.log('❌ 비밀번호 불일치')
