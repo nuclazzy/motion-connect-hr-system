@@ -381,44 +381,13 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       leaveData 
     })
     
+    // 대체휴가와 보상휴가 기능 비활성화
     if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
-      // 잔여 시간 확인 (시간을 일수로 변환) - 새 필드 또는 기존 필드에서 조회
-      const availableHours = leaveData?.substitute_leave_hours || leaveData?.leave_types?.substitute_leave_hours || 0
-      const availableDays = availableHours / 8 // 8시간 = 1일
-      
-      if (days < 0.5) {
-        return '대체휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
-      }
-      
-      // 0.5일 또는 1일 단위로만 사용 가능
-      if (days !== 0.5 && days !== Math.floor(days)) {
-        return '대체휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
-      }
-      
-      // 보유 시간이 부족한 경우
-      if (days > availableDays) {
-        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
-      }
+      return '대체휴가 기능은 현재 사용할 수 없습니다.'
     }
     
     if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
-      // 잔여 시간 확인 (시간을 일수로 변환) - 새 필드 또는 기존 필드에서 조회
-      const availableHours = leaveData?.compensatory_leave_hours || leaveData?.leave_types?.compensatory_leave_hours || 0
-      const availableDays = availableHours / 8 // 8시간 = 1일
-      
-      if (days < 0.5) {
-        return '보상휴가는 최소 0.5일(반차)부터 사용 가능합니다.'
-      }
-      
-      // 0.5일 또는 1일 단위로만 사용 가능
-      if (days !== 0.5 && days !== Math.floor(days)) {
-        return '보상휴가는 0.5일(반차) 또는 1일 단위로만 사용 가능합니다.'
-      }
-      
-      // 보유 시간이 부족한 경우
-      if (days > availableDays) {
-        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
-      }
+      return '보상휴가 기능은 현재 사용할 수 없습니다.'
     }
     
     return null
@@ -456,48 +425,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       const result = await response.json()
 
       if (response.ok) {
-        // 🎯 대체휴가 우선 사용 독려 메시지 처리
-        if (result.warning && result.message) {
-          const userChoice = confirm(`⚠️ ${result.message}\n\n${result.suggestion}`)
-          
-          if (userChoice) {
-            // 사용자가 대체휴가 사용을 선택한 경우
-            const newFormData = { ...formData }
-            newFormData.휴가형태 = formData.휴가형태?.includes('반차') ? '대체휴가 반차' : '대체휴가'
-            setFormData(newFormData)
-            
-            alert('💡 휴가 종류를 대체휴가로 변경했습니다. 다시 신청해주세요.')
-            setSubmitting(false)
-            return
-          }
-          
-          // 사용자가 연차로 계속 진행하려는 경우
-          const confirmAnnual = confirm('연차로 계속 신청하시겠습니까?')
-          if (!confirmAnnual) {
-            setSubmitting(false)
-            return
-          }
-          
-          // 강제로 연차 신청 - 추가 파라미터 전송
-          const forceResponse = await fetch('/api/form-requests', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${user.id}`,
-            },
-            body: JSON.stringify({
-              formType: selectedTemplate.name,
-              requestData: { ...formData, forceAnnualLeave: true }
-            })
-          })
-          
-          const forceResult = await forceResponse.json()
-          if (!forceResponse.ok) {
-            setError(forceResult.error || '신청 처리 중 오류가 발생했습니다.')
-            setSubmitting(false)
-            return
-          }
-        }
+        // 대체휴가 우선 사용 독려 메시지 비활성화
         
         // 2. PDF 생성 및 출력
         await generatePDF()
@@ -604,18 +532,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                       </p>
                     </div>
                     <div>
-                      {/* 대체휴가 시간 - leave_days 테이블의 새 필드 또는 기존 leave_types 필드에서 조회 */}
-                      {((leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0) > 0) && (
-                        <p className="text-purple-800">
-                          <strong>{LEAVE_TYPE_NAMES.substitute}:</strong> {getLeaveStatus(leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0).displayText}
-                        </p>
-                      )}
-                      {/* 보상휴가 시간 - leave_days 테이블의 새 필드 또는 기존 leave_types 필드에서 조회 */}
-                      {((leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0) > 0) && (
-                        <p className="text-green-800">
-                          <strong>{LEAVE_TYPE_NAMES.compensatory}:</strong> {getLeaveStatus(leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0).displayText}
-                        </p>
-                      )}
+                      {/* 대체휴가/보상휴가 표시 비활성화 */}
                     </div>
                   </div>
                 </div>
@@ -635,28 +552,22 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                 </div>
               )}
 
-              {/* 대체휴가 사용 규칙 안내 */}
+              {/* 대체휴가 기능 비활성화 안내 */}
               {selectedTemplate.name === '휴가 신청서' && (formData.휴가형태 === '대체휴가' || formData.휴가형태 === '대체휴가 반차') && (
-                <div className="mb-4 bg-purple-50 border border-purple-200 rounded-md p-4">
-                  <h5 className="text-sm font-medium text-purple-900 mb-2">🔄 대체휴가 사용 규칙</h5>
-                  <div className="text-sm text-purple-800 space-y-1">
-                    <p><strong>대상:</strong> 토요일 근무에 대한 1:1 대응 휴가</p>
-                    <p><strong>사용 단위:</strong> 0.5일(반차) 또는 1일 단위 사용 가능</p>
-                    <p><strong>신청 방법:</strong> 토요일 근무 후 발생한 대체휴가만 신청 가능</p>
-                    <p><strong>유효기간:</strong> 발생일로부터 90일 이내 사용 권장</p>
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+                  <h5 className="text-sm font-medium text-red-900 mb-2">⚠️ 대체휴가 기능 비활성화</h5>
+                  <div className="text-sm text-red-800">
+                    <p>대체휴가 기능은 현재 사용할 수 없습니다. 연차를 대신 사용해주세요.</p>
                   </div>
                 </div>
               )}
 
-              {/* 보상휴가 사용 규칙 안내 */}
+              {/* 보상휴가 기능 비활성화 안내 */}
               {selectedTemplate.name === '휴가 신청서' && (formData.휴가형태 === '보상휴가' || formData.휴가형태 === '보상휴가 반차') && (
-                <div className="mb-4 bg-green-50 border border-green-200 rounded-md p-4">
-                  <h5 className="text-sm font-medium text-green-900 mb-2">⭐ 보상휴가 사용 규칙</h5>
-                  <div className="text-sm text-green-800 space-y-1">
-                    <p><strong>대상:</strong> 일요일 또는 공휴일 근무에 대한 보상 휴가</p>
-                    <p><strong>사용 단위:</strong> 0.5일(반차) 또는 1일 단위 사용 가능</p>
-                    <p><strong>신청 방법:</strong> 0.5일부터 신청 가능, 남은 시간에 따라 조정</p>
-                    <p><strong>유효기간:</strong> 발생일로부터 90일 이내 사용 권장</p>
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
+                  <h5 className="text-sm font-medium text-red-900 mb-2">⚠️ 보상휴가 기능 비활성화</h5>
+                  <div className="text-sm text-red-800">
+                    <p>보상휴가 기능은 현재 사용할 수 없습니다. 연차를 대신 사용해주세요.</p>
                   </div>
                 </div>
               )}

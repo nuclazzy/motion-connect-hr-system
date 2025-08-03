@@ -122,30 +122,14 @@ export async function POST(request: NextRequest) {
         console.log('📊 병가 사용일수 업데이트:', currentUsed, '→', currentUsed + daysToDeduct)
         
       } else if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
-        // 대체휴가 시간 차감 (종일/반차 모두 처리)
-        const hoursToDeduct = daysToDeduct * 8
-        const currentHours = updatedLeaveTypes.substitute_leave_hours || 0
-        updatedLeaveTypes.substitute_leave_hours = Math.max(0, currentHours - hoursToDeduct)
-        console.log('📊 대체휴가 시간 업데이트:', {
-          휴가유형: leaveType,
-          차감일수: daysToDeduct,
-          차감시간: hoursToDeduct,
-          이전시간: currentHours,
-          업데이트후: currentHours - hoursToDeduct
-        })
+        // 대체휴가 기능 비활성화 - 승인 거부
+        console.log('❌ 대체휴가 승인 시도 - 기능 비활성화됨')
+        return NextResponse.json({ error: '대체휴가 기능은 현재 사용할 수 없습니다.' }, { status: 400 })
         
       } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
-        // 보상휴가 시간 차감 (종일/반차 모두 처리)
-        const hoursToDeduct = daysToDeduct * 8
-        const currentHours = updatedLeaveTypes.compensatory_leave_hours || 0
-        updatedLeaveTypes.compensatory_leave_hours = Math.max(0, currentHours - hoursToDeduct)
-        console.log('📊 보상휴가 시간 업데이트:', {
-          휴가유형: leaveType,
-          차감일수: daysToDeduct,
-          차감시간: hoursToDeduct,
-          이전시간: currentHours,
-          업데이트후: currentHours - hoursToDeduct
-        })
+        // 보상휴가 기능 비활성화 - 승인 거부
+        console.log('❌ 보상휴가 승인 시도 - 기능 비활성화됨')
+        return NextResponse.json({ error: '보상휴가 기능은 현재 사용할 수 없습니다.' }, { status: 400 })
       }
       
       // 휴가 데이터 업데이트
