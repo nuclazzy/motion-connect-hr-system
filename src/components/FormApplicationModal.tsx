@@ -132,6 +132,12 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     const start = new Date(startDate)
     const end = new Date(endDate)
     if (end < start) return 0
+    
+    // 같은 날짜면 1일
+    if (startDate === endDate) {
+      return 1
+    }
+    
     return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
   }
 
@@ -366,6 +372,14 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     
     const leaveType = formData.휴가형태
     const days = parseFloat(formData.휴가일수 || '0')
+    console.log('🔍 클라이언트 휴가 검증:', { 
+      leaveType, 
+      days, 
+      시작일: formData.시작일, 
+      종료일: formData.종료일,
+      휴가일수: formData.휴가일수,
+      leaveData 
+    })
     
     if (leaveType === '대체휴가') {
       // 대체휴가는 0.5일(반차) 또는 1일 단위로 사용 가능
@@ -382,7 +396,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       const availableDays = availableHours / 8 // 8시간 = 1일 (소수점 허용으로 반차 처리)
       
       if (days > availableDays) {
-        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays}일)`
+        return `대체휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
       }
     }
     
@@ -401,7 +415,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       const availableDays = availableHours / 8 // 8시간 = 1일
       
       if (days > availableDays) {
-        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays}일)`
+        return `보상휴가 잔여량이 부족합니다. (신청: ${days}일, 잔여: ${availableDays.toFixed(1)}일)`
       }
     }
     
