@@ -63,7 +63,7 @@ export async function POST(
     // Supabase에서 휴가 데이터 조회
     const { data: userLeaveData, error: fetchError } = await supabase
       .from('leave_days')
-      .select('leave_types')
+      .select('leave_types, substitute_leave_hours, compensatory_leave_hours')
       .eq('user_id', employeeId)
       .single()
 
@@ -102,8 +102,22 @@ export async function POST(
         newValue
       }
     } else {
-      // 대체휴가/보상휴가의 경우 기존 로직 유지
-      const currentValue = userLeaveData.leave_types[leaveType] || 0
+      // 대체휴가/보상휴가의 경우 새 필드 또는 기존 필드에서 조회
+      let currentValue = 0
+      let updateField = ''
+      
+      if (leaveType === 'substitute_leave_hours') {
+        currentValue = userLeaveData.substitute_leave_hours || userLeaveData.leave_types[leaveType] || 0
+        updateField = 'substitute_leave_hours'
+      } else if (leaveType === 'compensatory_leave_hours') {
+        currentValue = userLeaveData.compensatory_leave_hours || userLeaveData.leave_types[leaveType] || 0
+        updateField = 'compensatory_leave_hours'
+      } else {
+        // 기존 leave_types 내 필드
+        currentValue = userLeaveData.leave_types[leaveType] || 0
+        updateField = leaveType
+      }
+      
       const newValue = currentValue + amount
       
       // 음수 방지
@@ -114,17 +128,34 @@ export async function POST(
         )
       }
       
-      updatedLeaveTypes[leaveType] = newValue
+      // 새 필드 업데이트 또는 기존 필드 업데이트
+      if (updateField === 'substitute_leave_hours' || updateField === 'compensatory_leave_hours') {
+        // 새 필드에 업데이트하고 leave_types에도 동기화
+        updatedLeaveTypes[leaveType] = newValue
+      } else {
+        updatedLeaveTypes[leaveType] = newValue
+      }
+      
       adjustmentDetails = {
-        field: leaveType,
+        field: updateField,
         previousValue: currentValue,
         newValue
       }
     }
     
+    // 업데이트할 데이터 준비
+    const updateData: any = { leave_types: updatedLeaveTypes }
+    
+    // 시간 단위 휴가의 경우 새 필드도 업데이트
+    if (leaveType === 'substitute_leave_hours') {
+      updateData.substitute_leave_hours = updatedLeaveTypes[leaveType]
+    } else if (leaveType === 'compensatory_leave_hours') {
+      updateData.compensatory_leave_hours = updatedLeaveTypes[leaveType]
+    }
+    
     const { error: updateError } = await supabase
       .from('leave_days')
-      .update({ leave_types: updatedLeaveTypes })
+      .update(updateData)
       .eq('user_id', employeeId)
 
     if (updateError) {

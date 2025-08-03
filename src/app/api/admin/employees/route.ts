@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     employees.map(async (employee) => {
       const { data: leaveData } = await supabase
         .from('leave_days')
-        .select('leave_types')
+        .select('leave_types, substitute_leave_hours, compensatory_leave_hours')
         .eq('user_id', employee.id)
         .single()
       
@@ -50,13 +50,21 @@ export async function GET(request: NextRequest) {
       const annualRemaining = (leaveTypes.annual_days || 0) - (leaveTypes.used_annual_days || 0)
       const sickRemaining = (leaveTypes.sick_days || 0) - (leaveTypes.used_sick_days || 0)
       
+      // 시간 단위 휴가는 새 필드 또는 기존 필드에서 조회
+      const substituteHours = leaveData?.substitute_leave_hours || leaveTypes.substitute_leave_hours || 0
+      const compensatoryHours = leaveData?.compensatory_leave_hours || leaveTypes.compensatory_leave_hours || 0
+      
       return {
         ...employee,
         annual_leave: Math.max(0, annualRemaining),
         sick_leave: Math.max(0, sickRemaining),
-        substitute_leave_hours: leaveTypes.substitute_leave_hours || 0,
-        compensatory_leave_hours: leaveTypes.compensatory_leave_hours || 0,
-        leave_data: leaveTypes // 전체 leave_data도 포함
+        substitute_leave_hours: substituteHours,
+        compensatory_leave_hours: compensatoryHours,
+        leave_data: {
+          ...leaveTypes,
+          substitute_leave_hours: substituteHours,
+          compensatory_leave_hours: compensatoryHours
+        }
       }
     })
   )
