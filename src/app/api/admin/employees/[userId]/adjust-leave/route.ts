@@ -75,6 +75,12 @@ export async function POST(
       )
     }
 
+    console.log('🔧 조회된 사용자 휴가 데이터:', {
+      substitute_leave_hours: userLeaveData.substitute_leave_hours,
+      compensatory_leave_hours: userLeaveData.compensatory_leave_hours,
+      leave_types: userLeaveData.leave_types
+    })
+
     // 조정 로직 분기
     let updatedLeaveTypes = { ...userLeaveData.leave_types }
     let adjustmentDetails = {}
@@ -152,6 +158,13 @@ export async function POST(
     } else if (leaveType === 'compensatory_leave_hours') {
       updateData.compensatory_leave_hours = updatedLeaveTypes[leaveType]
     }
+    
+    console.log('🔧 업데이트할 데이터:', {
+      employeeId,
+      leaveType,
+      updateData,
+      updatedLeaveTypes
+    })
     
     const { error: updateError } = await supabase
       .from('leave_days')
