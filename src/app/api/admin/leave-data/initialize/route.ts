@@ -1,31 +1,27 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave';
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      return NextResponse.json(
-        { success: false, error: 'Not authenticated' },
-        { status: 401 }
-      );
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const adminUserId = authorization.replace('Bearer ', '')
+    const supabase = await createServiceRoleClient()
+
     // 관리자 권한 확인
-    const { data: userData } = await supabase
+    const { data: userProfile } = await supabase
       .from('users')
       .select('role')
-      .eq('id', user.id)
-      .single();
+      .eq('id', adminUserId)
+      .single()
 
-    if (!userData || userData.role !== 'admin') {
-      return NextResponse.json(
-        { success: false, error: 'Admin access required' },
-        { status: 403 }
-      );
+    if (userProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
     }
 
     // 모든 사용자 가져오기
@@ -76,8 +72,12 @@ export async function POST() {
             paternity_days: 10,
             used_paternity_days: 0,
             special_days: 5,
-            used_special_days: 0
+            used_special_days: 0,
+            substitute_leave_hours: 0,
+            compensatory_leave_hours: 0
           },
+          substitute_leave_hours: 0,
+          compensatory_leave_hours: 0,
           year: new Date().getFullYear(),
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
