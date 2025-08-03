@@ -87,8 +87,22 @@ export default function AdminFormManagement() {
 
       if (!response.ok) {
         const result = await response.json()
-        throw new Error(result.error || '상태 업데이트에 실패했습니다.')
+        console.error('❌ 휴가 승인 API 오류:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: result.error,
+          requestId,
+          action: newStatus
+        })
+        throw new Error(result.error || `상태 업데이트에 실패했습니다. (${response.status})`)
       }
+      
+      const responseData = await response.json()
+      console.log('✅ 휴가 승인 성공:', {
+        requestId,
+        action: newStatus,
+        response: responseData
+      })
       
       // 성공 시 부드럽게 목록 갱신
       setTimeout(() => fetchRequests(false), 500)

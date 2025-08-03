@@ -235,8 +235,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             </div>
 
-            {/* 대체휴가 현황 - 필드가 존재하면 표시 (0시간도 포함) */}
-            {leaveData.leave_types.hasOwnProperty('substitute_leave_hours') && (
+            {/* 대체휴가 현황 - 필드가 존재하거나 값이 있으면 표시 */}
+            {(leaveData.leave_types.hasOwnProperty('substitute_leave_hours') || substituteHours >= 0) && (
               <div className={`rounded-lg p-4 ${substituteStatus.needsAlert ? 'bg-red-50 border-2 border-red-200' : 'bg-purple-50'}`}>
                 <div className="flex items-start justify-between">
                   <div>
@@ -272,8 +272,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             )}
 
-            {/* 보상휴가 현황 - 필드가 존재하면 표시 (0시간도 포함) */}
-            {leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') && (
+            {/* 보상휴가 현황 - 필드가 존재하거나 값이 있으면 표시 */}
+            {(leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') || compensatoryHours >= 0) && (
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div>
@@ -302,6 +302,17 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             )}
           </div>
+
+          {/* 시간 단위 휴가가 초기화되지 않은 경우 안내 */}
+          {!leaveData.leave_types.hasOwnProperty('substitute_leave_hours') && 
+           !leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') && (
+            <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+              <p className="text-sm text-yellow-800">
+                💡 시간 단위 휴가(대체휴가, 보상휴가)가 아직 초기화되지 않았습니다.
+                관리자에게 문의해주세요.
+              </p>
+            </div>
+          )}
 
           {/* 추가 휴가 정보 */}
           {(leaveData.leave_types.special_days || leaveData.leave_types.maternity_days || 
