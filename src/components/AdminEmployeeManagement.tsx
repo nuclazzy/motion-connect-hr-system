@@ -107,7 +107,7 @@ export default function AdminEmployeeManagement() {
     try {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify(formData),
       })
 
@@ -182,7 +182,7 @@ export default function AdminEmployeeManagement() {
     try {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/adjust-leave`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ leaveType, adjustmentType, amount }),
       })
 
@@ -210,7 +210,7 @@ export default function AdminEmployeeManagement() {
     try {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/resign`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ resignation_date: formData.resignation_date }),
       })
 
@@ -237,6 +237,7 @@ export default function AdminEmployeeManagement() {
     try {
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
         method: 'DELETE',
+        headers: getAuthHeaders()
       })
 
       if (!response.ok) {

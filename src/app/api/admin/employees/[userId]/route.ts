@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function PATCH(
   request: NextRequest,
@@ -9,18 +8,20 @@ export async function PATCH(
   const { userId } = await params
   const updatedData = await request.json()
 
-  const supabase = createRouteHandlerClient({ cookies })
-
-  // 1. Check for admin role
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
+  // Authorization header에서 userId 가져오기
+  const authorization = request.headers.get('authorization')
+  if (!authorization || !authorization.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const adminUserId = authorization.replace('Bearer ', '')
+  const supabase = await createServiceRoleClient()
+
+  // 관리자 권한 확인
   const { data: userProfile } = await supabase
     .from('users')
     .select('role')
-    .eq('id', session.user.id)
+    .eq('id', adminUserId)
     .single()
 
   if (userProfile?.role !== 'admin') {
@@ -53,20 +54,22 @@ export async function DELETE(
 ) {
   const { userId } = await params
 
-  const supabase = createRouteHandlerClient({ cookies })
-
   console.log('🗑️ 직원 삭제 요청:', { userId })
 
-  // 1. Check for admin role
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session) {
+  // Authorization header에서 userId 가져오기
+  const authorization = request.headers.get('authorization')
+  if (!authorization || !authorization.startsWith('Bearer ')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const adminUserId = authorization.replace('Bearer ', '')
+  const supabase = await createServiceRoleClient()
+
+  // 관리자 권한 확인
   const { data: userProfile } = await supabase
     .from('users')
     .select('role')
-    .eq('id', session.user.id)
+    .eq('id', adminUserId)
     .single()
 
   if (userProfile?.role !== 'admin') {

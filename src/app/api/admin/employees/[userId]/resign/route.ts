@@ -11,6 +11,25 @@ export async function POST(
   { params }: { params: Promise<{ userId: string }> }
 ) {
   try {
+    // Authorization header에서 관리자 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const adminUserId = authorization.replace('Bearer ', '')
+    
+    // 관리자 권한 확인
+    const { data: adminProfile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', adminUserId)
+      .single()
+
+    if (!adminProfile || adminProfile.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
+    }
+
     const { resignation_date } = await request.json()
     const { userId } = await params
     const employeeId = userId
