@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { isPromotionTarget } from '@/lib/leave';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     // 이 API는 브라우저의 쿠키/세션 기반이 아닌, 

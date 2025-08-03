@@ -13,14 +13,14 @@ const buttonVariants = {
   text: 'text-primary-500 hover:text-primary-600 focus:ring-primary-500 p-0'
 } as const
 
-// 버튼 크기 스타일 정의
+// 버튼 크기 스타일 정의 (모바일 최적화)
 const buttonSizes = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-base',
-  lg: 'h-12 px-6 text-lg'
+  sm: 'h-10 px-3 text-sm md:h-8 md:px-2 md:text-xs',
+  md: 'h-12 px-4 text-base md:h-10 md:text-sm',
+  lg: 'h-14 px-6 text-lg md:h-12 md:text-base'
 } as const
 
-// 기본 버튼 스타일
+// 기본 버튼 스타일 (모바일 최적화)
 const baseButtonStyles = `
   inline-flex items-center justify-center gap-2
   rounded-md font-medium
@@ -28,6 +28,8 @@ const baseButtonStyles = `
   focus:outline-none focus:ring-2 focus:ring-offset-2
   disabled:opacity-50 disabled:pointer-events-none
   active:scale-95
+  touch-manipulation
+  min-h-[44px] md:min-h-[32px]
 `
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({

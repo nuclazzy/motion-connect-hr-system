@@ -248,3 +248,261 @@ body {
   border-radius: var(--radius-lg);
   margin: var(--spacing-4);
 }
+
+/* Mobile Optimization Styles */
+@media (max-width: 768px) {
+  /* 모바일에서 더 큰 터치 타겟 */
+  button, .btn, .form-control, input, select, textarea {
+    min-height: 44px; /* iOS/Android 권장 최소 터치 타겟 크기 */
+    font-size: 16px; /* iOS에서 줌 방지 */
+  }
+  
+  /* 모바일에서 테이블 가로 스크롤 */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .table-container table {
+    min-width: 600px;
+  }
+  
+  /* 모바일에서 카드 간격 조정 */
+  .card, .form-card {
+    margin: 0.5rem 0;
+    border-radius: var(--radius-md);
+  }
+  
+  /* 모바일에서 더 작은 패딩 */
+  .container, .main-content {
+    padding: 1rem 0.75rem;
+  }
+  
+  /* 모바일에서 폰트 크기 조정 */
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.5rem; }
+  h3 { font-size: 1.25rem; }
+  
+  /* 모바일에서 네비게이션 최적화 */
+  .mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-primary);
+    border-top: 1px solid var(--color-border-light);
+    z-index: 1000;
+    padding: 0.5rem;
+    display: flex;
+    justify-content: space-around;
+  }
+  
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem;
+    text-decoration: none;
+    color: var(--color-text-secondary);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast) var(--easing-standard);
+    flex: 1;
+    max-width: 80px;
+  }
+  
+  .mobile-nav-item:hover,
+  .mobile-nav-item.active {
+    background: var(--color-primary-50);
+    color: var(--color-primary);
+  }
+  
+  .mobile-nav-icon {
+    width: 24px;
+    height: 24px;
+    margin-bottom: 0.25rem;
+  }
+  
+  .mobile-nav-text {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-align: center;
+  }
+  
+  /* 모바일에서 폼 최적화 */
+  .form-group {
+    margin-bottom: 1rem;
+  }
+  
+  .form-label {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    display: block;
+    color: var(--color-text-primary);
+  }
+  
+  .form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    font-size: 16px; /* iOS 줌 방지 */
+    background: var(--color-surface-primary);
+    color: var(--color-text-primary);
+  }
+  
+  .form-control:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px var(--color-primary-50);
+  }
+  
+  /* 모바일에서 버튼 스타일 */
+  .btn-mobile {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition-fast) var(--easing-standard);
+  }
+  
+  .btn-primary-mobile {
+    background: var(--color-primary);
+    color: var(--color-text-inverse);
+  }
+  
+  .btn-primary-mobile:hover {
+    background: var(--color-primary-600);
+  }
+  
+  .btn-secondary-mobile {
+    background: var(--color-surface-secondary);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-light);
+  }
+  
+  .btn-secondary-mobile:hover {
+    background: var(--color-surface-tertiary);
+  }
+  
+  /* 모바일에서 모달 최적화 */
+  .modal-mobile {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--color-surface-primary);
+    z-index: 1001;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .modal-header-mobile {
+    position: sticky;
+    top: 0;
+    background: var(--color-surface-primary);
+    border-bottom: 1px solid var(--color-border-light);
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 1;
+  }
+  
+  .modal-content-mobile {
+    padding: 1rem;
+    padding-bottom: 2rem;
+  }
+  
+  /* 모바일에서 알림 최적화 */
+  .toast-mobile {
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    z-index: 1002;
+    background: var(--color-surface-primary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--elevation-3);
+    padding: 1rem;
+    border-left: 4px solid var(--color-primary);
+  }
+  
+  /* 모바일 전용 클래스 */
+  .mobile-only {
+    display: block;
+  }
+  
+  .desktop-only {
+    display: none;
+  }
+  
+  /* 모바일에서 사이드바 숨김 */
+  .sidebar {
+    display: none;
+  }
+  
+  /* 모바일에서 메인 콘텐츠 풀사이즈 */
+  .main-with-sidebar {
+    margin-left: 0;
+    width: 100%;
+  }
+  
+  /* 모바일에서 스택 레이아웃 */
+  .mobile-stack > * {
+    margin-bottom: 1rem;
+  }
+  
+  .mobile-stack > *:last-child {
+    margin-bottom: 0;
+  }
+}
+
+@media (min-width: 769px) {
+  .mobile-only {
+    display: none;
+  }
+  
+  .desktop-only {
+    display: block;
+  }
+}
+
+/* 터치 디바이스에서 호버 효과 제거 */
+@media (hover: none) and (pointer: coarse) {
+  .hover-effect:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  
+  /* 터치 디바이스에서 탭 하이라이트 제거 */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* 고해상도 디스플레이 최적화 */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .high-dpi-image {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* 안전 영역 (노치) 지원 */
+@supports (padding: max(0px)) {
+  .safe-area-inset-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+  
+  .safe-area-inset-bottom {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .mobile-nav {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { createServiceRoleGoogleCalendarService } from '@/services/googleCalendarServiceAccount'
 
 /**
  * 휴가 신청 시 트랜잭션으로 안전하게 처리하는 함수
@@ -190,10 +191,13 @@ async function approveLeaveRequestFallback(
   adminNote?: string
 ) {
   try {
-    // 요청 정보 조회
+    // 요청 정보와 사용자 정보 조회
     const { data: request, error: requestError } = await supabase
       .from('form_requests')
-      .select('*')
+      .select(`
+        *,
+        users!form_requests_user_id_fkey(name, email)
+      `)
       .eq('id', requestId)
       .single()
 
@@ -283,7 +287,17 @@ async function approveLeaveRequestFallback(
       return { success: false, error: '승인 처리에 실패했습니다.' }
     }
 
-    // 알림 생성 (선택적)
+    // Google Calendar 연동 (휴가 신청서인 경우)
+    if (request.form_type === '휴가 신청서') {
+      try {
+        await createCalendarEventForLeave(request, request.users)
+      } catch (calendarError) {
+        console.log('캘린더 이벤트 생성 실패:', calendarError)
+        // 캘린더 실패는 전체 프로세스를 중단하지 않음
+      }
+    }
+
+    // 알림 생성
     try {
       await supabase
         .from('notifications')
@@ -295,7 +309,6 @@ async function approveLeaveRequestFallback(
         })
     } catch (notificationError) {
       console.log('알림 생성 실패:', notificationError)
-      // 알림 실패는 전체 프로세스를 중단하지 않음
     }
 
     return { success: true, message: '승인 완료' }
@@ -303,5 +316,113 @@ async function approveLeaveRequestFallback(
   } catch (error) {
     console.error('Fallback 승인 처리 오류:', error)
     return { success: false, error: '승인 처리 중 오류가 발생했습니다.' }
+  }
+}
+
+/**
+ * 휴가 승인 시 Google Calendar 이벤트 생성
+ */
+async function createCalendarEventForLeave(request: any, user: any) {
+  try {
+    const requestData = request.request_data
+    const leaveType = requestData['휴가형태']
+    const startDate = requestData['시작일']
+    const endDate = requestData['종료일']
+    const reason = requestData['사유'] || ''
+
+    // Google Calendar 서비스 생성
+    const calendarService = await createServiceRoleGoogleCalendarService()
+    
+    // 이벤트 제목 생성
+    const eventTitle = `🏖️ ${user.name} - ${leaveType}`
+    
+    // 이벤트 설명 생성
+    let description = `직원: ${user.name}\n휴가 종류: ${leaveType}\n`
+    if (reason) {
+      description += `사유: ${reason}\n`
+    }
+    description += `\n승인 시간: ${new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`
+
+    // 반차인 경우 시간 설정
+    const isHalfDay = leaveType?.includes('반차')
+    let eventData: any
+
+    if (isHalfDay) {
+      // 반차는 시간 단위로 설정
+      const isAfternoon = leaveType.includes('오후')
+      const startTime = isAfternoon ? '13:00:00' : '09:00:00'
+      const endTime = isAfternoon ? '18:00:00' : '12:00:00'
+      
+      eventData = {
+        summary: eventTitle,
+        description: description,
+        start: {
+          dateTime: `${startDate}T${startTime}+09:00`,
+          timeZone: 'Asia/Seoul'
+        },
+        end: {
+          dateTime: `${startDate}T${endTime}+09:00`,
+          timeZone: 'Asia/Seoul'
+        },
+        extendedProperties: {
+          shared: {
+            'hr_leave_request_id': request.id,
+            'employee_email': user.email,
+            'leave_type': leaveType
+          }
+        }
+      }
+    } else {
+      // 종일 휴가는 날짜 단위로 설정
+      const nextDay = new Date(endDate)
+      nextDay.setDate(nextDay.getDate() + 1)
+      
+      eventData = {
+        summary: eventTitle,
+        description: description,
+        start: {
+          date: startDate,
+          timeZone: 'Asia/Seoul'
+        },
+        end: {
+          date: nextDay.toISOString().split('T')[0],
+          timeZone: 'Asia/Seoul'
+        },
+        extendedProperties: {
+          shared: {
+            'hr_leave_request_id': request.id,
+            'employee_email': user.email,
+            'leave_type': leaveType
+          }
+        }
+      }
+    }
+
+    // 회사 HR 캘린더에 이벤트 생성 (환경 변수에서 캘린더 ID 가져오기)
+    const calendarId = process.env.GOOGLE_CALENDAR_ID || 'primary'
+    const event = await calendarService.createEvent(calendarId, eventData)
+    
+    console.log('✅ Google Calendar 이벤트 생성 완료:', {
+      eventId: event.id,
+      title: eventTitle,
+      startDate: startDate,
+      endDate: endDate,
+      leaveType: leaveType
+    })
+
+    return event
+
+  } catch (error) {
+    console.error('❌ Google Calendar 이벤트 생성 실패:', error)
+    
+    // 개발 환경에서는 에러를 상세히 로깅
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Calendar service error details:', {
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      })
+    }
+    
+    throw error
   }
 }

@@ -23,20 +23,23 @@ const inputVariants = {
   `
 } as const
 
-// 입력 필드 크기 스타일
+// 입력 필드 크기 스타일 (모바일 최적화)
 const inputSizes = {
-  sm: 'h-8 px-3 text-sm',
-  md: 'h-10 px-4 text-base',
-  lg: 'h-12 px-6 text-lg'
+  sm: 'h-10 px-3 text-base md:h-8 md:px-2 md:text-sm',
+  md: 'h-12 px-4 text-base md:h-10 md:text-base',
+  lg: 'h-14 px-6 text-lg md:h-12 md:text-lg'
 } as const
 
-// 기본 입력 필드 스타일
+// 기본 입력 필드 스타일 (모바일 최적화)
 const baseInputStyles = `
   w-full rounded-md
   transition-all duration-200 ease-in-out
   placeholder:text-neutral-400
   focus:outline-none
   disabled:opacity-50 disabled:cursor-not-allowed
+  touch-manipulation
+  min-h-[44px] md:min-h-[32px]
+  text-base md:text-sm
 `
 
 // 레이블 스타일

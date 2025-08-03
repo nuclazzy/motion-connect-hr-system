@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server';
 import { createServiceRoleClient } from '@/lib/supabase/server';
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave';
 
+export const dynamic = 'force-dynamic';
+
 // Vercel Cron Job에 의해 호출될 API
 export async function GET() {
   try {
