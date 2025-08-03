@@ -4,6 +4,7 @@ import { calculateOvertimeLeave, getLeaveTypeName } from '@/lib/calculateOvertim
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 import { createServiceRoleGoogleCalendarService } from '@/services/googleCalendarServiceAccount'
+import { AuditLogger, extractRequestContext } from '@/lib/audit/audit-logger'
 
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -143,9 +144,18 @@ async function sendNotification(supabase: any, userId: string, message: string, 
 export async function POST(request: NextRequest) {
   try {
     const { requestId, action, adminNote } = await request.json()
+    const requestContext = extractRequestContext(request)
+    
     // Authorization header validation
     const authorization = request.headers.get('authorization')
     if (!authorization || !authorization.startsWith('Bearer ')) {
+      // 보안 이벤트 로깅
+      await AuditLogger.logSecurityEvent(
+        '인증되지 않은 관리자 작업 시도',
+        undefined,
+        'WARN' as any,
+        { action, requestId, ...requestContext }
+      )
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     const adminUserId = authorization.replace('Bearer ', '')
@@ -160,6 +170,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (adminUser?.role !== 'admin') {
+      // 권한 없는 접근 시도 로깅
+      await AuditLogger.logSecurityEvent(
+        '관리자 권한 없는 사용자의 승인 작업 시도',
+        adminUserId,
+        'HIGH' as any,
+        { action, requestId, userRole: adminUser?.role, ...requestContext }
+      )
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
@@ -415,6 +432,14 @@ export async function POST(request: NextRequest) {
           '/user'
         )
 
+        // 감사 로그 생성 - 승인
+        await AuditLogger.logFormApproval(
+          'APPROVE',
+          adminUserId,
+          formRequest,
+          adminNote
+        )
+
       } else if (action === 'reject') {
         // 서식 요청 거절 처리
         const { error: rejectError } = await serviceRoleSupabase
@@ -438,6 +463,14 @@ export async function POST(request: NextRequest) {
           formRequest.user_id,
           `${formRequest.form_type} 신청이 거절되었습니다. 사유: ${adminNote || '사유 없음'}`,
           '/user'
+        )
+
+        // 감사 로그 생성 - 거절
+        await AuditLogger.logFormApproval(
+          'REJECT',
+          adminUserId,
+          formRequest,
+          adminNote
         )
       }
 

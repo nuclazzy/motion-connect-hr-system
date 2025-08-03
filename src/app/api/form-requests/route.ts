@@ -3,6 +3,8 @@ import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { submitLeaveRequestWithTransaction } from '@/lib/supabase/leave-transaction'
 
+export const dynamic = 'force-dynamic'
+
 // Helper function to calculate leave days
 function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boolean): number {
   if (isHalfDay) {

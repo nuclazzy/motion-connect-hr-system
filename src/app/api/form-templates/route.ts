@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
+export const dynamic = 'force-dynamic'
+
 /* 로컬 테스트용 폼 템플릿 데이터 - 사용 중단
 const LOCAL_FORM_TEMPLATES = [
   {

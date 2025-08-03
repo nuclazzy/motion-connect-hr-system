@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 // 공공데이터포털 공휴일 API 키 (무료)
 const HOLIDAY_API_KEY = process.env.HOLIDAY_API_KEY
 

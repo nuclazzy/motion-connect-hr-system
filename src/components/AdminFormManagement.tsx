@@ -84,7 +84,19 @@ export default function AdminFormManagement() {
       // 성공 시 부드럽게 목록 갱신
       setTimeout(() => fetchRequests(false), 500)
     } catch (err) {
-      alert(`처리 중 오류 발생: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      // 개선된 에러 처리: 구체적이고 도움이 되는 메시지
+      const errorContext = {
+        action: newStatus,
+        requestId,
+        requestType: requests.find(r => r.id === requestId)?.form_type
+      }
+      
+      import('@/lib/error-handling/error-manager').then(({ ErrorManager }) => {
+        const appError = ErrorManager.getUserFriendlyMessage(err, errorContext)
+        ErrorManager.showUserError(appError)
+        ErrorManager.logError(appError, 'admin-action')
+      })
+      
       setRequests(originalRequests) // 실패 시 원래 상태로 롤백
     }
   }
