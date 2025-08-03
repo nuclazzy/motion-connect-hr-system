@@ -23,28 +23,28 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
     }
 
-    // 3. Fetch all users (입사일 기준으로 정렬 - 연차순)
-    const { data: employees, error } = await supabase
-    .from('users')
-    .select('*')
-    .order('hire_date', { ascending: true })
+    // 3. 최적화된 단일 쿼리로 직원 및 휴가 데이터 한 번에 조회
+    const { data: employeesWithLeave, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        leave_days!leave_days_user_id_fkey(
+          leave_types,
+          substitute_leave_hours,
+          compensatory_leave_hours
+        )
+      `)
+      .order('hire_date', { ascending: true })
 
-  if (error) {
-    console.error('Error fetching employees:', error)
-    return NextResponse.json({ error: 'Failed to fetch employees' }, { status: 500 })
-  }
+    if (error) {
+      console.error('Error fetching employees with leave data:', error)
+      return NextResponse.json({ error: 'Failed to fetch employees' }, { status: 500 })
+    }
 
-  // 3. Supabase 휴가 데이터와 합치기
-  const employeesWithLeaveData = await Promise.all(
-    employees.map(async (employee) => {
-      const { data: leaveData } = await supabase
-        .from('leave_days')
-        .select('leave_types, substitute_leave_hours, compensatory_leave_hours')
-        .eq('user_id', employee.id)
-        .single()
-      
+    // 데이터 변환 (N+1 쿼리 없이 처리)
+    const employeesWithLeaveData = employeesWithLeave.map(employee => {
+      const leaveData = employee.leave_days?.[0] // 첫 번째 휴가 데이터 (사용자당 하나)
       const leaveTypes = leaveData?.leave_types || {}
-      
       
       // 연차 잔여 계산 (지급 - 사용)
       const annualRemaining = (leaveTypes.annual_days || 0) - (leaveTypes.used_annual_days || 0)
@@ -54,8 +54,11 @@ export async function GET(request: NextRequest) {
       const substituteHours = leaveData?.substitute_leave_hours || leaveTypes.substitute_leave_hours || 0
       const compensatoryHours = leaveData?.compensatory_leave_hours || leaveTypes.compensatory_leave_hours || 0
       
+      // leave_days 필드 제거하고 변환된 데이터 반환
+      const { leave_days, ...employeeWithoutLeaveArray } = employee
+      
       return {
-        ...employee,
+        ...employeeWithoutLeaveArray,
         annual_leave: Math.max(0, annualRemaining),
         sick_leave: Math.max(0, sickRemaining),
         substitute_leave_hours: substituteHours,
@@ -67,7 +70,6 @@ export async function GET(request: NextRequest) {
         }
       }
     })
-  )
 
     console.log('👥 Supabase 직원 목록 조회 완료:', employeesWithLeaveData.length, '명')
 
