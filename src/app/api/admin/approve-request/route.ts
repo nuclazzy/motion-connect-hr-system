@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { calculateOvertimeLeave, getLeaveTypeName } from '@/lib/calculateOvertimeLeave'
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -32,64 +33,105 @@ async function createCalendarEvent(requestData: Record<string, any>, requestId: 
     const startDate = requestData.시작일
     const endDate = requestData.종료일 || startDate
     
-    // 반차 시간 설정
-    let timeStart = ''
-    let timeEnd = ''
+    let eventData
     
     if (isHalfDay) {
+      // 반차의 경우 시간 지정 이벤트
+      let timeStart = ''
+      let timeEnd = ''
+      
       if (requestData.휴가형태 === '오전 반차') {
         timeStart = 'T09:00:00'
         timeEnd = 'T13:00:00'
       } else if (requestData.휴가형태 === '오후 반차') {
         timeStart = 'T13:00:00'
         timeEnd = 'T18:00:00'
+      } else {
+        // 기본 반차 처리
+        timeStart = 'T09:00:00'
+        timeEnd = 'T13:00:00'
+      }
+      
+      eventData = {
+        summary: `[휴가] ${userName} - ${requestData.휴가형태}`,
+        description: `휴가 유형: ${requestData.휴가형태}\n사유: ${requestData.사유 || ''}\n신청자: ${userName}`,
+        start: {
+          dateTime: `${startDate}${timeStart}`,
+          timeZone: 'Asia/Seoul'
+        },
+        end: {
+          dateTime: `${endDate}${timeEnd}`,
+          timeZone: 'Asia/Seoul'
+        },
+        extendedProperties: {
+          shared: {
+            userId: userId,
+            requestId: requestId,
+            leaveType: requestData.휴가형태,
+            isHalfDay: 'true',
+            approvedAt: new Date().toISOString(),
+            source: 'motion-connect'
+          }
+        }
       }
     } else {
-      // 종일 휴가는 하루 종일
-      timeStart = 'T09:00:00'
-      timeEnd = 'T18:00:00'
-    }
-
-    const eventData = {
-      summary: `[휴가] ${userName} - ${requestData.휴가형태}`,
-      description: `휴가 유형: ${requestData.휴가형태}\n사유: ${requestData.사유 || ''}\n신청자: ${userName}`,
-      start: {
-        dateTime: `${startDate}${timeStart}`,
-        timeZone: 'Asia/Seoul'
-      },
-      end: {
-        dateTime: `${endDate}${timeEnd}`,
-        timeZone: 'Asia/Seoul'
-      },
-      // 향상된 메타데이터 저장
-      extendedProperties: {
-        shared: {
-          userId: userId,
-          requestId: requestId,
-          leaveType: requestData.휴가형태,
-          isHalfDay: isHalfDay.toString(),
-          approvedAt: new Date().toISOString(),
-          source: 'motion-connect'
+      // 종일 휴가의 경우 종일 이벤트로 생성
+      // 종료일은 다음 날로 설정 (Google Calendar 종일 이벤트 규칙)
+      const actualEndDate = new Date(endDate)
+      actualEndDate.setDate(actualEndDate.getDate() + 1)
+      const formattedEndDate = actualEndDate.toISOString().split('T')[0]
+      
+      eventData = {
+        summary: `[휴가] ${userName} - ${requestData.휴가형태}`,
+        description: `휴가 유형: ${requestData.휴가형태}\n사유: ${requestData.사유 || ''}\n신청자: ${userName}`,
+        start: {
+          date: startDate
+        },
+        end: {
+          date: formattedEndDate
+        },
+        extendedProperties: {
+          shared: {
+            userId: userId,
+            requestId: requestId,
+            leaveType: requestData.휴가형태,
+            isHalfDay: 'false',
+            approvedAt: new Date().toISOString(),
+            source: 'motion-connect'
+          }
         }
       }
     }
 
-    const response = await fetch('/api/calendar/create-event', {
+    // 휴가 전용 캘린더에 이벤트 생성
+    const response = await fetch('/api/calendar/create-event-direct', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(eventData)
+      body: JSON.stringify({
+        calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+        eventData
+      })
     })
 
     if (!response.ok) {
-      throw new Error('캘린더 이벤트 생성 실패')
+      const errorText = await response.text()
+      throw new Error(`캘린더 이벤트 생성 실패: ${errorText}`)
     }
 
     const result = await response.json()
-    return result.eventId
+    console.log('✅ 휴가 캘린더 이벤트 생성 완료:', {
+      eventId: result.event?.id,
+      calendar: '연차 및 경조사 현황',
+      user: userName,
+      leaveType: requestData.휴가형태,
+      period: `${startDate} ~ ${endDate}`
+    })
+    
+    return result.event?.id
   } catch (error) {
-    console.error('캘린더 이벤트 생성 오류:', error)
+    console.error('❌ 휴가 캘린더 이벤트 생성 오류:', error)
     throw error
   }
 }

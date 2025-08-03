@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
 // Helper function to send notification to admin
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,13 +31,22 @@ async function sendAdminNotification(supabase: any, message: string, link?: stri
 // Helper function to find and delete calendar event using extendedProperties
 async function deleteCalendarEventByMetadata(requestId: string, userId: string) {
   try {
-    // Google Calendar API를 통해 이벤트 검색 및 삭제
+    // 휴가 전용 캘린더에서 이벤트 조회
     const response = await fetch('/api/calendar/events', {
-      method: 'GET'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
+        timeMin: new Date(new Date().getFullYear(), 0, 1).toISOString(), // 올해 1월 1일부터
+        timeMax: new Date(new Date().getFullYear(), 11, 31).toISOString(), // 올해 12월 31일까지
+        maxResults: 500
+      })
     })
 
     if (!response.ok) {
-      throw new Error('캘린더 이벤트 조회 실패')
+      throw new Error('휴가 캘린더 이벤트 조회 실패')
     }
 
     const { events } = await response.json()
@@ -55,20 +65,35 @@ async function deleteCalendarEventByMetadata(requestId: string, userId: string) 
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ eventId: targetEvent.id })
+        body: JSON.stringify({ 
+          eventId: targetEvent.id,
+          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT
+        })
       })
 
       if (!deleteResponse.ok) {
-        throw new Error('캘린더 이벤트 삭제 실패')
+        const errorText = await deleteResponse.text()
+        throw new Error(`휴가 캘린더 이벤트 삭제 실패: ${errorText}`)
       }
+
+      console.log('✅ 휴가 캘린더 이벤트 삭제 완료:', {
+        eventId: targetEvent.id,
+        calendar: '연차 및 경조사 현황',
+        requestId
+      })
 
       return targetEvent.id
     } else {
-      console.warn('해당 요청의 캘린더 이벤트를 찾을 수 없습니다:', requestId)
+      console.warn('❌ 해당 요청의 캘린더 이벤트를 찾을 수 없습니다:', {
+        requestId,
+        userId,
+        searchedCalendar: '연차 및 경조사 현황',
+        totalEvents: events.length
+      })
       return null
     }
   } catch (error) {
-    console.error('캘린더 이벤트 삭제 오류:', error)
+    console.error('❌ 휴가 캘린더 이벤트 삭제 오류:', error)
     throw error
   }
 }

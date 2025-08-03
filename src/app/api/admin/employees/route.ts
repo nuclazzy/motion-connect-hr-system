@@ -47,12 +47,17 @@ export async function GET(request: NextRequest) {
       const leaveTypes = leaveData?.leave_types || {}
       
       
+      // 연차 잔여 계산 (지급 - 사용)
+      const annualRemaining = (leaveTypes.annual_days || 0) - (leaveTypes.used_annual_days || 0)
+      const sickRemaining = (leaveTypes.sick_days || 0) - (leaveTypes.used_sick_days || 0)
+      
       return {
         ...employee,
-        annual_leave: leaveTypes.annual_days || 0,
-        sick_leave: leaveTypes.sick_days || 0,
+        annual_leave: Math.max(0, annualRemaining),
+        sick_leave: Math.max(0, sickRemaining),
         substitute_leave_hours: leaveTypes.substitute_leave_hours || 0,
-        compensatory_leave_hours: leaveTypes.compensatory_leave_hours || 0
+        compensatory_leave_hours: leaveTypes.compensatory_leave_hours || 0,
+        leave_data: leaveTypes // 전체 leave_data도 포함
       }
     })
   )

@@ -16,6 +16,7 @@ interface Employee {
   address: string
   is_active: boolean
   resignation_date?: string
+  termination_date?: string
   annual_leave: number
   sick_leave: number
   substitute_leave_hours: number
@@ -250,13 +251,13 @@ export default function AdminEmployeeManagement() {
     }
   }
 
-  // 상태별 직원 필터링
+  // 상태별 직원 필터링 (termination_date 기준)
   const getFilteredEmployees = () => {
     switch (statusFilter) {
       case 'active':
-        return employees.filter(emp => emp.is_active)
+        return employees.filter(emp => !emp.termination_date)
       case 'resigned':
-        return employees.filter(emp => !emp.is_active)
+        return employees.filter(emp => !!emp.termination_date)
       default:
         return employees
     }
@@ -274,7 +275,7 @@ export default function AdminEmployeeManagement() {
           <div>
             <h3 className="text-lg font-medium text-gray-900">직원 정보 관리</h3>
             <p className="text-sm text-gray-500 mt-1">
-              전체 {employees.length}명 | 재직 {employees.filter(emp => emp.is_active).length}명 | 퇴사 {employees.filter(emp => !emp.is_active).length}명
+              전체 {employees.length}명 | 재직 {employees.filter(emp => !emp.termination_date).length}명 | 퇴사 {employees.filter(emp => !!emp.termination_date).length}명
             </p>
           </div>
           <div className="flex space-x-2">
@@ -317,15 +318,15 @@ export default function AdminEmployeeManagement() {
                     </div>
                     <div className="flex flex-col items-end">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                        emp.is_active 
+                        !emp.termination_date 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-red-100 text-red-800'
                       }`}>
-                        {emp.is_active ? '재직' : '퇴사'}
+                        {!emp.termination_date ? '재직' : '퇴사'}
                       </span>
-                      {!emp.is_active && emp.resignation_date && (
+                      {emp.termination_date && (
                         <span className="text-xs text-gray-400 mt-1">
-                          {new Date(emp.resignation_date).toLocaleDateString('ko-KR')}
+                          {new Date(emp.termination_date).toLocaleDateString('ko-KR')}
                         </span>
                       )}
                     </div>
