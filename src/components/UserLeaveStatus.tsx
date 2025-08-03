@@ -77,7 +77,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
       } finally {
         setLoading(false)
       }
-    }
   }, [user.id, user.name])
 
   useEffect(() => {
