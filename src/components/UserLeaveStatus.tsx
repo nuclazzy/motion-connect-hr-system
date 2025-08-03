@@ -138,9 +138,20 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const annualRemaining = (leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)
   const sickRemaining = (leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)
   
-  // 시간 단위 휴가 상태 계산 (새 필드 또는 기존 필드에서 조회)
-  const substituteHours = leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0
-  const compensatoryHours = leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0
+  // 시간 단위 휴가 상태 계산 (신청 검증과 동일한 방식으로 조회)
+  // 주요: leave_types 내부에서만 조회하여 신청 검증 로직과 일치시킴
+  const substituteHours = leaveData.leave_types.substitute_leave_hours || 0
+  const compensatoryHours = leaveData.leave_types.compensatory_leave_hours || 0
+  
+  console.log('🔍 직원 대시보드 휴가 시간 확인:', {
+    userId: user.id,
+    userName: user.name,
+    substituteHours,
+    compensatoryHours,
+    rawLeaveTypes: leaveData.leave_types,
+    hasSubstituteField: leaveData.leave_types.hasOwnProperty('substitute_leave_hours'),
+    hasCompensatoryField: leaveData.leave_types.hasOwnProperty('compensatory_leave_hours')
+  })
   const substituteStatus = getLeaveStatus(substituteHours)
   const compensatoryStatus = getLeaveStatus(compensatoryHours)
   

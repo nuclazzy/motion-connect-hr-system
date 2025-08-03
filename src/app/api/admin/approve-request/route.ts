@@ -5,6 +5,7 @@ import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 import { createServiceRoleGoogleCalendarService } from '@/services/googleCalendarServiceAccount'
 import { AuditLogger, extractRequestContext } from '@/lib/audit/audit-logger'
+import { approveLeaveRequestWithTransaction } from '@/lib/supabase/leave-transaction'
 
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -205,109 +206,46 @@ export async function POST(request: NextRequest) {
 
     try {
       if (action === 'approve') {
-        // 휴가 신청서인 경우 특별 처리
+        // 휴가 신청서인 경우 트랜잭션 함수로 처리
         if (formRequest.form_type === '휴가 신청서') {
-          const requestData = formRequest.request_data
-          const isHalfDay = requestData.휴가형태?.includes('반차')
-          const daysToDeduct = calculateWorkingDays(requestData.시작일, requestData.종료일, isHalfDay)
-
-          // 휴가 잔여일수 확인 및 차감
-          const { data: leaveDaysData, error: leaveDaysError } = await serviceRoleSupabase
-            .from('leave_days')
-            .select('leave_types')
-            .eq('user_id', formRequest.user_id)
-            .single()
-
-          if (leaveDaysError || !leaveDaysData) {
-            return NextResponse.json({ error: '휴가 정보를 조회할 수 없습니다.' }, { status: 404 })
-          }
-
-          // 원본 데이터 저장 (롤백용)
-          originalLeaveData = leaveDaysData.leave_types
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const leaveTypes = leaveDaysData.leave_types as Record<string, any>
+          console.log('🔄 휴가 승인 트랜잭션 처리 시작:', requestId)
           
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          let updatedLeaveTypes: any
+          // 트랜잭션 함수로 휴가 승인 처리
+          const approvalResult = await approveLeaveRequestWithTransaction(
+            serviceRoleSupabase,
+            requestId,
+            adminUserId,
+            adminNote
+          )
           
-          // 휴가 타입별 처리
-          if (requestData.휴가형태 === '대체휴가' || requestData.휴가형태 === '보상휴가') {
-            // 시간 단위 휴가 차감 - 시간 단위 휴가는 주말 관계없이 단순 계산
-            const simpleDays = requestData.시작일 === requestData.종료일 ? 1 : 
-              Math.ceil((new Date(requestData.종료일).getTime() - new Date(requestData.시작일).getTime()) / (1000 * 3600 * 24)) + 1
-            const hoursToDeduct = calculateHoursToDeduct(simpleDays)
-            const fieldName = requestData.휴가형태 === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
-            const availableHours = leaveTypes[fieldName] || 0
-            
-            if (availableHours < hoursToDeduct) {
-              return NextResponse.json({ 
-                error: `잔여 ${requestData.휴가형태}가 부족합니다. (잔여: ${availableHours}시간, 필요: ${hoursToDeduct}시간)` 
-              }, { status: 400 })
-            }
-
-            updatedLeaveTypes = {
-              ...leaveTypes,
-              [fieldName]: availableHours - hoursToDeduct
-            }
-          } else {
-            // 기존 연차/병가 처리
-            let leaveTypeKey = 'annual'
-            if (requestData.휴가형태 === '병가') {
-              leaveTypeKey = 'sick'
-            }
-
-            const totalDays = leaveTypes[leaveTypeKey]?.total || 0
-            const usedDays = leaveTypes[leaveTypeKey]?.used || 0
-            const remainingDays = totalDays - usedDays
-
-            if (remainingDays < daysToDeduct) {
-              return NextResponse.json({ 
-                error: `잔여 ${requestData.휴가형태}가 부족합니다. (잔여: ${remainingDays}일, 필요: ${daysToDeduct}일)` 
-              }, { status: 400 })
-            }
-
-            updatedLeaveTypes = {
-              ...leaveTypes,
-              [leaveTypeKey]: {
-                ...leaveTypes[leaveTypeKey],
-                used: (leaveTypes[leaveTypeKey]?.used || 0) + daysToDeduct
-              }
-            }
+          if (!approvalResult.success) {
+            const errorMessage = 'error' in approvalResult ? approvalResult.error : '휴가 승인 처리에 실패했습니다.'
+            console.error('❌ 휴가 승인 트랜잭션 실패:', errorMessage)
+            return NextResponse.json({ error: errorMessage }, { status: 400 })
           }
-
-          const { error: updateError } = await serviceRoleSupabase
-            .from('leave_days')
-            .update({ leave_types: updatedLeaveTypes })
-            .eq('user_id', formRequest.user_id)
-
-          if (updateError) {
-            console.error('휴가 일수 차감 실패:', updateError)
-            return NextResponse.json({ error: '휴가 일수 차감에 실패했습니다.' }, { status: 500 })
-          }
-
-          leaveBalanceUpdated = true
-
-          // Google Calendar 이벤트 생성
-          try {
-            eventId = await createCalendarEvent(
-              requestData,
-              requestId,
-              formRequest.user_id,
-              formRequest.users.name
-            )
-          } catch (calendarError) {
-            // 캘린더 생성 실패 시 휴가 일수 롤백
-            if (leaveBalanceUpdated && originalLeaveData) {
-              await serviceRoleSupabase
-                .from('leave_days')
-                .update({ leave_types: originalLeaveData })
-                .eq('user_id', formRequest.user_id)
-            }
-            
-            console.error('캘린더 이벤트 생성 실패:', calendarError)
-            return NextResponse.json({ error: '캘린더 이벤트 생성에 실패했습니다.' }, { status: 500 })
-          }
+          
+          console.log('✅ 휴가 승인 트랜잭션 완료')
+          
+          // 트랜잭션 함수에서 모든 처리가 완료되었으므로 직원 알림만 추가로 전송
+          await sendNotification(
+            serviceRoleSupabase,
+            formRequest.user_id,
+            `${formRequest.form_type} 신청이 승인되었습니다.`,
+            '/user'
+          )
+          
+          // 감사 로그 생성 - 승인
+          await AuditLogger.logFormApproval(
+            'APPROVE',
+            adminUserId,
+            formRequest,
+            adminNote
+          )
+          
+          return NextResponse.json({ 
+            success: true, 
+            message: `${formRequest.form_type} 승인 완료`
+          })
         }
 
         // 초과근무 신청서인 경우 보상휴가 자동 지급
