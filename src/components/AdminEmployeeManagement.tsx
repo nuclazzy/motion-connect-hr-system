@@ -34,6 +34,7 @@ export default function AdminEmployeeManagement() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
@@ -134,14 +135,26 @@ export default function AdminEmployeeManagement() {
 
     if (!selectedEmployee) return
 
-    // 현재 값과 새 값의 차이 계산
-    const currentData = (selectedEmployee as any)?.leave_data || {}
-    const targetField = leaveType === 'annual_leave' 
-      ? (adjustmentType === 'granted' ? 'annual_days' : 'used_annual_days')
-      : (adjustmentType === 'granted' ? 'sick_days' : 'used_sick_days')
-    
-    const currentValue = currentData[targetField] || 0
-    const difference = newValue - currentValue
+    let currentValue = 0
+    let difference = 0
+
+    // 필드별 현재 값 계산
+    if (['substitute_hours', 'compensatory_hours'].includes(fieldKey)) {
+      // 대체휴가/보상휴가는 직접 값 설정
+      currentValue = fieldKey === 'substitute_hours' 
+        ? selectedEmployee.substitute_leave_hours || 0
+        : selectedEmployee.compensatory_leave_hours || 0
+      difference = newValue - currentValue
+    } else {
+      // 연차/병가는 leave_data에서 값 가져오기
+      const currentData = (selectedEmployee as any)?.leave_data || {}
+      const targetField = leaveType === 'annual_leave' 
+        ? (adjustmentType === 'granted' ? 'annual_days' : 'used_annual_days')
+        : (adjustmentType === 'granted' ? 'sick_days' : 'used_sick_days')
+      
+      currentValue = currentData[targetField] || 0
+      difference = newValue - currentValue
+    }
 
     // 직접 값 설정이므로 차이값을 이용해 조정
     await handleLeaveAdjustment(leaveType, adjustmentType, difference)
@@ -237,27 +250,86 @@ export default function AdminEmployeeManagement() {
     }
   }
 
+  // 상태별 직원 필터링
+  const getFilteredEmployees = () => {
+    switch (statusFilter) {
+      case 'active':
+        return employees.filter(emp => emp.is_active)
+      case 'resigned':
+        return employees.filter(emp => !emp.is_active)
+      default:
+        return employees
+    }
+  }
+
+  const filteredEmployees = getFilteredEmployees()
+
   if (loading) return <div className="p-4">직원 목록을 불러오는 중...</div>
   if (error && !employees.length) return <div className="p-4 text-red-500">오류: {error}</div>
 
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="p-5">
-        <h3 className="text-lg font-medium text-gray-900">직원 정보 관리</h3>
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">직원 정보 관리</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              전체 {employees.length}명 | 재직 {employees.filter(emp => emp.is_active).length}명 | 퇴사 {employees.filter(emp => !emp.is_active).length}명
+            </p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              전체
+            </button>
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'active' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              재직중
+            </button>
+            <button
+              onClick={() => setStatusFilter('resigned')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'resigned' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              퇴사
+            </button>
+          </div>
+        </div>
         {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
       </div>
       <div className="border-t border-gray-200 md:grid md:grid-cols-3">
         {/* Employee List */}
         <div className="md:col-span-1 border-r border-gray-200 h-96 overflow-y-auto">
           <ul>
-            {employees.map(emp => (
+            {filteredEmployees.map(emp => (
               <li key={emp.id}>
                 <button
                   onClick={() => handleSelectEmployee(emp)}
                   className={`w-full text-left p-4 ${selectedEmployee?.id === emp.id ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
                 >
-                  <p className="font-medium text-indigo-600">{emp.name} ({emp.position})</p>
-                  <p className="text-sm text-gray-500">{emp.department}</p>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-indigo-600">{emp.name} ({emp.position})</p>
+                      <p className="text-sm text-gray-500">{emp.department}</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        emp.is_active 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {emp.is_active ? '재직' : '퇴사'}
+                      </span>
+                      {!emp.is_active && emp.resignation_date && (
+                        <span className="text-xs text-gray-400 mt-1">
+                          {new Date(emp.resignation_date).toLocaleDateString('ko-KR')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </button>
               </li>
             ))}
@@ -365,274 +437,234 @@ export default function AdminEmployeeManagement() {
               {/* Leave Management Tab */}
               {activeTab === 'leave' && (
                 <div className="space-y-6">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-4">현재 휴가 현황</h4>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm text-gray-600">연차</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.annual_leave || 0}일 잔여</div>
-                        {/* Leave data에서 실제 값 계산 필요 */}
-                        <div className="text-xs text-gray-500 mt-1">
-                          총 지급: {(selectedEmployee as any)?.leave_data?.annual_days || 0}일 / 사용: {(selectedEmployee as any)?.leave_data?.used_annual_days || 0}일
+                  <h4 className="font-medium text-gray-900 mb-4">휴가 현황 및 조정</h4>
+                  <p className="text-sm text-gray-600 mb-4">각 항목을 클릭하여 직접 수정할 수 있습니다.</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 연차 카드 */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-blue-900">연차</h5>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {selectedEmployee.annual_leave || 0}일 잔여
                         </div>
                       </div>
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm text-gray-600">병가</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.sick_leave || 0}일 잔여</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          총 지급: {(selectedEmployee as any)?.leave_data?.sick_days || 0}일 / 사용: {(selectedEmployee as any)?.leave_data?.used_sick_days || 0}일
+                      
+                      <div className="space-y-2">
+                        {/* 지급 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('annual_granted', (selectedEmployee as any)?.leave_data?.annual_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
+                          {editingField === 'annual_granted' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('annual_granted', 'annual_leave', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_granted', 'annual_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.annual_days || 0}일</span>
+                          )}
+                        </div>
+                        
+                        {/* 사용 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('annual_used', (selectedEmployee as any)?.leave_data?.used_annual_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
+                          {editingField === 'annual_used' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('annual_used', 'annual_leave', 'used')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_used', 'annual_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_annual_days || 0}일</span>
+                          )}
                         </div>
                       </div>
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm text-gray-600">대체휴가</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.substitute_leave_hours || 0}시간</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {selectedEmployee.is_active ? '재직중' : '퇴사'}
+                    </div>
+
+                    {/* 병가 카드 */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-red-900">병가</h5>
+                        <div className="text-2xl font-bold text-red-600">
+                          {selectedEmployee.sick_leave || 0}일 잔여
                         </div>
                       </div>
-                      <div className="bg-white p-3 rounded border">
-                        <div className="text-sm text-gray-600">보상휴가</div>
-                        <div className="text-lg font-semibold">{selectedEmployee.compensatory_leave_hours || 0}시간</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {selectedEmployee.resignation_date ? `퇴사일: ${selectedEmployee.resignation_date}` : '재직중'}
+                      
+                      <div className="space-y-2">
+                        {/* 지급 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('sick_granted', (selectedEmployee as any)?.leave_data?.sick_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
+                          {editingField === 'sick_granted' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('sick_granted', 'sick_leave', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_granted', 'sick_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.sick_days || 0}일</span>
+                          )}
+                        </div>
+                        
+                        {/* 사용 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('sick_used', (selectedEmployee as any)?.leave_data?.used_sick_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
+                          {editingField === 'sick_used' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('sick_used', 'sick_leave', 'used')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_used', 'sick_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_sick_days || 0}일</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 대체휴가 카드 */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-purple-900">대체휴가</h5>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {selectedEmployee.substitute_leave_hours || 0}시간
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('substitute_hours', selectedEmployee.substitute_leave_hours || 0)}>
+                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
+                          {editingField === 'substitute_hours' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-purple-600">{selectedEmployee.substitute_leave_hours || 0}시간</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 보상휴가 카드 */}
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-orange-900">보상휴가</h5>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {selectedEmployee.compensatory_leave_hours || 0}시간
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('compensatory_hours', selectedEmployee.compensatory_leave_hours || 0)}>
+                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
+                          {editingField === 'compensatory_hours' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-orange-600">{selectedEmployee.compensatory_leave_hours || 0}시간</span>
+                          )}
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <h4 className="font-medium text-gray-900">휴가 일수 조정</h4>
-                    <div className="space-y-6">
-                      {/* 연차 조정 */}
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h5 className="text-sm font-medium text-gray-900 mb-3">연차 조정</h5>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">지급 일수 조정</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.5"
-                                placeholder="일수 (예: 5, -2.5)"
-                                className="flex-1 border-gray-300 rounded-md shadow-sm"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const input = e.target as HTMLInputElement
-                                    const amount = parseFloat(input.value)
-                                    if (!isNaN(amount)) {
-                                      handleLeaveAdjustment('annual_leave', 'granted', amount)
-                                      input.value = ''
-                                    }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                                  const amount = parseFloat(input.value)
-                                  if (!isNaN(amount)) {
-                                    handleLeaveAdjustment('annual_leave', 'granted', amount)
-                                    input.value = ''
-                                  }
-                                }}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                              >
-                                조정
-                              </button>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">사용 일수 조정</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.5"
-                                placeholder="일수 (예: 5, -2.5)"
-                                className="flex-1 border-gray-300 rounded-md shadow-sm"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const input = e.target as HTMLInputElement
-                                    const amount = parseFloat(input.value)
-                                    if (!isNaN(amount)) {
-                                      handleLeaveAdjustment('annual_leave', 'used', amount)
-                                      input.value = ''
-                                    }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                                  const amount = parseFloat(input.value)
-                                  if (!isNaN(amount)) {
-                                    handleLeaveAdjustment('annual_leave', 'used', amount)
-                                    input.value = ''
-                                  }
-                                }}
-                                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                              >
-                                조정
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 병가 조정 */}
-                      <div className="bg-red-50 p-4 rounded-lg">
-                        <h5 className="text-sm font-medium text-gray-900 mb-3">병가 조정</h5>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">지급 일수 조정</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.5"
-                                placeholder="일수 (예: 5, -2.5)"
-                                className="flex-1 border-gray-300 rounded-md shadow-sm"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const input = e.target as HTMLInputElement
-                                    const amount = parseFloat(input.value)
-                                    if (!isNaN(amount)) {
-                                      handleLeaveAdjustment('sick_leave', 'granted', amount)
-                                      input.value = ''
-                                    }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                                  const amount = parseFloat(input.value)
-                                  if (!isNaN(amount)) {
-                                    handleLeaveAdjustment('sick_leave', 'granted', amount)
-                                    input.value = ''
-                                  }
-                                }}
-                                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                              >
-                                조정
-                              </button>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">사용 일수 조정</label>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                step="0.5"
-                                placeholder="일수 (예: 5, -2.5)"
-                                className="flex-1 border-gray-300 rounded-md shadow-sm"
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    const input = e.target as HTMLInputElement
-                                    const amount = parseFloat(input.value)
-                                    if (!isNaN(amount)) {
-                                      handleLeaveAdjustment('sick_leave', 'used', amount)
-                                      input.value = ''
-                                    }
-                                  }
-                                }}
-                              />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                                  const amount = parseFloat(input.value)
-                                  if (!isNaN(amount)) {
-                                    handleLeaveAdjustment('sick_leave', 'used', amount)
-                                    input.value = ''
-                                  }
-                                }}
-                                className="px-3 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                              >
-                                조정
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 대체휴가 조정 */}
-                      <div className="bg-purple-50 p-4 rounded-lg">
-                        <h5 className="text-sm font-medium text-gray-900 mb-3">대체휴가 조정 (시간)</h5>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            placeholder="시간 (예: 8, -4)"
-                            className="flex-1 border-gray-300 rounded-md shadow-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const input = e.target as HTMLInputElement
-                                const amount = parseFloat(input.value)
-                                if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('substitute_leave_hours', 'granted', amount)
-                                  input.value = ''
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                              const amount = parseFloat(input.value)
-                              if (!isNaN(amount)) {
-                                handleLeaveAdjustment('substitute_leave_hours', 'granted', amount)
-                                input.value = ''
-                              }
-                            }}
-                            className="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
-                          >
-                            조정
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 보상휴가 조정 */}
-                      <div className="bg-orange-50 p-4 rounded-lg">
-                        <h5 className="text-sm font-medium text-gray-900 mb-3">보상휴가 조정 (시간)</h5>
-                        <div className="flex gap-2">
-                          <input
-                            type="number"
-                            step="0.5"
-                            placeholder="시간 (예: 8, -4)"
-                            className="flex-1 border-gray-300 rounded-md shadow-sm"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const input = e.target as HTMLInputElement
-                                const amount = parseFloat(input.value)
-                                if (!isNaN(amount)) {
-                                  handleLeaveAdjustment('compensatory_leave_hours', 'granted', amount)
-                                  input.value = ''
-                                }
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              const input = (e.target as HTMLElement).previousElementSibling as HTMLInputElement
-                              const amount = parseFloat(input.value)
-                              if (!isNaN(amount)) {
-                                handleLeaveAdjustment('compensatory_leave_hours', 'granted', amount)
-                                input.value = ''
-                              }
-                            }}
-                            className="px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
-                          >
-                            조정
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h5 className="text-sm font-medium text-yellow-800 mb-2">💡 사용 안내</h5>
+                    <ul className="text-sm text-yellow-700 space-y-1">
+                      <li>• 각 항목을 클릭하면 직접 수정할 수 있습니다</li>
+                      <li>• Enter 키로 저장, Esc 키로 취소할 수 있습니다</li>
+                      <li>• 연차/병가는 지급 일수와 사용 일수를 별도로 관리합니다</li>
+                      <li>• 대체휴가/보상휴가는 보유 시간을 직접 설정합니다</li>
+                    </ul>
                   </div>
-
                 </div>
               )}
 
