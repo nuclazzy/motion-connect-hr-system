@@ -66,14 +66,23 @@ export default function AdminFormManagement() {
     )
 
     try {
+      const headers = getAuthHeaders()
+      const requestBody = { 
+        requestId, 
+        action: newStatus === 'approved' ? 'approve' : 'reject',
+        adminNote 
+      }
+      
+      console.log('🔍 관리자 승인 API 호출:', {
+        url: '/api/admin/approve-request',
+        headers,
+        body: requestBody
+      })
+      
       const response = await fetch('/api/admin/approve-request', {
         method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ 
-          requestId, 
-          action: newStatus === 'approved' ? 'approve' : 'reject',
-          adminNote 
-        }),
+        headers,
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {

@@ -7,6 +7,8 @@ import { createServiceRoleGoogleCalendarService } from '@/services/googleCalenda
 import { AuditLogger, extractRequestContext } from '@/lib/audit/audit-logger'
 import { approveLeaveRequestWithTransaction } from '@/lib/supabase/leave-transaction'
 
+export const dynamic = 'force-dynamic'
+
 // Helper function to calculate leave days (excluding weekends and holidays)
 function calculateWorkingDays(startDate: string, endDate: string, isHalfDay: boolean): number {
   if (isHalfDay) {
