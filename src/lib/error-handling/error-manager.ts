@@ -207,15 +207,23 @@ export class ErrorManager {
   }
   
   private static createGenericError(error: any, timestamp: Date): AppError {
+    // 에러 메시지에서 파일 경로 제거 (보안상 민감한 정보 노출 방지)
+    let cleanMessage = error.message || 'Unknown error'
+    
+    // 파일 경로 패턴 제거 (/var/folders/..., /Users/..., C:\... 등)
+    cleanMessage = cleanMessage.replace(/\/(?:var|Users|home|tmp)\/[^\s]+/gi, '[시스템 경로]')
+    cleanMessage = cleanMessage.replace(/[C-Z]:\\[^\s]+/gi, '[시스템 경로]')
+    
     return {
       code: ErrorCode.SYSTEM_DATABASE_ERROR,
-      message: error.message || 'Unknown error',
+      message: cleanMessage,
       userMessage: '예상치 못한 오류가 발생했습니다.',
       suggestions: [
         '페이지를 새로고침해보세요.',
         '문제가 계속되면 관리자에게 연락하세요.'
       ],
-      technicalDetails: error,
+      // technicalDetails는 개발 환경에서만 포함
+      ...(process.env.NODE_ENV === 'development' && { technicalDetails: error }),
       timestamp
     }
   }

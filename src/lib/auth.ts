@@ -145,19 +145,26 @@ export async function logoutUser() {
  * Authorization header가 포함된 fetch 옵션 생성
  */
 export function getAuthHeaders(): Record<string, string> {
+  // 기본 헤더는 항상 포함 (Content-Type이 없으면 JSON 파싱 실패로 인한 404 발생 가능)
+  const baseHeaders = {
+    'Content-Type': 'application/json'
+  }
+  
   const userStr = typeof window !== 'undefined' ? localStorage.getItem('motion-connect-user') : null
   if (!userStr) {
-    return {}
+    console.warn('⚠️ localStorage에서 사용자 정보를 찾을 수 없음 - Authorization 헤더 없이 요청')
+    return baseHeaders
   }
   
   try {
     const user = JSON.parse(userStr)
     return {
-      'Authorization': `Bearer ${user.id}`,
-      'Content-Type': 'application/json'
+      ...baseHeaders,
+      'Authorization': `Bearer ${user.id}`
     }
-  } catch {
-    return {}
+  } catch (error) {
+    console.error('❌ localStorage 사용자 정보 파싱 실패:', error)
+    return baseHeaders
   }
 }
 
