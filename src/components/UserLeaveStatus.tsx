@@ -235,8 +235,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             </div>
 
-            {/* 대체휴가 현황 - 시간이 있는 경우에만 표시 */}
-            {substituteHours > 0 && (
+            {/* 대체휴가 현황 - 필드가 존재하면 표시 (0시간도 포함) */}
+            {leaveData.leave_types.hasOwnProperty('substitute_leave_hours') && (
               <div className={`rounded-lg p-4 ${substituteStatus.needsAlert ? 'bg-red-50 border-2 border-red-200' : 'bg-purple-50'}`}>
                 <div className="flex items-start justify-between">
                   <div>
@@ -272,8 +272,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             )}
 
-            {/* 보상휴가 현황 - 시간이 있는 경우에만 표시 */}
-            {compensatoryHours > 0 && (
+            {/* 보상휴가 현황 - 필드가 존재하면 표시 (0시간도 포함) */}
+            {leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') && (
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div>
