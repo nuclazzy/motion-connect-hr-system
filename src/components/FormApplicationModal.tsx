@@ -454,6 +454,49 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       const result = await response.json()
 
       if (response.ok) {
+        // 🎯 대체휴가 우선 사용 독려 메시지 처리
+        if (result.warning && result.message) {
+          const userChoice = confirm(`⚠️ ${result.message}\n\n${result.suggestion}`)
+          
+          if (userChoice) {
+            // 사용자가 대체휴가 사용을 선택한 경우
+            const newFormData = { ...formData }
+            newFormData.휴가형태 = formData.휴가형태?.includes('반차') ? '대체휴가 반차' : '대체휴가'
+            setFormData(newFormData)
+            
+            alert('💡 휴가 종류를 대체휴가로 변경했습니다. 다시 신청해주세요.')
+            setSubmitting(false)
+            return
+          }
+          
+          // 사용자가 연차로 계속 진행하려는 경우
+          const confirmAnnual = confirm('연차로 계속 신청하시겠습니까?')
+          if (!confirmAnnual) {
+            setSubmitting(false)
+            return
+          }
+          
+          // 강제로 연차 신청 - 추가 파라미터 전송
+          const forceResponse = await fetch('/api/form-requests', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${user.id}`,
+            },
+            body: JSON.stringify({
+              formType: selectedTemplate.name,
+              requestData: { ...formData, forceAnnualLeave: true }
+            })
+          })
+          
+          const forceResult = await forceResponse.json()
+          if (!forceResponse.ok) {
+            setError(forceResult.error || '신청 처리 중 오류가 발생했습니다.')
+            setSubmitting(false)
+            return
+          }
+        }
+        
         // 2. PDF 생성 및 출력
         await generatePDF()
         

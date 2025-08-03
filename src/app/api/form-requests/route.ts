@@ -75,34 +75,66 @@ export async function POST(request: NextRequest) {
       
       const leaveTypes = leaveData.leave_types || {}
       
+      // 🎯 대체휴가 우선 사용 독려 메시지 (강제 신청이 아닌 경우에만)
+      if ((leaveType === '연차' || leaveType?.includes('반차')) && !requestData.forceAnnualLeave) {
+        const substituteHours = leaveTypes.substitute_leave_hours || 0
+        const substituteDays = substituteHours / 8
+        
+        if (substituteDays >= daysToRequest) {
+          console.log('💡 대체휴가 우선 사용 권장:', { 
+            신청일수: daysToRequest, 
+            대체휴가잔여: substituteDays 
+          })
+          
+          return NextResponse.json({
+            warning: true,
+            message: `대체휴가가 ${substituteDays.toFixed(1)}일 있습니다. 연차 대신 대체휴가 사용을 권장합니다.`,
+            substituteAvailable: substituteDays,
+            requestedDays: daysToRequest,
+            suggestion: '대체휴가를 먼저 사용하시겠습니까?'
+          }, { status: 200 })
+        }
+      }
+      
+      // 강제 연차 신청인 경우 메시지 출력
+      if (requestData.forceAnnualLeave) {
+        console.log('⚠️ 사용자가 대체휴가 권장을 무시하고 연차 신청을 선택했습니다.')
+      }
+      
       // 휴가 유형별 잔여량 확인
-      if (leaveType === '대체휴가') {
+      if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
         const hoursToRequest = daysToRequest * 8
         const availableHours = leaveTypes.substitute_leave_hours || 0
         
         console.log('📊 대체휴가 확인:', { 
+          휴가유형: leaveType,
+          신청일수: daysToRequest,
           필요시간: hoursToRequest, 
           잔여시간: availableHours 
         })
         
         if (availableHours < hoursToRequest) {
+          const leaveTypeName = leaveType === '대체휴가 반차' ? '대체휴가 반차' : '대체휴가'
           return NextResponse.json({ 
-            error: `대체휴가 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${availableHours/8}일)` 
+            error: `${leaveTypeName} 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${(availableHours/8).toFixed(1)}일)` 
           }, { status: 400 })
         }
         
-      } else if (leaveType === '보상휴가') {
+      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
         const hoursToRequest = daysToRequest * 8
         const availableHours = leaveTypes.compensatory_leave_hours || 0
         
         console.log('📊 보상휴가 확인:', { 
+          휴가유형: leaveType,
+          신청일수: daysToRequest,
           필요시간: hoursToRequest, 
           잔여시간: availableHours 
         })
         
         if (availableHours < hoursToRequest) {
+          const leaveTypeName = leaveType === '보상휴가 반차' ? '보상휴가 반차' : '보상휴가'
           return NextResponse.json({ 
-            error: `보상휴가 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${availableHours/8}일)` 
+            error: `${leaveTypeName} 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${(availableHours/8).toFixed(1)}일)` 
           }, { status: 400 })
         }
         

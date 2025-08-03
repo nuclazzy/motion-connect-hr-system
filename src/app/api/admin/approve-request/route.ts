@@ -121,19 +121,31 @@ export async function POST(request: NextRequest) {
         updatedLeaveTypes.used_sick_days = currentUsed + daysToDeduct
         console.log('📊 병가 사용일수 업데이트:', currentUsed, '→', currentUsed + daysToDeduct)
         
-      } else if (leaveType === '대체휴가') {
-        // 대체휴가 시간 차감
+      } else if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
+        // 대체휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
         const currentHours = updatedLeaveTypes.substitute_leave_hours || 0
         updatedLeaveTypes.substitute_leave_hours = Math.max(0, currentHours - hoursToDeduct)
-        console.log('📊 대체휴가 시간 업데이트:', currentHours, '→', currentHours - hoursToDeduct)
+        console.log('📊 대체휴가 시간 업데이트:', {
+          휴가유형: leaveType,
+          차감일수: daysToDeduct,
+          차감시간: hoursToDeduct,
+          이전시간: currentHours,
+          업데이트후: currentHours - hoursToDeduct
+        })
         
-      } else if (leaveType === '보상휴가') {
-        // 보상휴가 시간 차감
+      } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
+        // 보상휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
         const currentHours = updatedLeaveTypes.compensatory_leave_hours || 0
         updatedLeaveTypes.compensatory_leave_hours = Math.max(0, currentHours - hoursToDeduct)
-        console.log('📊 보상휴가 시간 업데이트:', currentHours, '→', currentHours - hoursToDeduct)
+        console.log('📊 보상휴가 시간 업데이트:', {
+          휴가유형: leaveType,
+          차감일수: daysToDeduct,
+          차감시간: hoursToDeduct,
+          이전시간: currentHours,
+          업데이트후: currentHours - hoursToDeduct
+        })
       }
       
       // 휴가 데이터 업데이트
