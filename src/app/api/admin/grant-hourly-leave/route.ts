@@ -101,6 +101,21 @@ export async function POST(request: NextRequest) {
     const leaveTypeName = leaveType === 'substitute' ? '대체휴가' : '보상휴가'
 
     console.log(`✅ ${leaveTypeName} ${hours}시간 지급 완료: ${currentHours}시간 → ${newHours}시간`)
+    
+    // Gemini 권장: 데이터 일관성 검증 로그
+    console.log('📋 데이터 일관성 검증:', {
+      employeeId,
+      leaveType: leaveTypeName,
+      jsonValue: updateData.leave_types[fieldName],
+      columnValue: updateData[fieldName],
+      isConsistent: updateData.leave_types[fieldName] === updateData[fieldName],
+      updateData: updateData
+    })
+    console.log('📋 업데이트된 데이터 확인:', {
+      updatedJSON: updateData.leave_types[fieldName],
+      updatedColumn: updateData[fieldName] || 'not updated',
+      bothFieldsMatch: updateData.leave_types[fieldName] === updateData[fieldName]
+    })
 
     return NextResponse.json({
       success: true,

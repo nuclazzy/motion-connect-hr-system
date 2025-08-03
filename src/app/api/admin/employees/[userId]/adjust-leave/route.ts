@@ -184,6 +184,18 @@ export async function POST(
       adjustmentDetails,
       adjustment: amount
     })
+    
+    // 데이터 일관성 검증
+    if (leaveType === 'substitute_leave_hours' || leaveType === 'compensatory_leave_hours') {
+      const jsonValue = updateData.leave_types[leaveType]
+      const columnValue = updateData[leaveType]
+      console.log('📋 데이터 일관성 검증:', {
+        leaveType,
+        jsonValue,
+        columnValue,
+        isConsistent: jsonValue === columnValue
+      })
+    }
 
     return NextResponse.json({
       success: true,

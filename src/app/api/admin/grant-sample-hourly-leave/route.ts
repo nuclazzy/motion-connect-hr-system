@@ -85,6 +85,21 @@ export async function POST(request: NextRequest) {
       substitute_leave_hours: `${currentLeaveTypes.substitute_leave_hours || 0} → ${updatedLeaveTypes.substitute_leave_hours}`,
       compensatory_leave_hours: `${currentLeaveTypes.compensatory_leave_hours || 0} → ${updatedLeaveTypes.compensatory_leave_hours}`
     })
+    
+    // Gemini 권장: 데이터 일관성 검증 로그
+    console.log('📋 샘플 지급 데이터 일관성 검증:', {
+      employeeId,
+      substituteHours: {
+        jsonValue: updateData.leave_types.substitute_leave_hours,
+        columnValue: updateData.substitute_leave_hours,
+        isConsistent: updateData.leave_types.substitute_leave_hours === updateData.substitute_leave_hours
+      },
+      compensatoryHours: {
+        jsonValue: updateData.leave_types.compensatory_leave_hours,
+        columnValue: updateData.compensatory_leave_hours,
+        isConsistent: updateData.leave_types.compensatory_leave_hours === updateData.compensatory_leave_hours
+      }
+    })
 
     return NextResponse.json({
       success: true,

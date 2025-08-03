@@ -138,16 +138,23 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const annualRemaining = (leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)
   const sickRemaining = (leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)
   
-  // 시간 단위 휴가 상태 계산 (신청 검증과 동일한 방식으로 조회)
-  // 주요: leave_types 내부에서만 조회하여 신청 검증 로직과 일치시킴
-  const substituteHours = leaveData.leave_types.substitute_leave_hours || 0
-  const compensatoryHours = leaveData.leave_types.compensatory_leave_hours || 0
+  // 시간 단위 휴가 상태 계산 (관리자 대시보드와 동일한 방식으로 조회)
+  // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 조회 (관리자 API와 동일한 로직)
+  const substituteHours = leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0
+  const compensatoryHours = leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0
   
-  console.log('🔍 직원 대시보드 휴가 시간 확인:', {
+  console.log('🔍 직원 대시보드 휴가 시간 확인 (관리자와 동일한 로직):', {
     userId: user.id,
     userName: user.name,
     substituteHours,
     compensatoryHours,
+    // 별도 컬럼 값들
+    separateColumnSubstitute: leaveData.substitute_leave_hours,
+    separateColumnCompensatory: leaveData.compensatory_leave_hours,
+    // JSON 필드 값들
+    jsonFieldSubstitute: leaveData.leave_types.substitute_leave_hours,
+    jsonFieldCompensatory: leaveData.leave_types.compensatory_leave_hours,
+    // 전체 구조
     rawLeaveTypes: leaveData.leave_types,
     hasSubstituteField: leaveData.leave_types.hasOwnProperty('substitute_leave_hours'),
     hasCompensatoryField: leaveData.leave_types.hasOwnProperty('compensatory_leave_hours')
