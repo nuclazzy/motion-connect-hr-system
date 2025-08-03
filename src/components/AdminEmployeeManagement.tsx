@@ -193,7 +193,11 @@ export default function AdminEmployeeManagement() {
       
       if (['substitute_leave_hours', 'compensatory_leave_hours'].includes(leaveType)) {
         // 대체휴가/보상휴가 업데이트
-        updatedEmployee[leaveType as keyof Employee] = (selectedEmployee[leaveType as keyof Employee] as number || 0) + amount
+        if (leaveType === 'substitute_leave_hours') {
+          updatedEmployee.substitute_leave_hours = (selectedEmployee.substitute_leave_hours || 0) + amount
+        } else if (leaveType === 'compensatory_leave_hours') {
+          updatedEmployee.compensatory_leave_hours = (selectedEmployee.compensatory_leave_hours || 0) + amount
+        }
       } else {
         // 연차/병가 업데이트
         const leaveData = (updatedEmployee as any).leave_data || {}
