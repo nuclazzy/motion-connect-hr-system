@@ -99,6 +99,22 @@ async function submitLeaveRequestFallback(
       const fieldName = leaveType === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
       const availableHours = leaveTypes[fieldName] || 0
 
+      console.log(`🔍 ${leaveType} 검증:`, {
+        fieldName,
+        availableHours,
+        hoursToDeduct,
+        daysToDeduct,
+        leaveTypes
+      })
+
+      // 필드가 존재하지 않는 경우
+      if (!leaveTypes.hasOwnProperty(fieldName)) {
+        return {
+          success: false,
+          error: `${leaveType} 데이터가 초기화되지 않았습니다. 관리자에게 문의하여 휴가 데이터를 초기화해주세요.`
+        }
+      }
+
       if (availableHours < hoursToDeduct) {
         return {
           success: false,
