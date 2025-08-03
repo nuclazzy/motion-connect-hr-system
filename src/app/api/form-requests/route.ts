@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { submitLeaveRequestWithTransaction } from '@/lib/supabase/leave-transaction'
 
 // Helper function to calculate leave days
 function calculateLeaveDays(startDate: string, endDate: string, isHalfDay: boolean): number {
@@ -41,6 +42,22 @@ export async function POST(request: NextRequest) {
 
     console.log('📝 로컬 서식 신청:', { formType, requestData, userId })
 
+    // 트랜잭션을 사용한 안전한 휴가 신청 처리
+    const result = await submitLeaveRequestWithTransaction(
+      serviceRoleSupabase,
+      userId,
+      formType,
+      requestData
+    )
+
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    console.log('✅ 서식 신청 완료 (트랜잭션):', result.data)
+    return NextResponse.json({ success: true, message: 'Request submitted successfully.' })
+
+    /* 기존 로직 (백업용으로 남겨둠) - 추후 안정화 후 제거
     // 휴가 신청일 경우, 잔여 일수 확인 로직
     if (formType === '휴가 신청서') {
       console.log('🔍 Supabase 휴가 데이터 조회:', userId)
@@ -129,6 +146,7 @@ export async function POST(request: NextRequest) {
     console.log('✅ Supabase 신청서 저장 완료:', newRequest)
 
     return NextResponse.json({ success: true, message: 'Request submitted successfully.' })
+    */
   } catch (error) {
     console.error('Form request API error:', error)
     return NextResponse.json({ error: '서버 오류가 발생했습니다.' }, { status: 500 })

@@ -37,10 +37,18 @@ export default function LocalAdminApprovalPanel() {
 
   useEffect(() => {
     loadRequests()
-    // 3초마다 새로고침
-    const interval = setInterval(loadRequests, 3000)
+    // 동적 폴링: 대기 중 요청이 있으면 5초, 없으면 30초
+    const updatePollingInterval = () => {
+      const hasPendingRequests = requests.some(req => req.status === 'pending')
+      return hasPendingRequests ? 5000 : 30000
+    }
+    
+    const interval = setInterval(() => {
+      loadRequests()
+    }, updatePollingInterval())
+    
     return () => clearInterval(interval)
-  }, [])
+  }, [requests.length])
 
   const handleApprove = async (requestId: string) => {
     try {
