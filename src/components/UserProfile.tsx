@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { updateUserProfile, type User } from '@/lib/auth'
+import { updateUserProfile, type User, authenticatedFetch } from '@/lib/auth'
 
 interface UserProfileProps {
   user: User
@@ -85,11 +85,8 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
     }
 
     try {
-      const response = await fetch('/api/auth/change-password', {
+      const response = await authenticatedFetch('/api/auth/change-password', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword
