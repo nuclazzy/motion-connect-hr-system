@@ -79,14 +79,40 @@ export async function POST(request: NextRequest) {
       
       // 휴가 유형별 잔여량 확인
       if (leaveType === '대체휴가' || leaveType === '대체휴가 반차') {
-        return NextResponse.json({ 
-          error: '대체휴가 기능은 현재 사용할 수 없습니다. 연차를 대신 사용해주세요.' 
-        }, { status: 400 })
+        const hoursToRequest = daysToRequest * 8
+        const availableHours = leaveTypes.substitute_leave_hours || 0
+        
+        console.log('📊 대체휴가 확인:', { 
+          휴가유형: leaveType,
+          신청일수: daysToRequest,
+          필요시간: hoursToRequest, 
+          잔여시간: availableHours 
+        })
+        
+        if (availableHours < hoursToRequest) {
+          const leaveTypeName = leaveType === '대체휴가 반차' ? '대체휴가 반차' : '대체휴가'
+          return NextResponse.json({ 
+            error: `${leaveTypeName} 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${(availableHours/8).toFixed(1)}일)` 
+          }, { status: 400 })
+        }
         
       } else if (leaveType === '보상휴가' || leaveType === '보상휴가 반차') {
-        return NextResponse.json({ 
-          error: '보상휴가 기능은 현재 사용할 수 없습니다. 연차를 대신 사용해주세요.' 
-        }, { status: 400 })
+        const hoursToRequest = daysToRequest * 8
+        const availableHours = leaveTypes.compensatory_leave_hours || 0
+        
+        console.log('📊 보상휴가 확인:', { 
+          휴가유형: leaveType,
+          신청일수: daysToRequest,
+          필요시간: hoursToRequest, 
+          잔여시간: availableHours 
+        })
+        
+        if (availableHours < hoursToRequest) {
+          const leaveTypeName = leaveType === '보상휴가 반차' ? '보상휴가 반차' : '보상휴가'
+          return NextResponse.json({ 
+            error: `${leaveTypeName} 잔여량이 부족합니다. (신청: ${daysToRequest}일, 잔여: ${(availableHours/8).toFixed(1)}일)` 
+          }, { status: 400 })
+        }
         
       } else if (leaveType === '연차' || leaveType?.includes('반차')) {
         const totalDays = leaveTypes.annual_days || 0
