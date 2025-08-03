@@ -21,17 +21,15 @@ export async function POST(request: NextRequest) {
   try {
     const { formType, requestData } = await request.json()
 
-    const supabase = await createClient()
     const serviceRoleSupabase = await createServiceRoleClient()
 
-    // Supabase 세션에서 현재 사용자 확인
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const userId = session.user.id
+    const userId = authorization.replace('Bearer ', '')
     
     console.log('🔍 추출된 userId:', userId)
 

@@ -37,11 +37,27 @@ export default function AdminEmployeeManagement() {
   const [editValue, setEditValue] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
 
+  const getAuthHeaders = () => {
+    const userStr = localStorage.getItem('motion-connect-user')
+    if (!userStr) return {}
+    try {
+      const user = JSON.parse(userStr)
+      return {
+        'Authorization': `Bearer ${user.id}`,
+        'Content-Type': 'application/json'
+      }
+    } catch {
+      return {}
+    }
+  }
+
   const fetchEmployees = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch('/api/admin/employees')
+      const response = await fetch('/api/admin/employees', {
+        headers: getAuthHeaders()
+      })
       if (!response.ok) {
         throw new Error('직원 목록을 불러오는데 실패했습니다.')
       }

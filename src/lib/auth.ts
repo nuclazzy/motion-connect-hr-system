@@ -129,6 +129,41 @@ export async function logoutUser() {
 }
 
 /**
+ * Authorization header가 포함된 fetch 옵션 생성
+ */
+export function getAuthHeaders(): Record<string, string> {
+  const userStr = typeof window !== 'undefined' ? localStorage.getItem('motion-connect-user') : null
+  if (!userStr) {
+    return {}
+  }
+  
+  try {
+    const user = JSON.parse(userStr)
+    return {
+      'Authorization': `Bearer ${user.id}`,
+      'Content-Type': 'application/json'
+    }
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 인증된 fetch 요청
+ */
+export async function authenticatedFetch(url: string, options: RequestInit = {}) {
+  const headers = getAuthHeaders()
+  
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers
+    }
+  })
+}
+
+/**
  * 권한 확인
  */
 export function checkPermission(user: User | null, requiredRole: 'admin' | 'user'): boolean {

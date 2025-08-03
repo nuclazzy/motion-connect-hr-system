@@ -1,56 +1,42 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
+import { NextRequest, NextResponse } from 'next/server'
+import bcrypt from 'bcryptjs'
 
 // 관리자 전용 사용자 생성 API
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const userData = await request.json()
-    const cookieStore = cookies()
-    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
+    const serviceRoleSupabase = await createServiceRoleClient()
 
-    // 1. 현재 요청자가 관리자인지 확인
-    const { data: { session } } = await supabase.auth.getSession()
-    
-    if (!session) {
-      return NextResponse.json({ error: '인증이 필요합니다.' }, { status: 401 })
+    // 1. Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const userId = authorization.replace('Bearer ', '')
+
     // 현재 사용자의 role 확인
-    const { data: currentUser } = await supabase
+    const { data: currentUser } = await serviceRoleSupabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single()
 
     if (!currentUser || currentUser.role !== 'admin') {
       return NextResponse.json({ error: '관리자 권한이 필요합니다.' }, { status: 403 })
     }
 
-    // 2. Supabase Auth에 사용자 생성
-    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email: userData.email,
-      password: userData.password,
-      email_confirm: true, // 이메일 확인 생략
-      user_metadata: {
-        name: userData.name,
-        role: userData.role || 'user'
-      }
-    })
+    // 2. 초기 비밀번호 '0000'으로 password_hash 생성
+    const initialPassword = '0000'
+    const password_hash = await bcrypt.hash(initialPassword, 10)
 
-    if (authError) {
-      console.error('Auth 사용자 생성 실패:', authError)
-      return NextResponse.json({ 
-        error: '사용자 생성 실패: ' + authError.message 
-      }, { status: 400 })
-    }
-
-    // 3. users 테이블에 프로필 정보 저장
-    const { data: profileUser, error: profileError } = await supabase
+    // 3. users 테이블에 사용자 정보 저장
+    const { data: profileUser, error: profileError } = await serviceRoleSupabase
       .from('users')
       .insert({
-        id: authUser.user.id,
         email: userData.email,
+        password_hash: password_hash,
         name: userData.name,
         role: userData.role || 'user',
         employee_id: userData.employee_id,
@@ -68,13 +54,9 @@ export async function POST(request: Request) {
       .single()
 
     if (profileError) {
-      console.error('프로필 생성 실패:', profileError)
-      
-      // Auth 사용자 삭제 (롤백)
-      await supabase.auth.admin.deleteUser(authUser.user.id)
-      
+      console.error('사용자 생성 실패:', profileError)
       return NextResponse.json({ 
-        error: '프로필 생성 실패: ' + profileError.message 
+        error: '사용자 생성 실패: ' + profileError.message 
       }, { status: 400 })
     }
 
@@ -88,10 +70,10 @@ export async function POST(request: Request) {
       compensatory_leave_hours: 0
     }
 
-    const { error: leaveError } = await supabase
+    const { error: leaveError } = await serviceRoleSupabase
       .from('leave_days')
       .insert({
-        user_id: authUser.user.id,
+        user_id: profileUser.id,
         leave_types: defaultLeaveTypes
       })
 
@@ -105,8 +87,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user: profileUser,
-      authUserId: authUser.user.id,
-      message: '사용자가 성공적으로 생성되었습니다.'
+      initialPassword: initialPassword,
+      message: `사용자가 성공적으로 생성되었습니다. 초기 비밀번호: ${initialPassword}`
     })
 
   } catch (error) {

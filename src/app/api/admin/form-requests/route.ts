@@ -3,20 +3,20 @@ import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
-
-    // 1. Supabase 세션에서 현재 사용자 확인
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // 2. 사용자 정보 및 권한 확인
+    const userId = authorization.replace('Bearer ', '')
+    const supabase = await createClient()
+
+    // 사용자 정보 및 권한 확인
     const { data: userProfile, error: userError } = await supabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', userId)
       .single()
 
     if (userError || userProfile?.role !== 'admin') {
