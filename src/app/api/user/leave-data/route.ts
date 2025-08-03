@@ -1,15 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const userId = searchParams.get('userId')
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const userId = authorization.replace('Bearer ', '')
+    const supabase = await createServiceRoleClient()
 
     console.log('🏖️ 휴가 데이터 조회:', userId)
 

@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function POST(
   request: NextRequest,
@@ -18,6 +13,7 @@ export async function POST(
     }
 
     const adminUserId = authorization.replace('Bearer ', '')
+    const supabase = await createServiceRoleClient()
     
     // 관리자 권한 확인
     const { data: adminProfile } = await supabase

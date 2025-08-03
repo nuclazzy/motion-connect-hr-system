@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { calculateOvertimeLeave, getLeaveTypeName } from '@/lib/calculateOvertimeLeave'
 import { calculateHoursToDeduct } from '@/lib/hoursToLeaveDay'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
@@ -154,19 +154,20 @@ async function sendNotification(supabase: any, userId: string, message: string, 
 export async function POST(request: NextRequest) {
   try {
     const { requestId, action, adminNote } = await request.json()
-    const supabase = await createClient()
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const adminUserId = authorization.replace('Bearer ', '')
+    
     const serviceRoleSupabase = await createServiceRoleClient()
 
     // 관리자 권한 확인
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: adminUser } = await supabase
+    const { data: adminUser } = await serviceRoleSupabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', adminUserId)
       .single()
 
     if (adminUser?.role !== 'admin') {
@@ -386,7 +387,7 @@ export async function POST(request: NextRequest) {
           .update({
             status: 'approved',
             processed_at: new Date().toISOString(),
-            processed_by: session.user.id,
+            processed_by: adminUserId,
             admin_note: adminNote
           })
           .eq('id', requestId)
@@ -432,7 +433,7 @@ export async function POST(request: NextRequest) {
           .update({
             status: 'rejected',
             processed_at: new Date().toISOString(),
-            processed_by: session.user.id,
+            processed_by: adminUserId,
             admin_note: adminNote
           })
           .eq('id', requestId)

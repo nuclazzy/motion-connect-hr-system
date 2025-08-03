@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const adminUserId = authorization.replace('Bearer ', '')
+    
+    const supabase = await createServiceRoleClient()
+    
+    // 관리자 권한 확인
+    const { data: adminUser } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', adminUserId)
+      .single()
+
+    if (!adminUser || adminUser.role !== 'admin') {
+      return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
+    }
+    
     const { employeeId, leaveType, hours, reason } = await request.json()
 
     console.log('⏰ 시간 단위 휴가 지급 요청:', { employeeId, leaveType, hours, reason })

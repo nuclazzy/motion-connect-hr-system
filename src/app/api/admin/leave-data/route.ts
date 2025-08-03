@@ -1,23 +1,25 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createServiceRoleClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !user) {
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json(
         { success: false, error: 'Not authenticated' },
         { status: 401 }
       );
     }
+    const adminUserId = authorization.replace('Bearer ', '')
+    
+    const supabase = await createServiceRoleClient();
 
     // 관리자 권한 확인
     const { data: userData } = await supabase
       .from('users')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', adminUserId)
       .single();
 
     if (!userData || userData.role !== 'admin') {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import bcrypt from 'bcryptjs'
 
 export async function POST(request: NextRequest) {
@@ -20,24 +20,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createClient()
-    const serviceRoleSupabase = await createServiceRoleClient()
-
-    // 1. Supabase 세션에서 현재 사용자 확인
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json(
         { success: false, error: '인증이 필요합니다. 다시 로그인해주세요.' },
         { status: 401 }
       )
     }
+    const userId = authorization.replace('Bearer ', '')
 
-    const userId = session.user.id
+    const serviceRoleSupabase = await createServiceRoleClient()
 
     console.log('🔐 비밀번호 변경 요청:', { 
-      userId: userId,
-      email: session.user.email
+      userId: userId
     })
 
     // 2. 현재 사용자의 비밀번호 해시 조회 (Service Role 사용)

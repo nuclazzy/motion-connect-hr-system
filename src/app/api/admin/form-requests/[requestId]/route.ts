@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function PATCH(
   request: NextRequest, 
@@ -21,21 +21,20 @@ export async function PATCH(
       )
     }
     
-    const supabase = await createClient()
-    const serviceRoleSupabase = await createServiceRoleClient()
-
-    // Supabase 세션에서 현재 사용자 확인
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    
-    if (sessionError || !session) {
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+    const adminUserId = authorization.replace('Bearer ', '')
+    
+    const serviceRoleSupabase = await createServiceRoleClient()
 
     // 관리자 권한 확인
-    const { data: userProfile, error: userError } = await supabase
+    const { data: userProfile, error: userError } = await serviceRoleSupabase
       .from('users')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', adminUserId)
       .single()
 
     if (userError || userProfile?.role !== 'admin') {
@@ -48,7 +47,7 @@ export async function PATCH(
       .update({ 
         status: finalAction, 
         processed_at: new Date().toISOString(),
-        processed_by: session.user.id,
+        processed_by: adminUserId,
         admin_notes: adminNotes || null
       })
       .eq('id', requestId)

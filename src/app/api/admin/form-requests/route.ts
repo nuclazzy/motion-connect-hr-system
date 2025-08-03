@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     }
 
     const userId = authorization.replace('Bearer ', '')
-    const supabase = await createClient()
+    const supabase = await createServiceRoleClient()
 
     // 사용자 정보 및 권한 확인
     const { data: userProfile, error: userError } = await supabase

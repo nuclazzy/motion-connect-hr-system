@@ -1,15 +1,30 @@
-import { createClient } from '@supabase/supabase-js'
-import { NextResponse } from 'next/server'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { NextRequest, NextResponse } from 'next/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
+    // Authorization header에서 userId 가져오기
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const adminUserId = authorization.replace('Bearer ', '')
+    const supabase = await createServiceRoleClient()
+
+    // 관리자 권한 확인
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', adminUserId)
+      .single()
+
+    if (userProfile?.role !== 'admin') {
+      return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 })
+    }
+
     console.log('🔄 Updating form templates with hourly leave options')
 
     // Get the current 휴가 신청서 template

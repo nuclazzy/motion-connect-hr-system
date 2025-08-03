@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // Helper function to send notification to employee
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -19,19 +19,21 @@ async function sendEmployeeNotification(supabase: any, userId: string, message: 
 export async function POST(request: NextRequest) {
   try {
     const { employeeId, leaveType, days, reason, validUntil } = await request.json()
-    const supabase = await createClient()
+    
+    // Authorization header validation
+    const authorization = request.headers.get('authorization')
+    if (!authorization || !authorization.startsWith('Bearer ')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const adminUserId = authorization.replace('Bearer ', '')
+    
     const serviceRoleSupabase = await createServiceRoleClient()
 
     // 관리자 권한 확인
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const { data: adminUser } = await supabase
+    const { data: adminUser } = await serviceRoleSupabase
       .from('users')
       .select('role, name')
-      .eq('id', session.user.id)
+      .eq('id', adminUserId)
       .single()
 
     if (adminUser?.role !== 'admin') {
@@ -113,7 +115,7 @@ export async function POST(request: NextRequest) {
       days: parsedDays,
       reason,
       validUntil: validUntil || null,
-      grantedBy: session.user.id,
+      grantedBy: adminUserId,
       grantedByName: adminUser.name
     }
 
@@ -126,7 +128,7 @@ export async function POST(request: NextRequest) {
         request_data: requestData,
         submitted_at: new Date().toISOString(),
         processed_at: new Date().toISOString(),
-        processed_by: session.user.id
+        processed_by: adminUserId
       })
 
     if (recordError) {
