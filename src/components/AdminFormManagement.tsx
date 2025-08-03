@@ -86,15 +86,25 @@ export default function AdminFormManagement() {
       })
 
       if (!response.ok) {
-        const result = await response.json()
+        let result = { error: 'Unknown error' }
+        try {
+          result = await response.json()
+        } catch (parseError) {
+          console.error('❌ 응답 파싱 실패:', parseError)
+        }
+        
         console.error('❌ 휴가 승인 API 오류:', {
+          url: '/api/admin/approve-request',
+          method: 'POST',
           status: response.status,
           statusText: response.statusText,
-          error: result.error,
+          headers: headers,
+          requestBody: requestBody,
+          responseError: result.error,
           requestId,
           action: newStatus
         })
-        throw new Error(result.error || `상태 업데이트에 실패했습니다. (${response.status})`)
+        throw new Error(result.error || `상태 업데이트에 실패했습니다. (${response.status}: ${response.statusText})`)
       }
       
       const responseData = await response.json()

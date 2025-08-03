@@ -60,13 +60,17 @@ export async function POST(request: NextRequest) {
       compensatory_leave_hours: (currentLeaveTypes.compensatory_leave_hours || 0) + 8  // 1일치
     }
 
-    // Supabase 데이터 업데이트
+    // Supabase 데이터 업데이트 (JSON 필드와 별도 컬럼 모두 업데이트)
+    const updateData: any = {
+      leave_types: updatedLeaveTypes,
+      substitute_leave_hours: updatedLeaveTypes.substitute_leave_hours,
+      compensatory_leave_hours: updatedLeaveTypes.compensatory_leave_hours,
+      updated_at: new Date().toISOString()
+    }
+    
     const { error: updateError } = await supabase
       .from('leave_days')
-      .update({
-        leave_types: updatedLeaveTypes,
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('user_id', employeeId)
 
     if (updateError) {

@@ -69,16 +69,25 @@ export async function POST(request: NextRequest) {
     const currentHours = leaveData.leave_types[fieldName] || 0
     const newHours = currentHours + hours
 
-    // Supabase 데이터 업데이트
+    // Supabase 데이터 업데이트 (JSON 필드와 별도 컬럼 모두 업데이트)
+    const updateData: any = {
+      leave_types: {
+        ...leaveData.leave_types,
+        [fieldName]: newHours
+      },
+      updated_at: new Date().toISOString()
+    }
+    
+    // 별도 컬럼도 함께 업데이트
+    if (fieldName === 'substitute_leave_hours') {
+      updateData.substitute_leave_hours = newHours
+    } else if (fieldName === 'compensatory_leave_hours') {
+      updateData.compensatory_leave_hours = newHours
+    }
+    
     const { error: updateError } = await supabase
       .from('leave_days')
-      .update({
-        leave_types: {
-          ...leaveData.leave_types,
-          [fieldName]: newHours
-        },
-        updated_at: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('user_id', employeeId)
 
     if (updateError) {
