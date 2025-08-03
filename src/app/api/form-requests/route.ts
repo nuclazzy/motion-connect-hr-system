@@ -133,9 +133,11 @@ export async function POST(request: NextRequest) {
 // Supabase 조회 API
 export async function GET() {
   try {
+    const serviceRoleSupabase = await createServiceRoleClient()
+    
     console.log('📋 Supabase 신청 내역 조회 시작')
     
-    const { data: requests, error } = await supabase
+    const { data: requests, error } = await serviceRoleSupabase
       .from('form_requests')
       .select(`
         *,
