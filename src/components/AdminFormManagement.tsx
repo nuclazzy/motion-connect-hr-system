@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { getAuthHeaders } from '@/lib/auth'
 
 interface FormRequest {
   id: string
@@ -27,7 +28,9 @@ export default function AdminFormManagement() {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/admin/form-requests?filter=${filter}`)
+      const response = await fetch(`/api/admin/form-requests?filter=${filter}`, {
+        headers: getAuthHeaders()
+      })
       if (!response.ok) {
         throw new Error('서식 신청 내역을 불러오는데 실패했습니다.')
       }
@@ -55,7 +58,10 @@ export default function AdminFormManagement() {
     try {
       const response = await fetch(`/api/admin/form-requests/${requestId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ status: newStatus }),
       })
 
