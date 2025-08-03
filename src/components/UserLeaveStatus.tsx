@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { type User } from '@/lib/auth'
+import { type User, authenticatedFetch } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
 
 interface LeaveData {
@@ -51,11 +51,8 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
         setLoading(true)
         console.log('휴가 데이터 조회 시작:', { userId: user.id, userName: user.name })
         
-        const response = await fetch(`/api/user/leave-data?userId=${user.id}`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+        const response = await authenticatedFetch(`/api/user/leave-data?userId=${user.id}`, {
+          method: 'GET'
         })
         
         console.log('API 응답 상태:', response.status)
