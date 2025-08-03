@@ -117,25 +117,38 @@ async function submitLeaveRequestFallback(
       const hoursToDeduct = daysToDeduct * 8
       const fieldName = leaveType === '대체휴가' ? 'substitute_leave_hours' : 'compensatory_leave_hours'
       
-      // 여러 방법으로 값 확인
-      const availableHours = leaveTypes[fieldName] || 0
-      const rawValue = leaveTypes[fieldName]
+      // Gemini 권장: 표준화된 조회 로직 (별도 컬럼 우선)
+      const availableHours = leaveData[fieldName] ?? leaveTypes[fieldName] ?? 0
+      const rawValue = leaveData[fieldName] ?? leaveTypes[fieldName]
       
-      console.log(`🔍 ${leaveType} 상세 검증:`, {
+      console.log(`🔍 ${leaveType} 상세 검증 (표준화된 로직):`, {
         fieldName,
+        // 별도 컬럼에서 조회
+        separateColumnValue: leaveData[fieldName],
+        separateColumnType: typeof leaveData[fieldName],
+        // JSON 필드에서 조회
+        jsonFieldValue: leaveTypes[fieldName],
+        jsonFieldType: typeof leaveTypes[fieldName],
+        // 최종 값
         rawValue,
         availableHours,
         hoursToDeduct,
         daysToDeduct,
-        hasProperty: leaveTypes.hasOwnProperty(fieldName),
-        typeOfValue: typeof rawValue,
-        leaveTypesKeys: Object.keys(leaveTypes),
+        // 전체 데이터 구조
+        fullLeaveData: {
+          substitute_leave_hours: leaveData.substitute_leave_hours,
+          compensatory_leave_hours: leaveData.compensatory_leave_hours
+        },
         fullLeaveTypes: leaveTypes
       })
 
-      // 필드가 존재하지 않는 경우
-      if (!leaveTypes.hasOwnProperty(fieldName)) {
-        console.error(`❌ ${leaveType} 필드 누락:`, fieldName)
+      // 필드가 존재하지 않는 경우 (별도 컬럼과 JSON 필드 모두 확인)
+      if (rawValue === undefined && !leaveTypes.hasOwnProperty(fieldName)) {
+        console.error(`❌ ${leaveType} 필드 누락:`, { 
+          fieldName,
+          separateColumn: leaveData[fieldName],
+          jsonField: leaveTypes[fieldName]
+        })
         return {
           success: false,
           error: `${leaveType} 데이터가 초기화되지 않았습니다. 관리자가 [시간 단위 휴가 지급] 기능으로 먼저 시간을 지급해주세요.`
