@@ -242,72 +242,9 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             </div>
 
-            {/* 대체휴가 현황 - 필드가 존재하거나 값이 있으면 표시 */}
-            {(leaveData.leave_types.hasOwnProperty('substitute_leave_hours') || substituteHours >= 0) && (
-              <div className={`rounded-lg p-4 ${substituteStatus.needsAlert ? 'bg-red-50 border-2 border-red-200' : 'bg-purple-50'}`}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className={`text-sm font-medium ${substituteStatus.needsAlert ? 'text-red-900' : 'text-purple-900'}`}>
-                      {LEAVE_TYPE_NAMES.substitute}
-                      {substituteStatus.needsAlert && (
-                        <span className="ml-2 px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full animate-pulse">
-                          사용 권고
-                        </span>
-                      )}
-                    </h4>
-                    <div className="mt-1">
-                      <p className={`text-lg font-semibold ${substituteStatus.needsAlert ? 'text-red-900' : 'text-purple-900'}`}>
-                        {substituteStatus.displayText}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-2xl font-bold ${substituteStatus.needsAlert ? 'text-red-600' : 'text-purple-600'}`}>
-                      {substituteStatus.days}
-                    </div>
-                    <div className={`text-xs ${substituteStatus.needsAlert ? 'text-red-500' : 'text-purple-500'}`}>잔여 일수</div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-purple-200 flex justify-end">
-                  <button
-                    onClick={() => onApply('휴가 신청서', { '휴가형태': '대체휴가' })}
-                    className="bg-white text-purple-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-purple-100 transition-colors"
-                  >
-                    대체휴가 신청
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* 대체휴가 기능 비활성화 - 카드 숨김 처리 */}
 
-            {/* 보상휴가 현황 - 필드가 존재하거나 값이 있으면 표시 */}
-            {(leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') || compensatoryHours >= 0) && (
-              <div className="bg-green-50 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium text-green-900">{LEAVE_TYPE_NAMES.compensatory}</h4>
-                    <div className="mt-1">
-                      <p className="text-lg font-semibold text-green-900">
-                        {compensatoryStatus.displayText}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-green-600">
-                      {compensatoryStatus.days}
-                    </div>
-                    <div className="text-xs text-green-500">잔여 일수</div>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-green-200 flex justify-end">
-                  <button
-                    onClick={() => onApply('휴가 신청서', { '휴가형태': '보상휴가' })}
-                    className="bg-white text-green-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-green-100 transition-colors"
-                  >
-                    보상휴가 신청
-                  </button>
-                </div>
-              </div>
-            )}
+            {/* 보상휴가 기능 비활성화 - 카드 숨김 처리 */}
           </div>
 
           {/* 시간 단위 휴가가 초기화되지 않은 경우 안내 */}
