@@ -117,7 +117,10 @@ export default function AdminFormManagement() {
         response: responseData
       })
       
-      // 성공 시 부드럽게 목록 갱신
+      // 성공 시 자동으로 전체보기로 전환하고 목록 갱신
+      if (filter === 'pending') {
+        setFilter('all')
+      }
       setTimeout(() => fetchRequests(false), 500)
     } catch (err) {
       // 개선된 에러 처리: 구체적이고 도움이 되는 메시지
