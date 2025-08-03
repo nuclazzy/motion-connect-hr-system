@@ -23,6 +23,8 @@ interface LeaveData {
     substitute_leave_hours?: number
     compensatory_leave_hours?: number
   }
+  substitute_leave_hours?: number
+  compensatory_leave_hours?: number
   created_at: string
   updated_at: string
   user: {
@@ -139,11 +141,12 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const annualRemaining = (leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)
   const sickRemaining = (leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)
   
-  // 시간 단위 휴가 상태 계산
-  const substituteHours = leaveData.leave_types.substitute_leave_hours || 0
-  const compensatoryHours = leaveData.leave_types.compensatory_leave_hours || 0
+  // 시간 단위 휴가 상태 계산 (새 필드 또는 기존 필드에서 조회)
+  const substituteHours = leaveData.substitute_leave_hours || leaveData.leave_types.substitute_leave_hours || 0
+  const compensatoryHours = leaveData.compensatory_leave_hours || leaveData.leave_types.compensatory_leave_hours || 0
   const substituteStatus = getLeaveStatus(substituteHours)
   const compensatoryStatus = getLeaveStatus(compensatoryHours)
+  
 
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -224,7 +227,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             </div>
 
-            {/* 대체휴가 현황 */}
+            {/* 대체휴가 현황 - 시간이 있는 경우에만 표시 */}
             {substituteHours > 0 && (
               <div className={`rounded-lg p-4 ${substituteStatus.needsAlert ? 'bg-red-50 border-2 border-red-200' : 'bg-purple-50'}`}>
                 <div className="flex items-start justify-between">
@@ -261,7 +264,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
               </div>
             )}
 
-            {/* 보상휴가 현황 */}
+            {/* 보상휴가 현황 - 시간이 있는 경우에만 표시 */}
             {compensatoryHours > 0 && (
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="flex items-start justify-between">

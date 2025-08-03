@@ -27,6 +27,8 @@ export async function GET(request: NextRequest) {
         id,
         user_id,
         leave_types,
+        substitute_leave_hours,
+        compensatory_leave_hours,
         created_at,
         updated_at,
         user:users!user_id(
