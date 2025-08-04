@@ -122,7 +122,15 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       setFormData(prev => ({ ...initialData, ...prev, ...defaultValues }))
 
       // 동적 제목 설정
-      if (defaultValues?.휴가형태) {
+      if (defaultValues?._leaveCategory) {
+        if (defaultValues._leaveCategory === 'substitute') {
+          setModalTitle('대체휴가 신청서')
+        } else if (defaultValues._leaveCategory === 'compensatory') {
+          setModalTitle('보상휴가 신청서')
+        } else {
+          setModalTitle(selectedTemplate.name)
+        }
+      } else if (defaultValues?.휴가형태) {
         setModalTitle(`${defaultValues.휴가형태} 신청`)
       } else {
         setModalTitle(selectedTemplate.name)
@@ -629,18 +637,42 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
               {selectedTemplate.name === '휴가 신청서' && leaveData && (
                 <div className="mb-4 bg-blue-50 border border-blue-200 rounded-md p-4">
                   <h5 className="text-sm font-medium text-blue-900 mb-2">📊 현재 잔여 휴가</h5>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-blue-800">
-                        <strong>연차:</strong> {(leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)}일 잔여
-                      </p>
-                      <p className="text-blue-800">
-                        <strong>병가:</strong> {(leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)}일 잔여
-                      </p>
-                    </div>
-                    <div>
-                      {/* 대체휴가/보상휴가 표시 비활성화 */}
-                    </div>
+                  <div className="text-sm">
+                    {/* 대체휴가 신청시 대체휴가 잔여량만 표시 */}
+                    {defaultValues?._leaveCategory === 'substitute' && (
+                      <div>
+                        <p className="text-purple-800">
+                          <strong>대체휴가:</strong> {((leaveData.substitute_leave_hours ?? leaveData.leave_types.substitute_leave_hours ?? 0) / 8).toFixed(1)}일 잔여 
+                          <span className="text-xs text-purple-600 ml-2">({leaveData.substitute_leave_hours ?? leaveData.leave_types.substitute_leave_hours ?? 0}시간)</span>
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* 보상휴가 신청시 보상휴가 잔여량만 표시 */}
+                    {defaultValues?._leaveCategory === 'compensatory' && (
+                      <div>
+                        <p className="text-green-800">
+                          <strong>보상휴가:</strong> {((leaveData.compensatory_leave_hours ?? leaveData.leave_types.compensatory_leave_hours ?? 0) / 8).toFixed(1)}일 잔여
+                          <span className="text-xs text-green-600 ml-2">({leaveData.compensatory_leave_hours ?? leaveData.leave_types.compensatory_leave_hours ?? 0}시간)</span>
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* 일반 휴가 신청시 연차/병가 표시 */}
+                    {!defaultValues?._leaveCategory && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-blue-800">
+                            <strong>연차:</strong> {(leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)}일 잔여
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-blue-800">
+                            <strong>병가:</strong> {(leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)}일 잔여
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
