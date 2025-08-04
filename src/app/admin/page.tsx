@@ -7,6 +7,8 @@ import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import AdminSalaryManagement from '@/components/AdminSalaryManagement'
+import AdminDetailedSalaryManagement from '@/components/AdminDetailedSalaryManagement'
+import AdminOvertimeManagement from '@/components/AdminOvertimeManagement'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserProfile from '@/components/UserProfile'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
@@ -131,7 +133,7 @@ export default function AdminDashboard() {
             <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-gray-200">관리자 기능</h2>
             <div className="space-y-6">
                 <AdminEmployeeManagement />
-                <AdminSalaryManagement />
+                <AdminOvertimeManagement />
                 <AdminFormManagement />
                 <AdminLeaveManagement />
                 <AdminDocumentManagement />

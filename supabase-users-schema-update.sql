@@ -49,17 +49,36 @@ ADD COLUMN IF NOT EXISTS used_sick_days NUMERIC(5,1) DEFAULT 0,
 ADD COLUMN IF NOT EXISTS substitute_leave_hours NUMERIC(5,1) DEFAULT 0,
 ADD COLUMN IF NOT EXISTS compensatory_leave_hours NUMERIC(5,1) DEFAULT 0;
 
--- 연봉 관리 컬럼 추가
+-- 연봉 관리 컬럼 추가 (기존 단순 연봉)
 ALTER TABLE users 
 ADD COLUMN IF NOT EXISTS salary INTEGER,
 ADD COLUMN IF NOT EXISTS salary_updated_at TIMESTAMP WITH TIME ZONE;
+
+-- 상세 급여 정보 컬럼 추가
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS annual_salary INTEGER, -- 연봉 (만원)
+ADD COLUMN IF NOT EXISTS monthly_salary INTEGER, -- 월급여 (만원)  
+ADD COLUMN IF NOT EXISTS basic_salary INTEGER, -- 기본급 (만원)
+ADD COLUMN IF NOT EXISTS bonus INTEGER, -- 상여 (만원)
+ADD COLUMN IF NOT EXISTS meal_allowance INTEGER, -- 식대 (만원)
+ADD COLUMN IF NOT EXISTS transportation_allowance INTEGER, -- 자가운전 수당 (만원)
+ADD COLUMN IF NOT EXISTS hourly_wage INTEGER, -- 통상 시급 (원)
+ADD COLUMN IF NOT EXISTS salary_details_updated_at TIMESTAMP WITH TIME ZONE;
 
 -- 2. 컬럼 설명 추가
 COMMENT ON COLUMN users.termination_date IS '퇴사 일자 - 값이 있으면 퇴사자로 분류';
 COMMENT ON COLUMN users.contract_end_date IS '계약 종료 일자 - 값이 있으면 계약직으로 분류';
 COMMENT ON COLUMN users.work_type IS '근무 형태 - termination_date와 contract_end_date에 따라 자동 업데이트';
-COMMENT ON COLUMN users.salary IS '연봉 (만원 단위)';
+COMMENT ON COLUMN users.salary IS '연봉 (만원 단위) - 기존 단순 연봉';
 COMMENT ON COLUMN users.salary_updated_at IS '연봉 최종 수정 일시';
+COMMENT ON COLUMN users.annual_salary IS '연봉 (만원 단위)';
+COMMENT ON COLUMN users.monthly_salary IS '월급여 (만원 단위)';
+COMMENT ON COLUMN users.basic_salary IS '기본급 (만원 단위)';
+COMMENT ON COLUMN users.bonus IS '상여 (만원 단위)';
+COMMENT ON COLUMN users.meal_allowance IS '식대 (만원 단위)';
+COMMENT ON COLUMN users.transportation_allowance IS '자가운전 수당 (만원 단위)';
+COMMENT ON COLUMN users.hourly_wage IS '통상 시급 (원 단위)';
+COMMENT ON COLUMN users.salary_details_updated_at IS '급여 상세 정보 최종 수정 일시';
 
 -- 3. work_type 자동 업데이트 함수 생성
 CREATE OR REPLACE FUNCTION update_work_type()
@@ -121,6 +140,36 @@ SELECT
   action_timing
 FROM information_schema.triggers 
 WHERE trigger_name = 'trigger_update_work_type';
+
+-- 초과근무시간 관리 테이블 생성
+CREATE TABLE IF NOT EXISTS overtime_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  work_date DATE NOT NULL,
+  overtime_hours NUMERIC(4,2) DEFAULT 0, -- 초과근무시간
+  night_hours NUMERIC(4,2) DEFAULT 0, -- 야간근무시간
+  overtime_pay INTEGER DEFAULT 0, -- 계산된 초과수당
+  night_pay INTEGER DEFAULT 0, -- 계산된 야간수당
+  total_pay INTEGER DEFAULT 0, -- 총 추가수당
+  notes TEXT, -- 비고
+  approved_by UUID REFERENCES users(id), -- 승인자
+  approved_at TIMESTAMP WITH TIME ZONE, -- 승인일시
+  status VARCHAR(20) DEFAULT 'pending', -- pending, approved, rejected
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 초과근무 테이블 인덱스 생성
+CREATE INDEX IF NOT EXISTS idx_overtime_records_user_id ON overtime_records(user_id);
+CREATE INDEX IF NOT EXISTS idx_overtime_records_work_date ON overtime_records(work_date);
+CREATE INDEX IF NOT EXISTS idx_overtime_records_status ON overtime_records(status);
+
+-- 초과근무 테이블 코멘트
+COMMENT ON TABLE overtime_records IS '초과근무 및 야간근무 시간 관리';
+COMMENT ON COLUMN overtime_records.overtime_hours IS '초과근무시간 (소수점 2자리)';
+COMMENT ON COLUMN overtime_records.night_hours IS '야간근무시간 (소수점 2자리)';
+COMMENT ON COLUMN overtime_records.overtime_pay IS '초과수당 (시급 × 1.5배)';
+COMMENT ON COLUMN overtime_records.night_pay IS '야간수당 (시급 × 1.5배)';
 
 -- 샘플 데이터로 테스트 (필요시 주석 해제)
 /*

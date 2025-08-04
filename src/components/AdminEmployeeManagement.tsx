@@ -23,6 +23,15 @@ interface Employee {
   sick_leave: number
   substitute_leave_hours: number
   compensatory_leave_hours: number
+  // 급여 관련 필드
+  annual_salary?: number
+  monthly_salary?: number
+  basic_salary?: number
+  bonus?: number
+  meal_allowance?: number
+  transportation_allowance?: number
+  hourly_wage?: number
+  salary_details_updated_at?: string
   // Add other fields as necessary
 }
 
@@ -33,7 +42,7 @@ export default function AdminEmployeeManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'management'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'salary' | 'management'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
@@ -75,7 +84,10 @@ export default function AdminEmployeeManagement() {
               id, name, email, department, position, hire_date,
               annual_days, used_annual_days, sick_days, used_sick_days,
               substitute_leave_hours, compensatory_leave_hours,
-              work_type, termination_date, contract_end_date
+              work_type, termination_date, contract_end_date,
+              annual_salary, monthly_salary, basic_salary, bonus,
+              meal_allowance, transportation_allowance, hourly_wage,
+              salary_details_updated_at
             `)
             .order('hire_date', { ascending: true, nullsFirst: false })
           
@@ -568,6 +580,16 @@ export default function AdminEmployeeManagement() {
                     휴가 관리
                   </button>
                   <button
+                    onClick={() => setActiveTab('salary')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'salary'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    급여 관리
+                  </button>
+                  <button
                     onClick={() => setActiveTab('management')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === 'management'
@@ -932,6 +954,148 @@ export default function AdminEmployeeManagement() {
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* Salary Management Tab */}
+              {activeTab === 'salary' && (
+                <div className="space-y-6">
+                  {/* 급여 정보 입력/수정 */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-4">급여 정보</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="annual_salary" className="block text-sm font-medium text-gray-700">연봉 (만원)</label>
+                        <input
+                          type="number"
+                          name="annual_salary"
+                          id="annual_salary"
+                          value={formData.annual_salary || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="monthly_salary" className="block text-sm font-medium text-gray-700">월급여 (만원)</label>
+                        <input
+                          type="number"
+                          name="monthly_salary"
+                          id="monthly_salary"
+                          value={formData.monthly_salary || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="basic_salary" className="block text-sm font-medium text-gray-700">기본급 (만원)</label>
+                        <input
+                          type="number"
+                          name="basic_salary"
+                          id="basic_salary"
+                          value={formData.basic_salary || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="bonus" className="block text-sm font-medium text-gray-700">상여 (만원)</label>
+                        <input
+                          type="number"
+                          name="bonus"
+                          id="bonus"
+                          value={formData.bonus || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="meal_allowance" className="block text-sm font-medium text-gray-700">식대 (만원)</label>
+                        <input
+                          type="number"
+                          name="meal_allowance"
+                          id="meal_allowance"
+                          value={formData.meal_allowance || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="transportation_allowance" className="block text-sm font-medium text-gray-700">자가운전 수당 (만원)</label>
+                        <input
+                          type="number"
+                          name="transportation_allowance"
+                          id="transportation_allowance"
+                          value={formData.transportation_allowance || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="hourly_wage" className="block text-sm font-medium text-gray-700">통상 시급 (원)</label>
+                        <input
+                          type="number"
+                          name="hourly_wage"
+                          id="hourly_wage"
+                          value={formData.hourly_wage || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          placeholder="0"
+                        />
+                        {formData.hourly_wage && formData.hourly_wage < 9860 && (
+                          <p className="mt-1 text-sm text-red-600">⚠️ 2024년 최저시급(9,860원) 미달</p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* 급여 계산 정보 표시 */}
+                    {formData.hourly_wage && (
+                      <div className="mt-4 p-3 bg-white rounded border">
+                        <h5 className="text-sm font-medium text-gray-900 mb-2">수당 계산 미리보기</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                          <div>초과근무수당 (1시간): {Math.round(formData.hourly_wage * 1.5).toLocaleString()}원</div>
+                          <div>야간근로수당 (1시간): {Math.round(formData.hourly_wage * 1.5).toLocaleString()}원</div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => handleSubmit({} as React.FormEvent)}
+                        disabled={submitting}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {submitting ? '저장 중...' : '급여 정보 저장'}
+                      </button>
+                    </div>
+
+                    {/* 급여 정보 수정 이력 */}
+                    {selectedEmployee?.salary_details_updated_at && (
+                      <div className="mt-4 text-sm text-gray-500">
+                        최종 수정: {new Date(selectedEmployee.salary_details_updated_at).toLocaleString('ko-KR')}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 급여 계산 가이드 */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">급여 계산 가이드</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div>• <strong>연봉:</strong> 연간 총 급여 (세전)</div>
+                      <div>• <strong>월급여:</strong> 월별 기본 급여</div>
+                      <div>• <strong>기본급:</strong> 고정 기본급</div>
+                      <div>• <strong>상여:</strong> 연간 상여금</div>
+                      <div>• <strong>식대:</strong> 월별 식대 지원</div>
+                      <div>• <strong>자가운전 수당:</strong> 월별 교통비 지원</div>
+                      <div>• <strong>통상 시급:</strong> 초과근무 및 야간근로 수당 계산 기준</div>
+                    </div>
                   </div>
                 </div>
               )}
