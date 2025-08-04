@@ -279,23 +279,13 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                     <div className={`text-xs ${substituteStatus.needsAlert ? 'text-red-500' : 'text-purple-500'}`}>잔여 일수</div>
                   </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-purple-200 flex justify-end space-x-2">
-                  {substituteHours >= 4 && (
-                    <button
-                      onClick={() => onApply('휴가 신청서', { '휴가형태': '대체휴가 반차', '휴가일수': '0.5' })}
-                      className="bg-white text-purple-600 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-purple-100 transition-colors"
-                    >
-                      반차 신청
-                    </button>
-                  )}
-                  {substituteHours >= 8 && (
-                    <button
-                      onClick={() => onApply('휴가 신청서', { '휴가형태': '대체휴가', '휴가일수': '1' })}
-                      className="bg-white text-purple-600 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-purple-100 transition-colors"
-                    >
-                      종일 신청
-                    </button>
-                  )}
+                <div className="mt-3 pt-3 border-t border-purple-200 flex justify-end">
+                  <button
+                    onClick={() => onApply('휴가 신청서', { '휴가형태': '대체휴가' })}
+                    className="bg-white text-purple-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-purple-100 transition-colors"
+                  >
+                    대체휴가 신청
+                  </button>
                 </div>
               </div>
             )}
@@ -319,23 +309,13 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                     <div className="text-xs text-green-500">잔여 일수</div>
                   </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-green-200 flex justify-end space-x-2">
-                  {compensatoryHours >= 4 && (
-                    <button
-                      onClick={() => onApply('휴가 신청서', { '휴가형태': '보상휴가 반차', '휴가일수': '0.5' })}
-                      className="bg-white text-green-600 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-green-100 transition-colors"
-                    >
-                      반차 신청
-                    </button>
-                  )}
-                  {compensatoryHours >= 8 && (
-                    <button
-                      onClick={() => onApply('휴가 신청서', { '휴가형태': '보상휴가', '휴가일수': '1' })}
-                      className="bg-white text-green-600 px-3 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-green-100 transition-colors"
-                    >
-                      종일 신청
-                    </button>
-                  )}
+                <div className="mt-3 pt-3 border-t border-green-200 flex justify-end">
+                  <button
+                    onClick={() => onApply('휴가 신청서', { '휴가형태': '보상휴가' })}
+                    className="bg-white text-green-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-green-100 transition-colors"
+                  >
+                    보상휴가 신청
+                  </button>
                 </div>
               </div>
             )}

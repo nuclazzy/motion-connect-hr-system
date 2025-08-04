@@ -392,7 +392,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       compensatory_json: leaveData?.leave_types?.compensatory_leave_hours
     })
     
-    if (leaveType === '대체휴가' || leaveType === '대체휴가 반차' || leaveType?.includes('대체휴가')) {
+    if (leaveType === '대체휴가' || leaveType === '대체휴가 오전 반차' || leaveType === '대체휴가 오후 반차' || leaveType?.includes('대체휴가')) {
       // 잔여 시간 확인 (시간을 일수로 변환) - 별도 컬럼 우선, 없으면 JSON 필드
       const availableHours = leaveData?.substitute_leave_hours ?? leaveData?.leave_types?.substitute_leave_hours ?? 0
       const availableDays = availableHours / 8 // 8시간 = 1일
@@ -427,7 +427,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       }
     }
     
-    if (leaveType === '보상휴가' || leaveType === '보상휴가 반차' || leaveType?.includes('보상휴가')) {
+    if (leaveType === '보상휴가' || leaveType === '보상휴가 오전 반차' || leaveType === '보상휴가 오후 반차' || leaveType?.includes('보상휴가')) {
       // 잔여 시간 확인 (시간을 일수로 변환) - 별도 컬럼 우선, 없으면 JSON 필드
       const availableHours = leaveData?.compensatory_leave_hours ?? leaveData?.leave_types?.compensatory_leave_hours ?? 0
       const availableDays = availableHours / 8 // 8시간 = 1일
@@ -470,9 +470,21 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     if (!selectedTemplate) return
 
     // 휴가 신청서인 경우 휴가 데이터 로딩 완료까지 대기
-    if (selectedTemplate.name === '휴가 신청서' && !leaveData) {
-      setError('휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.')
-      return
+    if (selectedTemplate.name === '휴가 신청서') {
+      if (!leaveData || !leaveData.leave_types) {
+        setError('휴가 데이터를 불러오는 중입니다. 잠시 후 다시 시도해주세요.')
+        setSubmitting(false)
+        
+        // 5초 후 자동으로 다시 시도
+        setTimeout(() => {
+          if (leaveData && leaveData.leave_types) {
+            setError('')
+            console.log('✅ 휴가 데이터 로딩 완료, 다시 시도 가능')
+          }
+        }, 2000)
+        
+        return
+      }
     }
 
     setSubmitting(true)
