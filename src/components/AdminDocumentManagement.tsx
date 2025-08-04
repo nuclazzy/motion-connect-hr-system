@@ -17,6 +17,7 @@ export default function AdminDocumentManagement() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [formLoading, setFormLoading] = useState(false)
   const [showDocumentsList, setShowDocumentsList] = useState(false)
+  const [editingDocument, setEditingDocument] = useState<Document | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     link: ''
@@ -50,25 +51,48 @@ export default function AdminDocumentManagement() {
     setFormLoading(true)
 
     try {
-      const { error } = await supabase
-        .from('documents')
-        .insert([{
-          name: formData.name,
-          link: formData.link,
-          upload_date: new Date().toISOString().split('T')[0]
-        }])
+      if (editingDocument) {
+        // 수정 모드
+        const { error } = await supabase
+          .from('documents')
+          .update({
+            name: formData.name,
+            link: formData.link
+          })
+          .eq('id', editingDocument.id)
 
-      if (error) {
-        console.error('문서 추가 실패:', error)
-        alert('문서 추가에 실패했습니다.')
+        if (error) {
+          console.error('문서 수정 실패:', error)
+          alert('문서 수정에 실패했습니다.')
+        } else {
+          alert('문서가 성공적으로 수정되었습니다.')
+          setFormData({ name: '', link: '' })
+          setShowAddForm(false)
+          setEditingDocument(null)
+          fetchDocuments()
+        }
       } else {
-        alert('문서가 성공적으로 추가되었습니다.')
-        setFormData({ name: '', link: '' })
-        setShowAddForm(false)
-        fetchDocuments()
+        // 추가 모드
+        const { error } = await supabase
+          .from('documents')
+          .insert([{
+            name: formData.name,
+            link: formData.link,
+            upload_date: new Date().toISOString().split('T')[0]
+          }])
+
+        if (error) {
+          console.error('문서 추가 실패:', error)
+          alert('문서 추가에 실패했습니다.')
+        } else {
+          alert('문서가 성공적으로 추가되었습니다.')
+          setFormData({ name: '', link: '' })
+          setShowAddForm(false)
+          fetchDocuments()
+        }
       }
     } catch (error) {
-      console.error('문서 추가 오류:', error)
+      console.error('문서 처리 오류:', error)
       alert('오류가 발생했습니다.')
     } finally {
       setFormLoading(false)
@@ -97,6 +121,15 @@ export default function AdminDocumentManagement() {
       console.error('문서 삭제 오류:', error)
       alert('오류가 발생했습니다.')
     }
+  }
+
+  const handleEditDocument = (doc: Document) => {
+    setEditingDocument(doc)
+    setFormData({
+      name: doc.name,
+      link: doc.link
+    })
+    setShowAddForm(true)
   }
 
   if (loading) {
@@ -197,6 +230,12 @@ export default function AdminDocumentManagement() {
                     보기
                   </a>
                   <button
+                    onClick={() => handleEditDocument(doc)}
+                    className="text-green-600 hover:text-green-900 text-sm font-medium"
+                  >
+                    수정
+                  </button>
+                  <button
                     onClick={() => handleDeleteDocument(doc.id, doc.name)}
                     className="text-red-600 hover:text-red-900 text-sm font-medium"
                   >
@@ -220,7 +259,9 @@ export default function AdminDocumentManagement() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">새 문서 추가</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {editingDocument ? '문서 수정' : '새 문서 추가'}
+            </h3>
               
               <form onSubmit={handleSubmitForm} className="space-y-4">
                 <div>
@@ -253,6 +294,7 @@ export default function AdminDocumentManagement() {
                     onClick={() => {
                       setShowAddForm(false)
                       setFormData({ name: '', link: '' })
+                      setEditingDocument(null)
                     }}
                     className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
                   >
@@ -263,7 +305,7 @@ export default function AdminDocumentManagement() {
                     disabled={formLoading}
                     className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {formLoading ? '추가 중...' : '추가'}
+                    {formLoading ? (editingDocument ? '수정 중...' : '추가 중...') : (editingDocument ? '수정' : '추가')}
                   </button>
                 </div>
               </form>
