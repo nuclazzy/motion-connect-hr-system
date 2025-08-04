@@ -366,6 +366,14 @@ export default function UserDashboard() {
 
           </div>
 
+          {/* 문서 서식 신청 및 내역 */}
+          <div className="mt-8">
+            <UserFormManagement
+              user={user}
+              onApplyClick={() => handleOpenFormModal(null)} // 모든 서식을 선택할 수 있도록 null 전달
+            />
+          </div>
+
           {/* 주간 미팅/답사 일정 */}
           <div className="mt-8">
             <UserWeeklySchedule />
@@ -382,14 +390,7 @@ export default function UserDashboard() {
           </div>
 
           {/* 하단 기타 섹션 */}
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 서식 신청 내역 관리 (역할 축소) */}
-            <div>
-              <UserFormManagement
-                user={user}
-                onApplyClick={() => handleOpenFormModal(null)} // 모든 서식을 선택할 수 있도록 null 전달
-              />
-            </div>
+          <div className="mt-8">
             {/* 자료실 위젯 */}
             <DocumentLibrary />
           </div>
