@@ -144,28 +144,66 @@ export default function AdminFormManagement() {
       // 휴가 신청인 경우 users 테이블 휴가 데이터도 업데이트
       if (newStatus === 'approved' && request.form_type.includes('휴가')) {
         const leaveType = request.request_data?.['휴가형태'] || '';
-        const leaveDays = parseFloat(request.request_data?.['신청일수'] || '0');
+        // 휴가일수 필드명 확인 (신청일수 또는 휴가일수)
+        const leaveDays = parseFloat(request.request_data?.['휴가일수'] || request.request_data?.['신청일수'] || '0');
 
         if (leaveDays > 0) {
           let updateField = '';
+          let isHourlyLeave = false;
+          
+          // 휴가 타입별 필드 매핑
           if (leaveType === '연차') {
             updateField = 'used_annual_days';
           } else if (leaveType === '병가') {
             updateField = 'used_sick_days';
+          } else if (leaveType === '대체휴가' || request.request_data?.['_leaveCategory'] === 'substitute') {
+            updateField = 'substitute_leave_hours';
+            isHourlyLeave = true;
+          } else if (leaveType === '보상휴가' || request.request_data?.['_leaveCategory'] === 'compensatory') {
+            updateField = 'compensatory_leave_hours';
+            isHourlyLeave = true;
           }
 
           if (updateField) {
+            console.log('🔍 휴가 차감 처리:', {
+              leaveType,
+              leaveDays,
+              updateField,
+              isHourlyLeave,
+              userId: request.user_id
+            });
+
             const { data: userData } = await supabase
               .from('users')
               .select(updateField)
               .eq('id', request.user_id)
               .single();
 
-            const currentUsed = (userData as any)?.[updateField] || 0;
+            let newValue;
+            const currentValue = (userData as any)?.[updateField] || 0;
+            
+            if (isHourlyLeave) {
+              // 시간 단위 휴가는 시간으로 차감 (1일 = 8시간)
+              const hoursToDeduct = leaveDays * 8;
+              newValue = Math.max(0, currentValue - hoursToDeduct);
+            } else {
+              // 일 단위 휴가는 사용 일수에 추가
+              newValue = currentValue + leaveDays;
+            }
+            
+            console.log('🔍 휴가 차감 계산:', {
+              currentValue,
+              leaveDays,
+              newValue,
+              operation: isHourlyLeave ? 'subtract_hours' : 'add_used_days'
+            });
+
             await supabase
               .from('users')
-              .update({ [updateField]: currentUsed + leaveDays })
+              .update({ [updateField]: newValue })
               .eq('id', request.user_id);
+              
+            console.log('✅ 휴가 차감 완료:', { updateField, newValue });
           }
         }
       }
