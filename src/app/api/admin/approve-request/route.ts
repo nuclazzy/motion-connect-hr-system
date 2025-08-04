@@ -124,11 +124,11 @@ export async function POST(request: NextRequest) {
       } else if (leaveType === '대체휴가' || leaveType === '대체휴가 오전 반차' || leaveType === '대체휴가 오후 반차' || leaveType?.includes('대체휴가')) {
         // 대체휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
-        // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 가져오기
-        const currentHours = leaveData.substitute_leave_hours ?? updatedLeaveTypes.substitute_leave_hours ?? 0
+        // JSON 필드에서 가져오기 (별도 컬럼은 존재하지 않음)
+        const currentHours = updatedLeaveTypes.substitute_leave_hours ?? 0
         const newHours = Math.max(0, currentHours - hoursToDeduct)
         
-        // JSON 필드와 별도 컬럼 모두 업데이트
+        // JSON 필드 업데이트
         updatedLeaveTypes.substitute_leave_hours = newHours
         
         console.log('📊 대체휴가 시간 업데이트:', {
@@ -137,18 +137,17 @@ export async function POST(request: NextRequest) {
           차감시간: hoursToDeduct,
           이전시간: currentHours,
           업데이트후: newHours,
-          별도컬럼값: leaveData.substitute_leave_hours,
           JSON필드값: leaveData.leave_types.substitute_leave_hours
         })
         
       } else if (leaveType === '보상휴가' || leaveType === '보상휴가 오전 반차' || leaveType === '보상휴가 오후 반차' || leaveType?.includes('보상휴가')) {
         // 보상휴가 시간 차감 (종일/반차 모두 처리)
         const hoursToDeduct = daysToDeduct * 8
-        // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 가져오기
-        const currentHours = leaveData.compensatory_leave_hours ?? updatedLeaveTypes.compensatory_leave_hours ?? 0
+        // JSON 필드에서 가져오기 (별도 컬럼은 존재하지 않음)
+        const currentHours = updatedLeaveTypes.compensatory_leave_hours ?? 0
         const newHours = Math.max(0, currentHours - hoursToDeduct)
         
-        // JSON 필드와 별도 컬럼 모두 업데이트
+        // JSON 필드 업데이트
         updatedLeaveTypes.compensatory_leave_hours = newHours
         
         console.log('📊 보상휴가 시간 업데이트:', {
@@ -157,23 +156,14 @@ export async function POST(request: NextRequest) {
           차감시간: hoursToDeduct,
           이전시간: currentHours,
           업데이트후: newHours,
-          별도컬럼값: leaveData.compensatory_leave_hours,
           JSON필드값: leaveData.leave_types.compensatory_leave_hours
         })
       }
       
-      // 휴가 데이터 업데이트 (JSON 필드와 별도 컬럼 모두 업데이트)
-      const updateData: any = {
+      // 휴가 데이터 업데이트 (JSON 필드만 업데이트, 별도 컬럼은 존재하지 않음)
+      const updateData = {
         leave_types: updatedLeaveTypes,
         updated_at: new Date().toISOString()
-      }
-      
-      // 대체휴가/보상휴가의 경우 별도 컬럼도 업데이트
-      if (leaveType?.includes('대체휴가') && updatedLeaveTypes.substitute_leave_hours !== undefined) {
-        updateData.substitute_leave_hours = updatedLeaveTypes.substitute_leave_hours
-      }
-      if (leaveType?.includes('보상휴가') && updatedLeaveTypes.compensatory_leave_hours !== undefined) {
-        updateData.compensatory_leave_hours = updatedLeaveTypes.compensatory_leave_hours
       }
       
       console.log('📊 데이터베이스 업데이트 데이터:', updateData)

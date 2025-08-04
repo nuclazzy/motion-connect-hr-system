@@ -642,8 +642,8 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                     {defaultValues?._leaveCategory === 'substitute' && (
                       <div>
                         <p className="text-purple-800">
-                          <strong>대체휴가:</strong> {((leaveData.substitute_leave_hours ?? leaveData.leave_types.substitute_leave_hours ?? 0) / 8).toFixed(1)}일 잔여 
-                          <span className="text-xs text-purple-600 ml-2">({leaveData.substitute_leave_hours ?? leaveData.leave_types.substitute_leave_hours ?? 0}시간)</span>
+                          <strong>대체휴가:</strong> {((leaveData.leave_types.substitute_leave_hours ?? 0) / 8).toFixed(1)}일 잔여 
+                          <span className="text-xs text-purple-600 ml-2">({leaveData.leave_types.substitute_leave_hours ?? 0}시간)</span>
                         </p>
                       </div>
                     )}
@@ -652,8 +652,8 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                     {defaultValues?._leaveCategory === 'compensatory' && (
                       <div>
                         <p className="text-green-800">
-                          <strong>보상휴가:</strong> {((leaveData.compensatory_leave_hours ?? leaveData.leave_types.compensatory_leave_hours ?? 0) / 8).toFixed(1)}일 잔여
-                          <span className="text-xs text-green-600 ml-2">({leaveData.compensatory_leave_hours ?? leaveData.leave_types.compensatory_leave_hours ?? 0}시간)</span>
+                          <strong>보상휴가:</strong> {((leaveData.leave_types.compensatory_leave_hours ?? 0) / 8).toFixed(1)}일 잔여
+                          <span className="text-xs text-green-600 ml-2">({leaveData.leave_types.compensatory_leave_hours ?? 0}시간)</span>
                         </p>
                       </div>
                     )}

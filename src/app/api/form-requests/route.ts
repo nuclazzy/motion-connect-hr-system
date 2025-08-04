@@ -80,15 +80,14 @@ export async function POST(request: NextRequest) {
       // 휴가 유형별 잔여량 확인
       if (leaveType === '대체휴가' || leaveType === '대체휴가 오전 반차' || leaveType === '대체휴가 오후 반차' || leaveType?.includes('대체휴가')) {
         const hoursToRequest = daysToRequest * 8
-        // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 가져오기
-        const availableHours = leaveData.substitute_leave_hours ?? leaveTypes.substitute_leave_hours ?? 0
+        // JSON 필드에서 가져오기 (별도 컬럼은 존재하지 않음)
+        const availableHours = leaveTypes.substitute_leave_hours ?? 0
         
         console.log('📊 대체휴가 확인:', { 
           휴가유형: leaveType,
           신청일수: daysToRequest,
           필요시간: hoursToRequest, 
           잔여시간: availableHours,
-          별도컬럼값: leaveData.substitute_leave_hours,
           JSON필드값: leaveTypes.substitute_leave_hours
         })
         
@@ -101,15 +100,14 @@ export async function POST(request: NextRequest) {
         
       } else if (leaveType === '보상휴가' || leaveType === '보상휴가 오전 반차' || leaveType === '보상휴가 오후 반차' || leaveType?.includes('보상휴가')) {
         const hoursToRequest = daysToRequest * 8
-        // 별도 컬럼을 우선하되, 없으면 JSON 필드에서 가져오기
-        const availableHours = leaveData.compensatory_leave_hours ?? leaveTypes.compensatory_leave_hours ?? 0
+        // JSON 필드에서 가져오기 (별도 컬럼은 존재하지 않음)
+        const availableHours = leaveTypes.compensatory_leave_hours ?? 0
         
         console.log('📊 보상휴가 확인:', { 
           휴가유형: leaveType,
           신청일수: daysToRequest,
           필요시간: hoursToRequest, 
           잔여시간: availableHours,
-          별도컬럼값: leaveData.compensatory_leave_hours,
           JSON필드값: leaveTypes.compensatory_leave_hours
         })
         
