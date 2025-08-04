@@ -215,11 +215,14 @@ export default function AdminFormManagement() {
         action: newStatus
       })
       
-      // 성공 시 자동으로 전체보기로 전환하고 목록 갱신
+      // 성공 시 즉시 목록 갱신 및 필터 조정
       if (filter === 'pending') {
         setFilter('all')
       }
-      setTimeout(() => fetchRequests(false), 500)
+      await fetchRequests(false) // 즉시 새로고침
+      
+      // 사용자에게 성공 피드백 제공
+      alert(successMessage)
     } catch (err) {
       // 개선된 에러 처리: 구체적이고 도움이 되는 메시지
       const errorContext = {
@@ -300,8 +303,7 @@ export default function AdminFormManagement() {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청자</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">서식 종류</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일시</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">처리</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태 / 처리</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -331,36 +333,45 @@ export default function AdminFormManagement() {
                       )}
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{formatDate(request.submitted_at)}</td>
-                    <td className="px-4 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
-                        {getStatusText(request.status)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-4 whitespace-nowrap text-sm">
                       {request.status === 'pending' ? (
-                        <div className="space-x-4">
-                          <button
-                            onClick={() => handleUpdateRequest(request.id, 'approved')}
-                            className="text-indigo-600 hover:text-indigo-900 disabled:text-gray-400"
-                          >
-                            승인
-                          </button>
-                          <button
-                            onClick={() => handleUpdateRequest(request.id, 'rejected')}
-                            className="text-red-600 hover:text-red-900 disabled:text-gray-400"
-                          >
-                            거절
-                          </button>
+                        <div className="flex items-center space-x-3">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
+                            {getStatusText(request.status)}
+                          </span>
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => handleUpdateRequest(request.id, 'approved')}
+                              className="bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                            >
+                              승인
+                            </button>
+                            <button
+                              onClick={() => handleUpdateRequest(request.id, 'rejected')}
+                              className="bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                            >
+                              거절
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <span className="text-gray-500">{getStatusText(request.status)}</span>
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
+                            {getStatusText(request.status)}
+                          </span>
+                          {request.processed_at && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              {formatDate(request.processed_at)}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-500">
                     {filter === 'pending' ? '승인 대기 중인 신청이 없습니다.' : '표시할 신청 내역이 없습니다.'}
                   </td>
                 </tr>

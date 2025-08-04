@@ -200,13 +200,7 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                       신청일시
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      상태
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      처리일시
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      액션
+                      상태 / 처리
                     </th>
                   </tr>
                 </thead>
@@ -242,30 +236,19 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
-                          {getStatusText(request.status)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">
-                          {request.processed_at ? formatDate(request.processed_at) : '-'}
+                        <div className="flex items-center justify-between">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(request.status)}`}>
+                            {getStatusText(request.status)}
+                          </span>
+                          {request.processed_at && (
+                            <span className="text-xs text-gray-500 ml-3">
+                              {formatDate(request.processed_at)}
+                            </span>
+                          )}
                         </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        {request.status === 'pending' && (
-                          <span className="text-gray-500">승인 대기중</span>
-                        )}
-                        {request.status === 'approved' && (
-                          <span className="text-green-600">승인 완료</span>
-                        )}
-                        {request.status === 'rejected' && (
-                          <div>
-                            <span className="text-red-600">거절됨</span>
-                            {request.admin_notes && (
-                              <div className="mt-1 text-xs text-red-500">
-                                사유: {request.admin_notes}
-                              </div>
-                            )}
+                        {request.status === 'rejected' && request.admin_notes && (
+                          <div className="mt-2 text-xs text-red-500">
+                            사유: {request.admin_notes}
                           </div>
                         )}
                       </td>
