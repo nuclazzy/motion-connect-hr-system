@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // Assuming a more complete User type
 interface Employee {
@@ -41,7 +42,7 @@ export default function AdminEmployeeManagement() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        console.log('🚀 Fetching employees...')
+        console.log('🚀 Fetching employees (direct Supabase)...')
         
         // localStorage에서 사용자 정보 가져오기
         const userStr = localStorage.getItem('motion-connect-user')
@@ -54,24 +55,43 @@ export default function AdminEmployeeManagement() {
           throw new Error('관리자 권한이 필요합니다.')
         }
 
-        const response = await fetch('/api/admin/employees-simple', {
-          headers: {
-            'Authorization': `Bearer ${user.id}`,
-            'Content-Type': 'application/json'
-          }
-        })
+        // Supabase에서 직접 users 테이블 조회
+        const { data: users, error } = await supabase
+          .from('users')
+          .select(`
+            id, name, email, department, position, work_type, hire_date, dob, phone, address, 
+            is_active, resignation_date, termination_date,
+            annual_days, used_annual_days, sick_days, used_sick_days,
+            substitute_leave_hours, compensatory_leave_hours,
+            updated_at
+          `)
+          .order('hire_date', { ascending: true })
 
-        console.log('📡 Response status:', response.status)
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || `HTTP ${response.status}`)
+        if (error) {
+          console.error('❌ Supabase error:', error)
+          throw new Error('직원 데이터를 불러올 수 없습니다.')
         }
 
-        const data = await response.json()
-        console.log('✅ Data received:', data.employees?.length, '명')
+        console.log('✅ Users fetched directly from Supabase:', users?.length, '명')
         
-        setEmployees(data.employees || [])
+        // 데이터 변환
+        const result = users?.map((user: any) => ({
+          ...user,
+          annual_leave: Math.max(0, (user.annual_days || 0) - (user.used_annual_days || 0)),
+          sick_leave: Math.max(0, (user.sick_days || 0) - (user.used_sick_days || 0)),
+          substitute_leave_hours: user.substitute_leave_hours || 0,
+          compensatory_leave_hours: user.compensatory_leave_hours || 0,
+          leave_data: {
+            annual_days: user.annual_days || 0,
+            used_annual_days: user.used_annual_days || 0,
+            sick_days: user.sick_days || 0,
+            used_sick_days: user.used_sick_days || 0,
+            substitute_leave_hours: user.substitute_leave_hours || 0,
+            compensatory_leave_hours: user.compensatory_leave_hours || 0
+          }
+        })) || []
+        
+        setEmployees(result)
       } catch (err) {
         console.error('❌ Error:', err)
         setError(err instanceof Error ? err.message : '알 수 없는 오류')
@@ -125,26 +145,25 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
-      const userStr = localStorage.getItem('motion-connect-user')
-      const user = userStr ? JSON.parse(userStr) : null
-      
-      const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${user?.id}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(formData),
-      })
+      // Supabase로 직접 업데이트
+      const { error } = await supabase
+        .from('users')
+        .update(formData)
+        .eq('id', selectedEmployee.id)
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || '직원 정보 업데이트에 실패했습니다.')
+      if (error) {
+        console.error('❌ Supabase update error:', error)
+        throw new Error('직원 정보 업데이트에 실패했습니다.')
       }
       
       alert('직원 정보가 성공적으로 업데이트되었습니다.')
-      // Refresh the page to show updated data
-      window.location.reload()
+      // 로컬 상태 업데이트
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => 
+          emp.id === selectedEmployee.id ? { ...emp, ...formData } : emp
+        )
+      )
+      setSelectedEmployee({ ...selectedEmployee, ...formData })
     } catch (err) {
       setError(err instanceof Error ? err.message : '업데이트 중 오류가 발생했습니다.')
     } finally {
@@ -203,21 +222,33 @@ export default function AdminEmployeeManagement() {
     if (!selectedEmployee) return
 
     try {
-      const userStr = localStorage.getItem('motion-connect-user')
-      const user = userStr ? JSON.parse(userStr) : null
+      let updateData: any = {}
       
-      const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/adjust-leave`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${user?.id}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ leaveType, adjustmentType, amount }),
-      })
+      if (['substitute_leave_hours', 'compensatory_leave_hours'].includes(leaveType)) {
+        // 대체휴가/보상휴가 직접 업데이트
+        const currentValue = leaveType === 'substitute_leave_hours' 
+          ? (selectedEmployee.substitute_leave_hours || 0)
+          : (selectedEmployee.compensatory_leave_hours || 0)
+        
+        updateData[leaveType] = currentValue + amount
+      } else {
+        // 연차/병가 업데이트
+        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
+        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
+        
+        const currentValue = (selectedEmployee as any).leave_data?.[targetField] || 0
+        updateData[targetField] = currentValue + amount
+      }
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || '휴가 일수 조정에 실패했습니다.')
+      // Supabase로 직접 업데이트
+      const { error } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', selectedEmployee.id)
+
+      if (error) {
+        console.error('❌ Supabase leave adjustment error:', error)
+        throw new Error('휴가 일수 조정에 실패했습니다.')
       }
       
       // 로컬 상태 즉시 업데이트
@@ -232,20 +263,23 @@ export default function AdminEmployeeManagement() {
         }
       } else {
         // 연차/병가 업데이트
-        const leaveData = (updatedEmployee as any).leave_data || {}
-        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
-        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
+        const leaveData = (updatedEmployee as any).leave_data || {};
+        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick';
+        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`;
         
-        leaveData[targetField] = (leaveData[targetField] || 0) + amount
+        leaveData[targetField] = (leaveData[targetField] || 0) + amount;
+        
+        // users 테이블 필드도 업데이트
+        (updatedEmployee as any)[targetField] = leaveData[targetField];
         
         // 잔여 일수 재계산
         if (leaveType === 'annual_leave') {
-          updatedEmployee.annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0)
+          updatedEmployee.annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0);
         } else {
-          updatedEmployee.sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0)
+          updatedEmployee.sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0);
         }
         
-        (updatedEmployee as any).leave_data = leaveData
+        (updatedEmployee as any).leave_data = leaveData;
       }
       
       // 직원 목록에서도 업데이트
@@ -256,8 +290,6 @@ export default function AdminEmployeeManagement() {
       
     } catch (err) {
       setError(err instanceof Error ? err.message : '휴가 일수 조정 중 오류가 발생했습니다.')
-      // 오류 발생 시에만 새로고침
-      window.location.reload()
     }
   }
 
@@ -268,25 +300,37 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
-      const userStr = localStorage.getItem('motion-connect-user')
-      const user = userStr ? JSON.parse(userStr) : null
-      
-      const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/resign`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${user?.id}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ resignation_date: formData.resignation_date }),
-      })
+      // Supabase로 직접 퇴사 처리
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          resignation_date: formData.resignation_date,
+          termination_date: formData.resignation_date,
+          is_active: false
+        })
+        .eq('id', selectedEmployee.id)
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || '퇴사 처리에 실패했습니다.')
+      if (error) {
+        console.error('❌ Supabase resignation error:', error)
+        throw new Error('퇴사 처리에 실패했습니다.')
       }
       
       alert('퇴사 처리가 완료되었습니다.')
-      window.location.reload()
+      
+      // 로컬 상태 업데이트
+      const updatedEmployee = { 
+        ...selectedEmployee, 
+        resignation_date: formData.resignation_date,
+        termination_date: formData.resignation_date,
+        is_active: false
+      }
+      
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => 
+          emp.id === selectedEmployee.id ? updatedEmployee : emp
+        )
+      )
+      setSelectedEmployee(updatedEmployee)
     } catch (err) {
       setError(err instanceof Error ? err.message : '퇴사 처리 중 오류가 발생했습니다.')
     } finally {
@@ -301,26 +345,25 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
-      const userStr = localStorage.getItem('motion-connect-user')
-      const user = userStr ? JSON.parse(userStr) : null
-      
-      const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${user?.id}`,
-          'Content-Type': 'application/json'
-        }
-      })
+      // Supabase로 직접 직원 삭제
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', selectedEmployee.id)
 
-      if (!response.ok) {
-        const result = await response.json()
-        throw new Error(result.error || '직원 삭제에 실패했습니다.')
+      if (error) {
+        console.error('❌ Supabase delete error:', error)
+        throw new Error('직원 삭제에 실패했습니다.')
       }
       
       alert('직원이 성공적으로 삭제되었습니다.')
+      
+      // 로컬 상태에서 직원 제거
+      setEmployees(prevEmployees => 
+        prevEmployees.filter(emp => emp.id !== selectedEmployee.id)
+      )
       setSelectedEmployee(null)
       setShowDeleteConfirm(false)
-      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : '직원 삭제 중 오류가 발생했습니다.')
     } finally {
