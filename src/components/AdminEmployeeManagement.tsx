@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, FormEvent } from 'react'
-import { getAuthHeaders } from '@/lib/auth'
+import { getAuthHeaders, getCurrentUser } from '@/lib/auth'
 
 // Assuming a more complete User type
 interface Employee {
@@ -43,16 +43,35 @@ export default function AdminEmployeeManagement() {
     setLoading(true)
     setError(null)
     try {
+      const headers = getAuthHeaders()
+      console.log('🔑 Request headers:', headers)
+      
       const response = await fetch('/api/admin/employees', {
-        headers: getAuthHeaders()
+        headers
       })
+      
+      console.log('📡 Response status:', response.status)
+      
       if (!response.ok) {
-        throw new Error('직원 목록을 불러오는데 실패했습니다.')
+        const errorData = await response.json().catch(() => ({ error: '서버에서 응답을 받을 수 없습니다.' }))
+        console.error('❌ API Error:', errorData)
+        
+        if (response.status === 401) {
+          throw new Error('인증이 필요합니다. 다시 로그인해주세요.')
+        } else if (response.status === 403) {
+          throw new Error('관리자 권한이 필요합니다.')
+        } else {
+          throw new Error(errorData.error || '직원 목록을 불러오는데 실패했습니다.')
+        }
       }
+      
       const data = await response.json()
+      console.log('✅ Employee data received:', data.employees?.length, '명')
+      
       const newEmployees = data.employees || []
       setEmployees(newEmployees)
     } catch (err) {
+      console.error('❌ fetchEmployees error:', err)
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
@@ -60,7 +79,32 @@ export default function AdminEmployeeManagement() {
   }, [])
 
   useEffect(() => {
-    fetchEmployees()
+    // 현재 사용자 인증 상태 확인
+    const checkAuthAndFetch = async () => {
+      try {
+        const currentUser = await getCurrentUser()
+        if (!currentUser) {
+          setError('로그인이 필요합니다. 다시 로그인해주세요.')
+          setLoading(false)
+          return
+        }
+        
+        if (currentUser.role !== 'admin') {
+          setError('관리자 권한이 필요합니다.')
+          setLoading(false)
+          return
+        }
+        
+        console.log('✅ 관리자 인증 확인:', currentUser.name)
+        fetchEmployees()
+      } catch (error) {
+        console.error('❌ Auth check failed:', error)
+        setError('인증 확인 중 오류가 발생했습니다.')
+        setLoading(false)
+      }
+    }
+    
+    checkAuthAndFetch()
   }, [fetchEmployees])
 
   // employees가 변경될 때 선택된 직원 정보 업데이트 (순환 참조 방지)
@@ -298,8 +342,27 @@ export default function AdminEmployeeManagement() {
 
   const filteredEmployees = getFilteredEmployees()
 
-  if (loading) return <div className="p-4">직원 목록을 불러오는 중...</div>
-  if (error && !employees.length) return <div className="p-4 text-red-500">오류: {error}</div>
+  if (loading) return (
+    <div className="p-8 text-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+      <p className="text-gray-600">직원 목록을 불러오는 중...</p>
+    </div>
+  )
+  
+  if (error && !employees.length) return (
+    <div className="p-8 text-center">
+      <div className="bg-red-50 border border-red-300 rounded-lg p-6">
+        <div className="text-red-600 font-semibold mb-2">❌ 오류 발생</div>
+        <p className="text-red-800 mb-4">{error}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+        >
+          페이지 새로고침
+        </button>
+      </div>
+    </div>
+  )
 
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
