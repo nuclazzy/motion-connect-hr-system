@@ -12,8 +12,10 @@ import {
   Users,
   AlertTriangle,
   CheckCircle,
-  XCircle
+  XCircle,
+  Upload
 } from 'lucide-react'
+import CapsUploadManager from './CapsUploadManager'
 
 interface Employee {
   id: string
@@ -55,6 +57,7 @@ export default function AdminAttendanceManagement() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [filterType, setFilterType] = useState<'all' | '출근' | '퇴근' | 'missing'>('all')
   const [showMissingForm, setShowMissingForm] = useState(false)
+  const [activeTab, setActiveTab] = useState<'attendance' | 'upload'>('attendance')
   const [missingFormData, setMissingFormData] = useState<MissingRecordRequest>({
     user_id: '',
     date_string: '',
@@ -245,17 +248,47 @@ export default function AdminAttendanceManagement() {
           <h2 className="text-2xl font-bold text-gray-900">출퇴근 관리</h2>
           <p className="text-gray-600">직원들의 출퇴근 현황을 관리합니다</p>
         </div>
+        {activeTab === 'attendance' && (
+          <button
+            onClick={() => setShowMissingForm(true)}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            누락 기록 추가
+          </button>
+        )}
+      </div>
+
+      {/* 탭 메뉴 */}
+      <div className="flex border-b mb-6">
         <button
-          onClick={() => setShowMissingForm(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          onClick={() => setActiveTab('attendance')}
+          className={`px-4 py-2 font-medium ${
+            activeTab === 'attendance'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
         >
-          <Plus className="h-4 w-4 mr-2" />
-          누락 기록 추가
+          출퇴근 현황
+        </button>
+        <button
+          onClick={() => setActiveTab('upload')}
+          className={`px-4 py-2 font-medium flex items-center ${
+            activeTab === 'upload'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Upload className="h-4 w-4 mr-2" />
+          CAPS 데이터 업로드
         </button>
       </div>
 
-      {/* 통계 카드 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* 출퇴근 현황 탭 */}
+      {activeTab === 'attendance' && (
+        <>
+          {/* 통계 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="p-4 bg-blue-50 rounded-lg">
           <div className="flex items-center">
             <Users className="h-8 w-8 text-blue-500 mr-3" />
@@ -550,6 +583,13 @@ export default function AdminAttendanceManagement() {
             </div>
           </div>
         </div>
+      )}
+        </>
+      )}
+
+      {/* CAPS 업로드 탭 */}
+      {activeTab === 'upload' && (
+        <CapsUploadManager />
       )}
     </div>
   )
