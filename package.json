@@ -1,12 +1,16 @@
 {
   "name": "motion-connect",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "version:patch": "npm version patch && npm run build && git push && git push --tags",
+    "version:minor": "npm version minor && npm run build && git push && git push --tags",
+    "version:major": "npm version major && npm run build && git push && git push --tags",
+    "deploy": "npm run build && vercel --prod"
   },
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
