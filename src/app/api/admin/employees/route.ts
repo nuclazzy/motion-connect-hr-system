@@ -37,17 +37,8 @@ export async function GET(request: NextRequest) {
     console.log('👤 User ID:', userId)
     
     console.log('🔌 Creating Supabase client...')
-    let supabase
-    try {
-      supabase = await createServiceRoleClient()
-      console.log('✅ Supabase client created')
-    } catch (supabaseError) {
-      console.error('❌ Failed to create Supabase client:', supabaseError)
-      return NextResponse.json({ 
-        error: 'Database connection failed',
-        details: supabaseError instanceof Error ? supabaseError.message : 'Unknown error'
-      }, { status: 500 })
-    }
+    const supabase = await createServiceRoleClient()
+    console.log('✅ Supabase client created')
 
     // 사용자 정보 및 권한 확인
     console.log('🔍 Checking user permissions...')

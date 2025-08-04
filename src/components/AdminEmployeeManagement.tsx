@@ -39,7 +39,7 @@ export default function AdminEmployeeManagement() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
 
 
-  const fetchEmployees = useCallback(async () => {
+  const fetchEmployees = async () => {
     setLoading(true)
     setError(null)
     try {
@@ -77,7 +77,7 @@ export default function AdminEmployeeManagement() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }
 
   useEffect(() => {
     // 현재 사용자 인증 상태 확인
@@ -106,7 +106,7 @@ export default function AdminEmployeeManagement() {
     }
     
     checkAuthAndFetch()
-  }, [fetchEmployees])
+  }, []) // fetchEmployees 의존성 제거하여 무한 루프 방지
 
   // employees가 변경될 때 선택된 직원 정보 업데이트 (순환 참조 방지)
   useEffect(() => {
