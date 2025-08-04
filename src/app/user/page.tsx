@@ -226,28 +226,30 @@ export default function UserDashboard() {
                 </div>
                 <div className="mt-3">
                   <p className="text-xs text-gray-500">
-                    캡스로 출퇴근 체크를 하지 못한 경우 이용해주세요!
+                    실시간 출퇴근 기록 및 근무시간 현황을 확인하세요!
                   </p>
                 </div>
               </div>
               <div className="bg-gray-50 px-5 py-3 space-y-2">
                 <div className="text-sm">
                   <a 
-                    href="https://script.google.com/a/macros/motionsense.co.kr/s/AKfycbwBcCpDZZ3J5vxHswCXWgkrDJTcfLVCJPNcMSom7_K-pL9X6uXAvf-kZmE5ea-WyBD5Lw/exec"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block"
+                    href="/attendance"
+                    className="font-medium text-indigo-600 hover:text-indigo-500 block flex items-center"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
                     출퇴근 기록하기
                   </a>
                 </div>
                 <div className="text-sm">
                   <a 
-                    href="https://script.google.com/a/macros/motionsense.co.kr/s/AKfycbwBcCpDZZ3J5vxHswCXWgkrDJTcfLVCJPNcMSom7_K-pL9X6uXAvf-kZmE5ea-WyBD5Lw/exec?page=worktime"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block"
+                    href="/attendance"
+                    className="font-medium text-indigo-600 hover:text-indigo-500 block flex items-center"
                   >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
                     근무시간 조회하기
                   </a>
                 </div>
