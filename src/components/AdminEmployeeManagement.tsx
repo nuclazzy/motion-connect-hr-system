@@ -66,7 +66,7 @@ export default function AdminEmployeeManagement() {
           `)
           .order('hire_date', { ascending: true, nullsFirst: false })
 
-        // termination_date, contract_end_date 컬럼이 존재하는지 확인하고 추가 조회
+        // work_type, termination_date, contract_end_date 컬럼이 존재하는지 확인하고 추가 조회
         let hasStatusColumns = false
         try {
           const { data: usersWithStatus, error: statusError } = await supabase
@@ -75,7 +75,7 @@ export default function AdminEmployeeManagement() {
               id, name, email, department, position, hire_date,
               annual_days, used_annual_days, sick_days, used_sick_days,
               substitute_leave_hours, compensatory_leave_hours,
-              termination_date, contract_end_date
+              work_type, termination_date, contract_end_date
             `)
             .order('hire_date', { ascending: true, nullsFirst: false })
           
@@ -97,19 +97,25 @@ export default function AdminEmployeeManagement() {
         
         // 데이터 변환 (퇴사자 및 계약직 분류 포함)
         const result = users?.map((userData: any) => {
-          // 퇴사자 여부 확인 (컬럼이 있는 경우만)
-          const isTerminated = hasStatusColumns && !!userData.termination_date
-          
-          // 계약직 여부 확인 (컬럼이 있는 경우만)
-          const isContractEmployee = hasStatusColumns && !!userData.contract_end_date
-          
-          // 근무 형태 결정
+          // work_type 컬럼이 있으면 그것을 사용, 없으면 로직으로 계산
           let work_type = '정규직'
-          if (isTerminated) {
-            work_type = '퇴사자'
-          } else if (isContractEmployee) {
-            work_type = '계약직'
+          if (hasStatusColumns && userData.work_type) {
+            // 데이터베이스에서 자동 계산된 work_type 사용
+            work_type = userData.work_type
+          } else if (hasStatusColumns) {
+            // 컬럼은 있지만 work_type이 비어있는 경우 로직으로 계산
+            const isTerminated = !!userData.termination_date
+            const isContractEmployee = !!userData.contract_end_date
+            
+            if (isTerminated) {
+              work_type = '퇴사자'
+            } else if (isContractEmployee) {
+              work_type = '계약직'
+            }
           }
+          
+          // 퇴사자 여부 (is_active 설정용)
+          const isTerminated = hasStatusColumns && !!userData.termination_date
           
           return {
             ...userData,
@@ -423,11 +429,11 @@ export default function AdminEmployeeManagement() {
   const getFilteredEmployees = () => {
     switch (statusFilter) {
       case 'active':
-        return employees.filter(emp => !emp.termination_date && !emp.contract_end_date)
+        return employees.filter(emp => emp.work_type === '정규직')
       case 'resigned':
-        return employees.filter(emp => !!emp.termination_date)
+        return employees.filter(emp => emp.work_type === '퇴사자')
       case 'contract':
-        return employees.filter(emp => !!emp.contract_end_date && !emp.termination_date)
+        return employees.filter(emp => emp.work_type === '계약직')
       default:
         return employees
     }
