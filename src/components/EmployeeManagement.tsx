@@ -1,6 +1,19 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+
+interface LeaveData {
+  user_id: string
+  leave_types: {
+    annual_days?: number
+    used_annual_days?: number
+    sick_days?: number
+    used_sick_days?: number
+    substitute_leave_hours?: number
+    compensatory_leave_hours?: number
+  }
+}
 
 interface Employee {
   id: string
@@ -25,32 +38,40 @@ export default function EmployeeManagement() {
     setError(null)
     
     try {
-      const userStr = localStorage.getItem('motion-connect-user')
-      if (!userStr) {
-        throw new Error('사용자 인증 정보가 없습니다')
-      }
-      
-      const user = JSON.parse(userStr)
-      
-      const response = await fetch('/api/admin/employees-simple', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${user.id}`,
-          'Content-Type': 'application/json'
-        }
+      // 사용자 목록 조회
+      const { data: users, error: usersError } = await supabase
+        .from('users')
+        .select('*')
+        .order('hire_date', { ascending: true })
+
+      if (usersError) throw usersError
+
+      // 휴가 데이터 조회
+      const { data: leaveData, error: leaveError } = await supabase
+        .from('leave_days')
+        .select('user_id, leave_types')
+
+      if (leaveError) throw leaveError
+
+      // 데이터 매핑
+      const leaveMap = new Map<string, any>()
+      leaveData?.forEach((leave: LeaveData) => {
+        leaveMap.set(leave.user_id, leave.leave_types || {})
       })
 
-      if (!response.ok) {
-        throw new Error(`서버 오류: ${response.status}`)
-      }
+      // 직원 데이터 결합
+      const employeesData = users?.map(user => {
+        const leave = leaveMap.get(user.id) || {}
+        return {
+          ...user,
+          annual_leave: Math.max(0, (leave.annual_days || 0) - (leave.used_annual_days || 0)),
+          sick_leave: Math.max(0, (leave.sick_days || 0) - (leave.used_sick_days || 0)),
+          substitute_leave_hours: leave.substitute_leave_hours || 0,
+          compensatory_leave_hours: leave.compensatory_leave_hours || 0
+        }
+      }) || []
 
-      const data = await response.json()
-      
-      if (data.success && data.employees) {
-        setEmployees(data.employees)
-      } else {
-        throw new Error('직원 데이터를 불러올 수 없습니다')
-      }
+      setEmployees(employeesData)
     } catch (err) {
       console.error('직원 목록 로딩 오류:', err)
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다')
