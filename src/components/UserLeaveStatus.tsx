@@ -77,7 +77,14 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
         }
 
         console.log('✅ Supabase 직접 조회 성공:', leaveDataResult)
-        setLeaveData(leaveDataResult)
+        
+        // user 배열을 단일 객체로 변환
+        const formattedData = {
+          ...leaveDataResult,
+          user: Array.isArray(leaveDataResult.user) ? leaveDataResult.user[0] : leaveDataResult.user
+        }
+        
+        setLeaveData(formattedData)
         
       } catch (err) {
         console.error('휴가 데이터 조회 오류:', err)
