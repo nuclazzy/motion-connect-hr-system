@@ -49,10 +49,17 @@ ADD COLUMN IF NOT EXISTS used_sick_days NUMERIC(5,1) DEFAULT 0,
 ADD COLUMN IF NOT EXISTS substitute_leave_hours NUMERIC(5,1) DEFAULT 0,
 ADD COLUMN IF NOT EXISTS compensatory_leave_hours NUMERIC(5,1) DEFAULT 0;
 
+-- 연봉 관리 컬럼 추가
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS salary INTEGER,
+ADD COLUMN IF NOT EXISTS salary_updated_at TIMESTAMP WITH TIME ZONE;
+
 -- 2. 컬럼 설명 추가
 COMMENT ON COLUMN users.termination_date IS '퇴사 일자 - 값이 있으면 퇴사자로 분류';
 COMMENT ON COLUMN users.contract_end_date IS '계약 종료 일자 - 값이 있으면 계약직으로 분류';
 COMMENT ON COLUMN users.work_type IS '근무 형태 - termination_date와 contract_end_date에 따라 자동 업데이트';
+COMMENT ON COLUMN users.salary IS '연봉 (만원 단위)';
+COMMENT ON COLUMN users.salary_updated_at IS '연봉 최종 수정 일시';
 
 -- 3. work_type 자동 업데이트 함수 생성
 CREATE OR REPLACE FUNCTION update_work_type()

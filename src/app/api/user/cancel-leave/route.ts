@@ -155,49 +155,77 @@ export async function POST(request: NextRequest) {
     // 휴가 신청서인 경우에만 휴가 일수 복원 처리
     if (formRequest.form_type === '휴가 신청서') {
       const requestData = formRequest.request_data
-      const isHalfDay = requestData.휴가형태?.includes('반차')
-      const daysToRestore = calculateWorkingDays(requestData.시작일, requestData.종료일, isHalfDay)
+      const leaveType = requestData?.['휴가형태'] || '';
+      const leaveDays = parseFloat(requestData?.['휴가일수'] || requestData?.['신청일수'] || '0');
 
-      // 현재 휴가 데이터 조회
-      const { data: leaveDaysData, error: leaveDaysError } = await serviceRoleSupabase
-        .from('leave_days')
-        .select('leave_types')
-        .eq('user_id', userId)
-        .single()
+      if (leaveDays > 0) {
+        let updateField = '';
+        let isHourlyLeave = false;
+        
+        // 휴가 타입별 필드 매핑 (AdminFormManagement와 동일한 로직)
+        if (leaveType === '연차') {
+          updateField = 'used_annual_days';
+        } else if (leaveType === '병가') {
+          updateField = 'used_sick_days';
+        } else if (leaveType === '대체휴가' || requestData?.['_leaveCategory'] === 'substitute') {
+          updateField = 'substitute_leave_hours';
+          isHourlyLeave = true;
+        } else if (leaveType === '보상휴가' || requestData?.['_leaveCategory'] === 'compensatory') {
+          updateField = 'compensatory_leave_hours';
+          isHourlyLeave = true;
+        }
 
-      if (leaveDaysError || !leaveDaysData) {
-        return NextResponse.json({ error: '휴가 정보를 조회할 수 없습니다.' }, { status: 404 })
-      }
+        if (updateField) {
+          console.log('🔍 휴가 복원 처리:', {
+            leaveType,
+            leaveDays,
+            updateField,
+            isHourlyLeave,
+            userId
+          });
 
-      const leaveTypes = leaveDaysData.leave_types as Record<string, { total: number; used: number }>
-      
-      // 휴가 타입에 따른 키 결정
-      let leaveTypeKey = 'annual'
-      if (requestData.휴가형태 === '병가') {
-        leaveTypeKey = 'sick'
-      }
+          const { data: userData, error: userDataError } = await serviceRoleSupabase
+            .from('users')
+            .select(updateField)
+            .eq('id', userId)
+            .single();
 
-      // 휴가 일수 복원
-      const updatedLeaveTypes = {
-        ...leaveTypes,
-        [leaveTypeKey]: {
-          ...leaveTypes[leaveTypeKey],
-          used: Math.max(0, (leaveTypes[leaveTypeKey]?.used || 0) - daysToRestore)
+          if (userDataError) {
+            return NextResponse.json({ error: '사용자 휴가 정보 조회 실패' }, { status: 500 })
+          }
+
+          let newValue;
+          const currentValue = (userData as any)?.[updateField] || 0;
+          
+          if (isHourlyLeave) {
+            // 시간 단위 휴가는 시간으로 복원 (1일 = 8시간)
+            const hoursToRestore = leaveDays * 8;
+            newValue = currentValue + hoursToRestore;
+          } else {
+            // 일 단위 휴가는 사용 일수에서 차감
+            newValue = Math.max(0, currentValue - leaveDays);
+          }
+          
+          console.log('🔍 휴가 복원 계산:', {
+            currentValue,
+            leaveDays,
+            newValue,
+            operation: isHourlyLeave ? 'add_hours' : 'subtract_used_days'
+          });
+
+          const { error: updateError } = await serviceRoleSupabase
+            .from('users')
+            .update({ [updateField]: newValue })
+            .eq('id', userId);
+
+          if (updateError) {
+            console.error('휴가 일수 복원 실패:', updateError)
+            return NextResponse.json({ error: '휴가 일수 복원에 실패했습니다.' }, { status: 500 })
+          }
+          
+          console.log('✅ 휴가 복원 완료:', { updateField, newValue });
         }
       }
-
-      // 데이터베이스 업데이트 (먼저 DB를 업데이트하고 성공 시에만 캘린더 삭제)
-      const { error: updateError } = await serviceRoleSupabase
-        .from('leave_days')
-        .update({ leave_types: updatedLeaveTypes })
-        .eq('user_id', userId)
-
-      if (updateError) {
-        console.error('휴가 일수 복원 실패:', updateError)
-        return NextResponse.json({ error: '휴가 일수 복원에 실패했습니다.' }, { status: 500 })
-      }
-
-      console.log(`💰 [휴가복원] ${requestData.휴가형태} ${daysToRestore}일 복원 완료`)
     }
 
     // 서식 요청 상태를 'cancelled'로 업데이트

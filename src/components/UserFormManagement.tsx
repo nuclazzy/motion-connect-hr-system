@@ -30,6 +30,7 @@ interface UserFormManagementProps {
 export default function UserFormManagement({ user, onApplyClick }: UserFormManagementProps) {
   const [formRequests, setFormRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
   const fetchMyFormRequests = useCallback(async () => {
     try {
@@ -78,6 +79,37 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     }
   }, [fetchMyFormRequests])
 
+  const handleCancelRequest = async (requestId: string) => {
+    if (!confirm('정말로 이 신청을 취소하시겠습니까?\n승인된 휴가인 경우 사용된 휴가일수가 복원됩니다.')) {
+      return
+    }
+
+    setCancellingId(requestId)
+    try {
+      const response = await fetch('/api/user/cancel-leave', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requestId }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        alert(result.message || '신청이 취소되었습니다.')
+        await fetchMyFormRequests() // 목록 새로고침
+      } else {
+        alert(result.error || '취소 처리에 실패했습니다.')
+      }
+    } catch (error) {
+      console.error('취소 요청 오류:', error)
+      alert('취소 처리 중 오류가 발생했습니다.')
+    } finally {
+      setCancellingId(null)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
@@ -86,6 +118,8 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
         return 'bg-green-100 text-green-800'
       case 'rejected':
         return 'bg-red-100 text-red-800'
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -99,6 +133,8 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
         return '승인됨'
       case 'rejected':
         return '거절됨'
+      case 'cancelled':
+        return '취소됨'
       default:
         return '알 수 없음'
     }
@@ -249,6 +285,17 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                         {request.status === 'rejected' && request.admin_notes && (
                           <div className="mt-2 text-xs text-red-500">
                             사유: {request.admin_notes}
+                          </div>
+                        )}
+                        {(request.status === 'pending' || request.status === 'approved') && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => handleCancelRequest(request.id)}
+                              disabled={cancellingId === request.id}
+                              className="bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 px-3 py-1 rounded-md text-xs font-medium transition-colors"
+                            >
+                              {cancellingId === request.id ? '취소 중...' : '신청 취소'}
+                            </button>
                           </div>
                         )}
                       </td>

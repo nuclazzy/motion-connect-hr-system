@@ -206,6 +206,56 @@ export default function AdminFormManagement() {
             console.log('✅ 휴가 차감 완료:', { updateField, newValue });
           }
         }
+
+        // 휴가 승인 시 Google Calendar에 이벤트 생성
+        try {
+          const startDate = request.request_data?.['시작일'] || '';
+          const endDate = request.request_data?.['종료일'] || startDate;
+          
+          if (startDate) {
+            // 종료일 계산 (Google Calendar는 종일 이벤트의 경우 다음날까지 포함해야 함)
+            const endDateObj = new Date(endDate);
+            endDateObj.setDate(endDateObj.getDate() + 1);
+            const adjustedEndDate = endDateObj.toISOString().split('T')[0];
+            
+            const calendarEventData = {
+              leaveData: {
+                leaveType: leaveType,
+                leaveDays: leaveDays,
+                startDate: startDate,
+                endDate: adjustedEndDate,
+                reason: request.request_data?.['사유'] || request.request_data?.['휴가사유'] || '',
+                formRequestId: request.id
+              },
+              userData: {
+                id: request.user_id,
+                name: request.user.name,
+                department: request.user.department
+              }
+            };
+
+            console.log('📅 캘린더 이벤트 생성 요청:', calendarEventData);
+
+            const calendarResponse = await fetch('/api/calendar/create-leave-event', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(calendarEventData)
+            });
+
+            if (calendarResponse.ok) {
+              const calendarResult = await calendarResponse.json();
+              console.log('✅ 휴가 캘린더 이벤트 생성 성공:', calendarResult);
+            } else {
+              const errorData = await calendarResponse.json();
+              console.error('❌ 휴가 캘린더 이벤트 생성 실패:', errorData);
+            }
+          }
+        } catch (calendarError) {
+          console.error('❌ 캘린더 이벤트 생성 중 오류:', calendarError);
+          // 캘린더 오류는 휴가 승인 자체에는 영향을 주지 않음
+        }
       }
 
       const successMessage = newStatus === 'approved' ? '승인되었습니다.' : '반려되었습니다.';
