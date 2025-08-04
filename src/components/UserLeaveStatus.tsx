@@ -281,7 +281,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                 </div>
                 <div className="mt-3 pt-3 border-t border-purple-200 flex justify-end">
                   <button
-                    onClick={() => onApply('휴가 신청서', { '휴가형태': '대체휴가' })}
+                    onClick={() => onApply('휴가 신청서', { '_leaveCategory': 'substitute' })}
                     className="bg-white text-purple-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-purple-100 transition-colors"
                   >
                     대체휴가 신청
@@ -311,7 +311,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                 </div>
                 <div className="mt-3 pt-3 border-t border-green-200 flex justify-end">
                   <button
-                    onClick={() => onApply('휴가 신청서', { '휴가형태': '보상휴가' })}
+                    onClick={() => onApply('휴가 신청서', { '_leaveCategory': 'compensatory' })}
                     className="bg-white text-green-600 px-4 py-1.5 rounded-md text-sm font-medium shadow-sm hover:bg-green-100 transition-colors"
                   >
                     보상휴가 신청

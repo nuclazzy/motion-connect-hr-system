@@ -314,9 +314,22 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         ) : field.type === 'select' && field.options ? (
           <select {...commonProps}>
             <option value="">선택해주세요</option>
-            {field.options.map(option => (
-              <option key={option} value={option}>{option}</option>
-            ))}
+            {field.options
+              .filter(option => {
+                // 휴가형태 필드이고 카테고리 힌트가 있는 경우 필터링
+                if (field.name === '휴가형태' && defaultValues?._leaveCategory) {
+                  if (defaultValues._leaveCategory === 'substitute') {
+                    return option.includes('대체휴가')
+                  }
+                  if (defaultValues._leaveCategory === 'compensatory') {
+                    return option.includes('보상휴가')
+                  }
+                }
+                return true
+              })
+              .map(option => (
+                <option key={option} value={option}>{option}</option>
+              ))}
           </select>
         ) : (
           <input
