@@ -89,6 +89,28 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month') // YYYY-MM 형식
     const status = searchParams.get('status')
 
+    console.log('🔍 초과근무 조회 요청:', { user_id, month, status })
+
+    // 먼저 overtime_records 테이블이 존재하는지 확인
+    const { data: tableCheck, error: tableError } = await supabase
+      .from('overtime_records')
+      .select('id')
+      .limit(1)
+
+    if (tableError) {
+      console.error('❌ overtime_records 테이블 오류:', tableError)
+      // 테이블이 존재하지 않는 경우 빈 배열 반환
+      if (tableError.code === 'PGRST116' || tableError.message.includes('does not exist')) {
+        console.log('⚠️ overtime_records 테이블이 존재하지 않습니다. 빈 결과를 반환합니다.')
+        return NextResponse.json({
+          success: true,
+          data: [],
+          message: 'overtime_records 테이블이 아직 생성되지 않았습니다.'
+        })
+      }
+      throw tableError
+    }
+
     let query = supabase
       .from('overtime_records')
       .select(`
@@ -115,12 +137,24 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error('초과근무 기록 조회 오류:', error)
+      console.error('❌ 초과근무 기록 조회 오류:', error)
+      console.error('에러 상세:', {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint
+      })
       return NextResponse.json({
         success: false,
-        error: '초과근무 기록 조회에 실패했습니다.'
+        error: `초과근무 기록 조회에 실패했습니다: ${error.message}`
       }, { status: 500 })
     }
+
+    console.log('✅ 초과근무 기록 조회 성공:', {
+      count: data?.length || 0,
+      user_id,
+      month
+    })
 
     return NextResponse.json({
       success: true,

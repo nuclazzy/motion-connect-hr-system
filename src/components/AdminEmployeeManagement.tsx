@@ -263,8 +263,8 @@ export default function AdminEmployeeManagement() {
     }))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
     if (!selectedEmployee) return
 
     setSubmitting(true)
@@ -358,16 +358,26 @@ export default function AdminEmployeeManagement() {
     if (!selectedEmployee) return
     
     try {
-      const response = await fetch(`/api/admin/overtime?month=${selectedMonth}&user_id=${selectedEmployee.id}`)
+      const url = `/api/admin/overtime?month=${selectedMonth}&user_id=${selectedEmployee.id}`
+      console.log('🔍 초과근무 기록 요청:', url)
+      
+      const response = await fetch(url)
       const result = await response.json()
 
+      console.log('📝 초과근무 API 응답:', result)
+
       if (result.success) {
-        setOvertimeRecords(result.data)
+        setOvertimeRecords(result.data || [])
+        if (result.message) {
+          console.log('ℹ️', result.message)
+        }
       } else {
-        console.error('초과근무 기록 조회 오류:', result.error)
+        console.error('❌ 초과궼무 기록 조회 오류:', result.error)
+        setOvertimeRecords([]) // 오류 시 빈 배열로 설정
       }
     } catch (err) {
-      console.error('초과근무 기록 fetch 오류:', err)
+      console.error('❌ 초과근무 기록 fetch 오류:', err)
+      setOvertimeRecords([]) // 오류 시 빈 배열로 설정
     }
   }
 
@@ -1258,7 +1268,7 @@ export default function AdminEmployeeManagement() {
                     <div className="mt-4">
                       <button
                         type="button"
-                        onClick={() => handleSubmit({} as React.FormEvent)}
+                        onClick={() => handleSubmit()}
                         disabled={submitting}
                         className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
                       >
