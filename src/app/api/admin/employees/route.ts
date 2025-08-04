@@ -2,15 +2,27 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+export const maxDuration = 30
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🚀 Starting admin employees API request')
     console.log('🔧 Environment check:', {
+      nodeEnv: process.env.NODE_ENV,
       hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
       hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...'
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...',
+      vercelRegion: process.env.VERCEL_REGION || 'local'
     })
+    
+    // 환경 변수 필수 체크
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('❌ Missing required environment variables')
+      return NextResponse.json({ 
+        error: 'Server configuration error: Missing Supabase credentials' 
+      }, { status: 500 })
+    }
     
     // Authorization header에서 userId 가져오기
     const authorization = request.headers.get('authorization')
@@ -25,8 +37,17 @@ export async function GET(request: NextRequest) {
     console.log('👤 User ID:', userId)
     
     console.log('🔌 Creating Supabase client...')
-    const supabase = await createServiceRoleClient()
-    console.log('✅ Supabase client created')
+    let supabase
+    try {
+      supabase = await createServiceRoleClient()
+      console.log('✅ Supabase client created')
+    } catch (supabaseError) {
+      console.error('❌ Failed to create Supabase client:', supabaseError)
+      return NextResponse.json({ 
+        error: 'Database connection failed',
+        details: supabaseError instanceof Error ? supabaseError.message : 'Unknown error'
+      }, { status: 500 })
+    }
 
     // 사용자 정보 및 권한 확인
     console.log('🔍 Checking user permissions...')
@@ -90,19 +111,23 @@ export async function GET(request: NextRequest) {
       leaveDataMap.set(leave.user_id, leave)
     })
 
-    // 6. 직원과 휴가 데이터 결합
+    // 6. 직원과 휴가 데이터 결합 (성능 최적화)
+    console.log('🔄 Processing employee leave data...')
     const employeesWithLeaveData = employees.map(employee => {
       const leaveData = leaveDataMap.get(employee.id)
       const leaveTypes = leaveData?.leave_types || {}
       
-      console.log(`👤 ${employee.name} 휴가 데이터:`, {
-        hasLeaveData: !!leaveData,
-        leaveTypes,
-        annual_days: leaveTypes.annual_days,
-        used_annual_days: leaveTypes.used_annual_days,
-        sick_days: leaveTypes.sick_days,
-        used_sick_days: leaveTypes.used_sick_days
-      })
+      // 디버깅 로그는 처음 3명만 (Vercel 로그 제한 고려)
+      if (employees.indexOf(employee) < 3) {
+        console.log(`👤 ${employee.name} 휴가 데이터:`, {
+          hasLeaveData: !!leaveData,
+          leaveTypes,
+          annual_days: leaveTypes.annual_days,
+          used_annual_days: leaveTypes.used_annual_days,
+          sick_days: leaveTypes.sick_days,
+          used_sick_days: leaveTypes.used_sick_days
+        })
+      }
       
       // 연차 잔여 계산 (지급 - 사용) - null/undefined 안전 처리
       const annualDays = leaveTypes.annual_days ?? 0
