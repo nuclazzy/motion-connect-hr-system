@@ -71,12 +71,12 @@ COMMENT ON COLUMN users.contract_end_date IS '계약 종료 일자 - 값이 있�
 COMMENT ON COLUMN users.work_type IS '근무 형태 - termination_date와 contract_end_date에 따라 자동 업데이트';
 COMMENT ON COLUMN users.salary IS '연봉 (만원 단위) - 기존 단순 연봉';
 COMMENT ON COLUMN users.salary_updated_at IS '연봉 최종 수정 일시';
-COMMENT ON COLUMN users.annual_salary IS '연봉 (만원 단위)';
-COMMENT ON COLUMN users.monthly_salary IS '월급여 (만원 단위)';
-COMMENT ON COLUMN users.basic_salary IS '기본급 (만원 단위)';
-COMMENT ON COLUMN users.bonus IS '상여 (만원 단위)';
-COMMENT ON COLUMN users.meal_allowance IS '식대 (만원 단위)';
-COMMENT ON COLUMN users.transportation_allowance IS '자가운전 수당 (만원 단위)';
+COMMENT ON COLUMN users.annual_salary IS '연봉 (원 단위)';
+COMMENT ON COLUMN users.monthly_salary IS '월급여 (원 단위)';
+COMMENT ON COLUMN users.basic_salary IS '기본급 (원 단위)';
+COMMENT ON COLUMN users.bonus IS '상여 (원 단위)';
+COMMENT ON COLUMN users.meal_allowance IS '식대 (원 단위)';
+COMMENT ON COLUMN users.transportation_allowance IS '자가운전 수당 (원 단위)';
 COMMENT ON COLUMN users.hourly_wage IS '통상 시급 (원 단위)';
 COMMENT ON COLUMN users.salary_details_updated_at IS '급여 상세 정보 최종 수정 일시';
 
@@ -99,7 +99,46 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. 트리거 생성 (INSERT, UPDATE 시 자동 실행)
+-- 4. 급여 자동 계산 함수 생성
+CREATE OR REPLACE FUNCTION auto_calculate_salary()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- 월급여가 입력되었을 때 자동 계산
+  IF NEW.monthly_salary IS NOT NULL AND NEW.monthly_salary > 0 THEN
+    -- 연봉 자동 계산 (월급여 × 12)
+    NEW.annual_salary = NEW.monthly_salary * 12;
+    
+    -- 기본급 자동 계산 (월급여 - 식대 - 자가운전 수당)
+    NEW.basic_salary = NEW.monthly_salary 
+                      - COALESCE(NEW.meal_allowance, 0) 
+                      - COALESCE(NEW.transportation_allowance, 0);
+    
+    -- 통상시급 자동 계산 (월급여 ÷ 208시간)
+    -- 208시간 = 주 40시간 × 52주 ÷ 12개월
+    NEW.hourly_wage = ROUND(NEW.monthly_salary / 208);
+    
+    -- 급여 상세 정보 수정 시간 업데이트
+    NEW.salary_details_updated_at = NOW();
+  END IF;
+  
+  -- 식대나 자가운전 수당이 변경된 경우에도 기본급 재계산
+  IF (OLD.meal_allowance IS DISTINCT FROM NEW.meal_allowance OR 
+      OLD.transportation_allowance IS DISTINCT FROM NEW.transportation_allowance) AND
+      NEW.monthly_salary IS NOT NULL AND NEW.monthly_salary > 0 THEN
+    
+    NEW.basic_salary = NEW.monthly_salary 
+                      - COALESCE(NEW.meal_allowance, 0) 
+                      - COALESCE(NEW.transportation_allowance, 0);
+    
+    NEW.salary_details_updated_at = NOW();
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 5. 트리거 생성 (INSERT, UPDATE 시 자동 실행)
+-- work_type 자동 업데이트 트리거
 DROP TRIGGER IF EXISTS trigger_update_work_type ON users;
 CREATE TRIGGER trigger_update_work_type
   BEFORE INSERT OR UPDATE OF termination_date, contract_end_date
@@ -107,7 +146,15 @@ CREATE TRIGGER trigger_update_work_type
   FOR EACH ROW
   EXECUTE FUNCTION update_work_type();
 
--- 5. 기존 데이터에 대해 work_type 일괄 업데이트
+-- 급여 자동 계산 트리거
+DROP TRIGGER IF EXISTS trigger_auto_calculate_salary ON users;
+CREATE TRIGGER trigger_auto_calculate_salary
+  BEFORE INSERT OR UPDATE OF monthly_salary, meal_allowance, transportation_allowance
+  ON users
+  FOR EACH ROW
+  EXECUTE FUNCTION auto_calculate_salary();
+
+-- 6. 기존 데이터에 대해 work_type 일괄 업데이트
 UPDATE users 
 SET work_type = CASE 
   WHEN termination_date IS NOT NULL THEN '퇴사자'
@@ -115,12 +162,12 @@ SET work_type = CASE
   ELSE '정규직'
 END;
 
--- 6. 인덱스 추가 (성능 최적화)
+-- 7. 인덱스 추가 (성능 최적화)
 CREATE INDEX IF NOT EXISTS idx_users_termination_date ON users(termination_date);
 CREATE INDEX IF NOT EXISTS idx_users_contract_end_date ON users(contract_end_date);
 CREATE INDEX IF NOT EXISTS idx_users_work_type ON users(work_type);
 
--- 7. 테스트 및 확인 쿼리
+-- 8. 테스트 및 확인 쿼리
 -- 컬럼 확인
 SELECT 
   column_name, 
@@ -139,7 +186,8 @@ SELECT
   event_object_table,
   action_timing
 FROM information_schema.triggers 
-WHERE trigger_name = 'trigger_update_work_type';
+WHERE trigger_name IN ('trigger_update_work_type', 'trigger_auto_calculate_salary')
+ORDER BY trigger_name;
 
 -- 초과근무시간 관리 테이블 생성
 CREATE TABLE IF NOT EXISTS overtime_records (
@@ -180,9 +228,30 @@ VALUES ('테스트계약직', 'test_contract@example.com', '개발팀', '계약�
 INSERT INTO users (name, email, department, position, hire_date, termination_date) 
 VALUES ('테스트퇴사자', 'test_resigned@example.com', '개발팀', '전직원', '2023-01-01', '2024-06-30');
 
+-- 급여 자동 계산 테스트
+INSERT INTO users (name, email, department, position, hire_date, monthly_salary, meal_allowance, transportation_allowance) 
+VALUES ('급여테스트', 'salary_test@example.com', '개발팀', '개발자', '2024-01-01', 3000000, 100000, 50000);
+
 -- work_type이 자동으로 설정되었는지 확인
 SELECT name, work_type, termination_date, contract_end_date FROM users WHERE name LIKE '테스트%';
 
+-- 급여 자동 계산 결과 확인
+SELECT 
+  name, 
+  monthly_salary, 
+  annual_salary, 
+  basic_salary, 
+  hourly_wage,
+  meal_allowance,
+  transportation_allowance
+FROM users WHERE name = '급여테스트';
+
+-- 예상 결과:
+-- monthly_salary: 3000000 (입력값)
+-- annual_salary: 36000000 (3000000 × 12)
+-- basic_salary: 2850000 (3000000 - 100000 - 50000)
+-- hourly_wage: 14423 (3000000 ÷ 208시간)
+
 -- 테스트 데이터 정리
-DELETE FROM users WHERE name LIKE '테스트%';
+DELETE FROM users WHERE name LIKE '테스트%' OR name = '급여테스트';
 */
