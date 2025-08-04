@@ -34,8 +34,8 @@ export async function GET() {
       email: record.users.email,
       hire_date: record.users.hire_date,
       leave_types: record.leave_types,
-      substitute_leave_hours: record.substitute_leave_hours,
-      compensatory_leave_hours: record.compensatory_leave_hours,
+      substitute_leave_hours: record.leave_types?.substitute_leave_hours || 0,
+      compensatory_leave_hours: record.leave_types?.compensatory_leave_hours || 0,
       created_at: record.created_at,
       updated_at: record.updated_at
     }))

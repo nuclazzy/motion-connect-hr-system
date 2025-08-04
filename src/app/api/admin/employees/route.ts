@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const employeeIds = employees.map(emp => emp.id)
     const { data: allLeaveData, error: leaveError } = await supabase
       .from('leave_days')
-      .select('user_id, leave_types, substitute_leave_hours, compensatory_leave_hours')
+      .select('user_id, leave_types')
       .in('user_id', employeeIds)
 
     if (leaveError) {
@@ -77,9 +77,9 @@ export async function GET(request: NextRequest) {
       const annualRemaining = (leaveTypes.annual_days || 0) - (leaveTypes.used_annual_days || 0)
       const sickRemaining = (leaveTypes.sick_days || 0) - (leaveTypes.used_sick_days || 0)
       
-      // 시간 단위 휴가는 새 필드 또는 기존 필드에서 조회
-      const substituteHours = leaveData?.substitute_leave_hours || leaveTypes.substitute_leave_hours || 0
-      const compensatoryHours = leaveData?.compensatory_leave_hours || leaveTypes.compensatory_leave_hours || 0
+      // 시간 단위 휴가는 JSON 필드에서만 조회 (직원 대시보드와 일관성 유지)
+      const substituteHours = leaveTypes.substitute_leave_hours || 0
+      const compensatoryHours = leaveTypes.compensatory_leave_hours || 0
       
       return {
         ...employee,

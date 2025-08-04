@@ -79,21 +79,66 @@ export interface Database {
         Row: {
           id: string
           user_id: string
-          leave_types: Record<string, unknown> // JSONB
+          leave_types: {
+            annual_days: number
+            used_annual_days: number
+            sick_days: number
+            used_sick_days: number
+            substitute_leave_hours: number
+            compensatory_leave_hours: number
+            special_days?: number
+            used_special_days?: number
+            maternity_days?: number
+            used_maternity_days?: number
+            paternity_days?: number
+            used_paternity_days?: number
+            family_care_days?: number
+            used_family_care_days?: number
+          }
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
           user_id: string
-          leave_types: Record<string, unknown>
+          leave_types: {
+            annual_days: number
+            used_annual_days: number
+            sick_days: number
+            used_sick_days: number
+            substitute_leave_hours: number
+            compensatory_leave_hours: number
+            special_days?: number
+            used_special_days?: number
+            maternity_days?: number
+            used_maternity_days?: number
+            paternity_days?: number
+            used_paternity_days?: number
+            family_care_days?: number
+            used_family_care_days?: number
+          }
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
           user_id?: string
-          leave_types?: Record<string, unknown>
+          leave_types?: {
+            annual_days?: number
+            used_annual_days?: number
+            sick_days?: number
+            used_sick_days?: number
+            substitute_leave_hours?: number
+            compensatory_leave_hours?: number
+            special_days?: number
+            used_special_days?: number
+            maternity_days?: number
+            used_maternity_days?: number
+            paternity_days?: number
+            used_paternity_days?: number
+            family_care_days?: number
+            used_family_care_days?: number
+          }
           created_at?: string
           updated_at?: string
         }

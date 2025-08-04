@@ -7,7 +7,204 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1158ms
- ✓ Compiled /src/middleware in 181ms (72 modules)
- ✓ Compiled /api/admin/approve-request in 292ms (170 modules)
- GET /api/admin/approve-request 200 in 370ms
+ ✓ Ready in 1183ms
+ ✓ Compiled /src/middleware in 347ms (72 modules)
+ ✓ Compiled /api/user/leave-data in 342ms (170 modules)
+🏖️ 휴가 데이터 조회: 550e8400-e29b-41d4-a716-446655440001
+✅ 휴가 데이터 조회 성공: {
+  name: '김경은',
+  position: '팀장',
+  hire_date: '2020-06-24',
+  department: '편집팀'
+}
+ GET /api/user/leave-data 200 in 937ms
+ ✓ Compiled /api/admin/employees in 60ms (172 modules)
+👥 조회된 직원 수: 10
+📋 조회된 휴가 데이터 수: 10
+📋 첫 번째 휴가 데이터 샘플: {
+  user_id: '550e8400-e29b-41d4-a716-446655440002',
+  leave_types: {
+    sick_days: 60,
+    annual_days: 17,
+    used_sick_days: 1,
+    used_annual_days: 9,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 1.5
+  }
+}
+👤 김성호 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 5,
+    annual_days: 19,
+    used_sick_days: 0,
+    used_annual_days: 0,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 19,
+  used_annual_days: 0,
+  sick_days: 5,
+  used_sick_days: 0
+}
+👤 김경은 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 17,
+    used_sick_days: 1.5,
+    used_annual_days: 7.5,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 23
+  },
+  annual_days: 17,
+  used_annual_days: 7.5,
+  sick_days: 60,
+  used_sick_days: 1.5
+}
+👤 한종운 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 17,
+    used_sick_days: 1,
+    used_annual_days: 9,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 1.5
+  },
+  annual_days: 17,
+  used_annual_days: 9,
+  sick_days: 60,
+  used_sick_days: 1
+}
+👤 노현태 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 16,
+    used_sick_days: 0,
+    used_annual_days: 0,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 16,
+  used_annual_days: 0,
+  sick_days: 60,
+  used_sick_days: 0
+}
+👤 박종호 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 16,
+    used_sick_days: 0,
+    used_annual_days: 0,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 16,
+  used_annual_days: 0,
+  sick_days: 60,
+  used_sick_days: 0
+}
+👤 이재혁 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 15,
+    used_sick_days: 1,
+    used_annual_days: 10,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 12
+  },
+  annual_days: 15,
+  used_annual_days: 10,
+  sick_days: 60,
+  used_sick_days: 1
+}
+👤 허지현 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 14,
+    used_sick_days: 0,
+    used_annual_days: 9,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 14,
+  used_annual_days: 9,
+  sick_days: 60,
+  used_sick_days: 0
+}
+👤 유희수 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 14,
+    used_sick_days: 2,
+    used_annual_days: 14,
+    substitute_leave_hours: 7,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 14,
+  used_annual_days: 14,
+  sick_days: 60,
+  used_sick_days: 2
+}
+👤 윤서랑 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 12,
+    used_sick_days: 1,
+    used_annual_days: 8,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 34
+  },
+  annual_days: 12,
+  used_annual_days: 8,
+  sick_days: 60,
+  used_sick_days: 1
+}
+👤 장현수 휴가 데이터: {
+  hasLeaveData: true,
+  leaveTypes: {
+    sick_days: 60,
+    annual_days: 1,
+    used_sick_days: 0,
+    used_annual_days: 0,
+    substitute_leave_hours: 0,
+    compensatory_leave_hours: 0
+  },
+  annual_days: 1,
+  used_annual_days: 0,
+  sick_days: 60,
+  used_sick_days: 0
+}
+👥 Supabase 직원 목록 조회 완료: 10 명
+ GET /api/admin/employees 200 in 264ms
+ ✓ Compiled /api/debug/check-specific-user in 36ms (174 modules)
+Checking data for ke.kim@motionsense.co.kr...
+Found user: {
+  id: '550e8400-e29b-41d4-a716-446655440001',
+  name: '김경은',
+  email: 'ke.kim@motionsense.co.kr',
+  leave_days: {
+    id: '650e8400-e29b-41d4-a716-446655440001',
+    created_at: '2025-07-15T10:00:46.581907+00:00',
+    updated_at: '2025-08-04T01:04:55.542452+00:00',
+    leave_types: {
+      sick_days: 60,
+      annual_days: 17,
+      used_sick_days: 1.5,
+      used_annual_days: 7.5,
+      substitute_leave_hours: 0,
+      compensatory_leave_hours: 23
+    }
+  }
+}
+ GET /api/debug/check-specific-user 200 in 176ms
+ ✓ Compiled in 35ms (172 modules)
+ ✓ Compiled in 225ms (446 modules)
+ ✓ Compiled in 29ms
