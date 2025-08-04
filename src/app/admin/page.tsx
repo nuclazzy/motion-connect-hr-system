@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, logoutUser, checkPermission, type User } from '@/lib/auth'
+import EmployeeManagement from '@/components/EmployeeManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import UserFormManagement from '@/components/UserFormManagement'
@@ -128,15 +129,7 @@ export default function AdminDashboard() {
           <div>
             <h2 className="text-2xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-gray-200">관리자 기능</h2>
             <div className="space-y-6">
-                <div className="bg-white shadow rounded-lg p-6">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">직원 관리</h3>
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                    <div className="text-yellow-800 font-medium">임시 비활성화</div>
-                    <div className="text-yellow-700 text-sm mt-1">
-                      클라이언트 사이드 무한 루프 문제로 인해 임시적으로 비활성화되었습니다.
-                    </div>
-                  </div>
-                </div>
+                <EmployeeManagement />
                 <AdminLeaveManagement />
                 <AdminFormManagement />
                 <AdminDocumentManagement />
