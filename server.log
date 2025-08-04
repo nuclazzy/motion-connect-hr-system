@@ -208,10 +208,21 @@
  ✓ Compiled /_error in 851ms (437 modules)
 <w> [webpack.cache.PackFileCacheStrategy] Restoring pack failed from /Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development.pack.gz: Error: unexpected end of file
  ✓ Compiled in 576ms (507 modules)
-rectory, rename '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz_' -> '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz'
-<w> [webpack.cache.PackFileCacheStrategy] Restoring pack failed from /Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development.pack.gz: Error: unexpected end of file
- ✓ Compiled in 266ms (274 modules)
-<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, lstat '/Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user'
+ ✓ Compiled in 357ms (507 modules)
+ ✓ Compiled in 158ms (507 modules)
+ ✓ Compiled in 299ms (507 modules)
+ ✓ Compiled /api/fix-trigger in 319ms (190 modules)
+❌ 트리거 수정 오류: {
+  code: 'PGRST202',
+  details: 'Searched for the function public.exec with parameter sql or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.',
+  hint: null,
+  message: 'Could not find the function public.exec(sql) in the schema cache'
+}
+ POST /api/fix-trigger 500 in 463ms
+ ✓ Compiled in 65ms (190 modules)
+ ✓ Compiled in 28ms (48 modules)
+ ✓ Compiled in 145ms (507 modules)
+t/.next/server/app/api/debug/check-specific-user'
 <w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/debug/check-specific-user/route' in /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server for build dependencies doesn't lead to expected result '/Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/debug/check-specific-user/route' in '/Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server'' instead. Resolving dependencies are ignored for this path.
 <w>  at resolve commonjs file ../../../../.next/server/app/api/debug/check-specific-user/route (expected /Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js)
 <w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
@@ -225,3 +236,340 @@ rectory, rename '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpa
 <w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at resolve commonjs /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
+ ○ Compiling /api/admin/employees ...
+ ✓ Compiled /api/admin/employees in 668ms (150 modules)
+👥 관리자 - 전체 직원 목록 조회 요청
+❌ 직원 목록 조회 오류: {
+  code: '42703',
+  details: null,
+  hint: null,
+  message: 'column users.start_date does not exist'
+}
+ GET /api/admin/employees 500 in 1291ms
+ ✓ Compiled in 331ms (274 modules)
+ ✓ Compiled /api/apply-gas-logic in 55ms (150 modules)
+🔧 Google Apps Script 로직 적용 API 호출
+1️⃣ 기존 트리거 삭제...
+✅ 기존 트리거 삭제 완료
+2️⃣ 완전한 Google Apps Script 로직 함수 생성...
+❌ 함수 생성 오류: {
+  code: 'PGRST202',
+  details: 'Searched for the function public.exec with parameter sql or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.',
+  hint: null,
+  message: 'Could not find the function public.exec(sql) in the schema cache'
+}
+ POST /api/apply-gas-logic 500 in 872ms
+ ✓ Compiled in 64ms (150 modules)
+ ✓ Compiled in 56ms (274 modules)
+ ○ Compiling /api/calendar/sync-leave-data ...
+ ✓ Compiled /api/calendar/sync-leave-data in 3.1s (1198 modules)
+ GET /api/calendar/sync-leave-data 200 in 4750ms
+ ✓ Compiled /api/calendar/events in 292ms (1201 modules)
+ POST /api/calendar/events 400 in 699ms
+ ✓ Compiled in 160ms (1201 modules)
+ GET /api/calendar/sync-leave-data 200 in 138ms
+🔄 Google Calendar 연차 데이터 동기화 시작
+👥 직원 10명 조회 완료
+📅 Google Calendar 조회: 2025-08-01T00:00:00Z ~ 2025-11-01T00:00:00Z
+📊 Google Calendar에서 0개 이벤트 조회
+🎉 Google Calendar 연차 데이터 동기화 완료!
+📊 처리 결과: { matched: 0, unmatched: 0, processed: 0, errors: 0 }
+ POST /api/calendar/sync-leave-data 200 in 1025ms
+ POST /api/calendar/events 200 in 567ms
+🔄 Google Calendar 연차 데이터 동기화 시작
+👥 직원 10명 조회 완료
+📅 Google Calendar 조회: 2025-05-01T00:00:00Z ~ 2025-12-01T00:00:00Z
+📊 Google Calendar에서 0개 이벤트 조회
+🎉 Google Calendar 연차 데이터 동기화 완료!
+📊 처리 결과: { matched: 0, unmatched: 0, processed: 0, errors: 0 }
+ POST /api/calendar/sync-leave-data 200 in 1022ms
+ ✓ Compiled in 116ms (1201 modules)
+🔄 Google Calendar 연차 데이터 동기화 시작
+👥 직원 10명 조회 완료
+📅 Google Calendar 조회: 2025-08-01T00:00:00Z ~ 2025-11-01T00:00:00Z
+📊 Google Calendar에서 16개 이벤트 조회
+❌ 2025-08-04 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-05 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-06 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-05 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-06 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-08 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-09 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❓ 매칭 실패: "최진아 연차" - 직원을 찾을 수 없음
+❌ 2025-08-11 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-12 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-13 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-14 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-15 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-14 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-15 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-21 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-22 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-23 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-26 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-08-27 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-09-29 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-09-30 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-01 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-02 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-03 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-02 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-03 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-10 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-11 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-14 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-15 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-16 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-17 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-18 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-19 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-20 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-21 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-21 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+❌ 2025-10-22 근무시간 인정 실패: {
+  code: '42702',
+  details: 'It could refer to either a PL/pgSQL variable or a table column.',
+  hint: null,
+  message: 'column reference "work_month" is ambiguous'
+}
+🎉 Google Calendar 연차 데이터 동기화 완료!
+📊 처리 결과: { matched: 15, unmatched: 1, processed: 16, errors: 38 }
+ POST /api/calendar/sync-leave-data 200 in 3132ms
+🔄 Google Calendar 연차 데이터 동기화 시작
+👥 직원 10명 조회 완료
+📅 Google Calendar 조회: 2025-08-01T00:00:00Z ~ 2025-11-01T00:00:00Z
+📊 Google Calendar에서 16개 이벤트 조회
+✅ 윤서랑 - 2025-08-04 8시간 인정
+✅ 윤서랑 - 2025-08-05 8시간 인정
+✅ 윤서랑 - 2025-08-06 8시간 인정
+✅ 유희수 - 2025-08-05 4시간 인정
+✅ 유희수 - 2025-08-06 4시간 인정
+❌ 2025-08-08 근무시간 인정 실패: {
+  code: '23505',
+  details: 'Key (user_id, work_date)=(550e8400-e29b-41d4-a716-446655440000, 2025-08-08) already exists.',
+  hint: null,
+  message: 'duplicate key value violates unique constraint "daily_work_summary_user_id_work_date_key"'
+}
+✅ 김성호 - 2025-08-09 8시간 인정
+❓ 매칭 실패: "최진아 연차" - 직원을 찾을 수 없음
+✅ 한종운 - 2025-08-11 8시간 인정
+✅ 한종운 - 2025-08-12 8시간 인정
+✅ 한종운 - 2025-08-13 8시간 인정
+✅ 한종운 - 2025-08-14 8시간 인정
+✅ 한종운 - 2025-08-15 8시간 인정
+✅ 허지현 - 2025-08-14 8시간 인정
+✅ 허지현 - 2025-08-15 8시간 인정
+✅ 이재혁 - 2025-08-21 8시간 인정
+✅ 이재혁 - 2025-08-22 8시간 인정
+✅ 이재혁 - 2025-08-23 8시간 인정
+✅ 한종운 - 2025-08-26 8시간 인정
+✅ 한종운 - 2025-08-27 8시간 인정
+✅ 윤서랑 - 2025-09-29 8시간 인정
+✅ 윤서랑 - 2025-09-30 8시간 인정
+✅ 이재혁 - 2025-10-01 8시간 인정
+✅ 이재혁 - 2025-10-02 8시간 인정
+✅ 이재혁 - 2025-10-03 8시간 인정
+✅ 윤서랑 - 2025-10-02 8시간 인정
+✅ 윤서랑 - 2025-10-03 8시간 인정
+✅ 이재혁 - 2025-10-10 8시간 인정
+✅ 이재혁 - 2025-10-11 8시간 인정
+✅ 이재혁 - 2025-10-14 8시간 인정
+✅ 이재혁 - 2025-10-15 8시간 인정
+✅ 윤서랑 - 2025-10-16 8시간 인정
+✅ 윤서랑 - 2025-10-17 8시간 인정
+✅ 윤서랑 - 2025-10-18 8시간 인정
+✅ 윤서랑 - 2025-10-19 8시간 인정
+✅ 윤서랑 - 2025-10-20 8시간 인정
+✅ 윤서랑 - 2025-10-21 8시간 인정
+✅ 이재혁 - 2025-10-21 8시간 인정
+✅ 이재혁 - 2025-10-22 8시간 인정
+🎉 Google Calendar 연차 데이터 동기화 완료!
+📊 처리 결과: { matched: 15, unmatched: 1, processed: 16, errors: 1 }
+ POST /api/calendar/sync-leave-data 200 in 2704ms
+ ✓ Compiled in 184ms (274 modules)
+ ✓ Compiled in 79ms (274 modules)
