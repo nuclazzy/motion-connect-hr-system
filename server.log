@@ -206,76 +206,22 @@
 <w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/client-development/2.pack.gz_' -> '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/client-development/2.pack.gz'
  ○ Compiling /_error ...
  ✓ Compiled /_error in 851ms (437 modules)
-led in 93ms (274 modules)
- ✓ Compiled in 72ms (274 modules)
- ✓ Compiled in 90ms (274 modules)
- ✓ Compiled in 152ms (274 modules)
-<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz_' -> '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz'
-sense.co.kr)
-❌ 장현수 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 김경은 (ke.kim@motionsense.co.kr)
-❌ 김경은 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 한종운 (jw.han@motionsense.co.kr)
-❌ 한종운 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 노현태 (ht.no@motionsense.co.kr)
-❌ 노현태 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 박종호 (jh.park@motionsense.co.kr)
-❌ 박종호 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 이재혁 (jh.lee@motionsense.co.kr)
-❌ 이재혁 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 허지현 (jh.heo@motionsense.co.kr)
-❌ 허지현 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 유희수 (hs.ryoo@motionsense.co.kr)
-❌ 유희수 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-처리 중: 윤서랑 (sr.yun@motionsense.co.kr)
-❌ 윤서랑 업데이트 실패: {
-  code: 'PGRST204',
-  details: null,
-  hint: null,
-  message: "Could not find the 'annual_days' column of 'users' in the schema cache"
-}
-🎉 마이그레이션 완료!
- POST /api/admin/migrate-leave-columns 200 in 1169ms
- ✓ Compiled in 13ms
- ✓ Compiled in 271ms (274 modules)
- ✓ Compiled in 197ms (274 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack failed from /Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development.pack.gz: Error: unexpected end of file
+ ✓ Compiled in 576ms (507 modules)
+rectory, rename '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz_' -> '/Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development/1.pack.gz'
+<w> [webpack.cache.PackFileCacheStrategy] Restoring pack failed from /Users/lewis/Desktop/HR System/motion-connect/.next/cache/webpack/edge-server-development.pack.gz: Error: unexpected end of file
+ ✓ Compiled in 266ms (274 modules)
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, lstat '/Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user'
+<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/debug/check-specific-user/route' in /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server for build dependencies doesn't lead to expected result '/Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/debug/check-specific-user/route' in '/Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server'' instead. Resolving dependencies are ignored for this path.
+<w>  at resolve commonjs file ../../../../.next/server/app/api/debug/check-specific-user/route (expected /Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js)
+<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
+<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
+<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/load-components.js
+<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/load-components.js
+<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/utils.js
+<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/utils.js
+<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
+<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
+<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
+<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
+<w>  at resolve commonjs /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js

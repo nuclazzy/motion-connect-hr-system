@@ -141,13 +141,33 @@ export async function GET(request: NextRequest) {
     // 상세 정보 (요청 시에만)
     let detailData = null
     if (include_details) {
+      // 각 일별 기록에 누락된 기록 정보 추가
+      const enhancedDailyData = dailyData?.map(day => {
+        const missing_records: string[] = []
+        
+        // 출근 기록이 없는 경우
+        if (!day.check_in_time && day.work_status !== '휴가' && day.work_status !== '결근') {
+          missing_records.push('출근기록누락')
+        }
+        
+        // 퇴근 기록이 없는 경우 (출근은 했지만 퇴근이 없는 경우)
+        if (day.check_in_time && !day.check_out_time) {
+          missing_records.push('퇴근기록누락')
+        }
+
+        return {
+          ...day,
+          missing_records: missing_records.length > 0 ? missing_records : undefined
+        }
+      }) || []
+
       // 누락된 기록 찾기
       const missingRecords: any[] = []
-      dailyData?.forEach(day => {
-        if (day.work_status?.includes('누락')) {
+      enhancedDailyData.forEach(day => {
+        if (day.missing_records && day.missing_records.length > 0) {
           missingRecords.push({
             date: day.work_date,
-            type: day.work_status.includes('출근') ? '출근기록누락' : '퇴근기록누락',
+            type: day.missing_records.join(', '),
             status: day.work_status
           })
         }
@@ -164,7 +184,7 @@ export async function GET(request: NextRequest) {
         .limit(10)
 
       detailData = {
-        dailyRecords: dailyData,
+        dailyRecords: enhancedDailyData,
         missingRecords,
         recentAttendance: recentRecords || []
       }
@@ -206,7 +226,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (detailData) {
-      summaryData.details = detailData
+      summaryData.dailyRecords = detailData.dailyRecords
+      summaryData.missingRecords = detailData.missingRecords
+      summaryData.recentAttendance = detailData.recentAttendance
     }
 
     console.log('✅ 근무시간 요약 조회 성공:', {
