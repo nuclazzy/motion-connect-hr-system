@@ -162,13 +162,25 @@ export async function POST(request: NextRequest) {
         })
       }
       
-      // 휴가 데이터 업데이트
+      // 휴가 데이터 업데이트 (JSON 필드와 별도 컬럼 모두 업데이트)
+      const updateData: any = {
+        leave_types: updatedLeaveTypes,
+        updated_at: new Date().toISOString()
+      }
+      
+      // 대체휴가/보상휴가의 경우 별도 컬럼도 업데이트
+      if (leaveType?.includes('대체휴가') && updatedLeaveTypes.substitute_leave_hours !== undefined) {
+        updateData.substitute_leave_hours = updatedLeaveTypes.substitute_leave_hours
+      }
+      if (leaveType?.includes('보상휴가') && updatedLeaveTypes.compensatory_leave_hours !== undefined) {
+        updateData.compensatory_leave_hours = updatedLeaveTypes.compensatory_leave_hours
+      }
+      
+      console.log('📊 데이터베이스 업데이트 데이터:', updateData)
+      
       const { error: leaveUpdateError } = await supabase
         .from('leave_days')
-        .update({
-          leave_types: updatedLeaveTypes,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('user_id', formRequest.user_id)
 
       if (leaveUpdateError) {
