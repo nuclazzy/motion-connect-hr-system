@@ -49,39 +49,41 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const fetchLeaveData = useCallback(async () => {
       try {
         setLoading(true)
-        console.log('휴가 데이터 조회 시작 (Supabase 직접 호출):', { userId: user.id, userName: user.name })
+        console.log('휴가 데이터 조회 시작 (간소화된 방식):', { userId: user.id, userName: user.name })
         
-        // Supabase에서 직접 휴가 데이터 조회
-        const { data: leaveDataResult, error: leaveError } = await supabase
-          .from('leave_days')
-          .select(`
-            id,
-            user_id,
-            leave_types,
-            created_at,
-            updated_at,
-            user:users!user_id(
-              name,
-              department,
-              position,
-              hire_date
-            )
-          `)
-          .eq('user_id', user.id)
-          .single()
+        // leave_days와 users 테이블을 각각 조회하여 조합
+        const [leaveResult, userResult] = await Promise.all([
+          supabase
+            .from('leave_days')
+            .select('id, user_id, leave_types, created_at, updated_at')
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('users')
+            .select('name, department, position, hire_date')
+            .eq('id', user.id)
+            .single()
+        ])
 
-        if (leaveError) {
-          console.error('Supabase 휴가 데이터 조회 오류:', leaveError)
+        if (leaveResult.error) {
+          console.error('Supabase 휴가 데이터 조회 오류:', leaveResult.error)
           setError('휴가 데이터를 불러올 수 없습니다.')
           return
         }
 
-        console.log('✅ Supabase 직접 조회 성공:', leaveDataResult)
+        if (userResult.error) {
+          console.error('Supabase 사용자 데이터 조회 오류:', userResult.error)
+          setError('사용자 데이터를 불러올 수 없습니다.')
+          return
+        }
+
+        console.log('✅ 휴가 데이터 조회 성공:', leaveResult.data.leave_types)
+        console.log('✅ 사용자 데이터 조회 성공:', userResult.data)
         
-        // user 배열을 단일 객체로 변환
+        // 데이터 조합
         const formattedData = {
-          ...leaveDataResult,
-          user: Array.isArray(leaveDataResult.user) ? leaveDataResult.user[0] : leaveDataResult.user
+          ...leaveResult.data,
+          user: userResult.data
         }
         
         setLeaveData(formattedData)
