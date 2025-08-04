@@ -249,6 +249,20 @@ export default function AdminEmployeeManagement() {
     setFormData(prev => ({ ...prev, [name]: finalValue }))
   }
 
+  // 급여 전용 입력 핸들러 (콤마 포매팅 지원)
+  const handleSalaryInputChange = (fieldName: string, value: string) => {
+    // 숫자만 추출
+    const numericValue = value.replace(/[^0-9]/g, '')
+    const intValue = numericValue ? parseInt(numericValue) : 0
+    
+    console.log(`💰 ${fieldName} 입력:`, value, '->', intValue)
+    
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: intValue
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedEmployee) return
@@ -257,17 +271,24 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
+      // 디버깅: 전송할 데이터 로그
+      console.log('💾 업데이트할 데이터:', formData)
+      console.log('선택된 직원 ID:', selectedEmployee.id)
+      
       // Supabase로 직접 업데이트
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('users')
         .update(formData)
         .eq('id', selectedEmployee.id)
+        .select()
+        .single()
 
       if (error) {
         console.error('❌ Supabase update error:', error)
         throw new Error('직원 정보 업데이트에 실패했습니다.')
       }
       
+      console.log('✅ 업데이트 성공:', data)
       alert('직원 정보가 성공적으로 업데이트되었습니다.')
       // 로컬 상태 업데이트
       setEmployees(prevEmployees => 
@@ -1141,10 +1162,7 @@ export default function AdminEmployeeManagement() {
                           name="annual_salary"
                           id="annual_salary"
                           value={formData.annual_salary ? formData.annual_salary.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, annual_salary: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('annual_salary', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
@@ -1156,10 +1174,7 @@ export default function AdminEmployeeManagement() {
                           name="monthly_salary"
                           id="monthly_salary"
                           value={formData.monthly_salary ? formData.monthly_salary.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, monthly_salary: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('monthly_salary', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
@@ -1183,10 +1198,7 @@ export default function AdminEmployeeManagement() {
                           name="bonus"
                           id="bonus"
                           value={formData.bonus ? formData.bonus.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, bonus: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('bonus', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
@@ -1198,10 +1210,7 @@ export default function AdminEmployeeManagement() {
                           name="meal_allowance"
                           id="meal_allowance"
                           value={formData.meal_allowance ? formData.meal_allowance.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, meal_allowance: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('meal_allowance', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
@@ -1213,10 +1222,7 @@ export default function AdminEmployeeManagement() {
                           name="transportation_allowance"
                           id="transportation_allowance"
                           value={formData.transportation_allowance ? formData.transportation_allowance.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, transportation_allowance: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('transportation_allowance', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
@@ -1228,10 +1234,7 @@ export default function AdminEmployeeManagement() {
                           name="hourly_wage"
                           id="hourly_wage"
                           value={formData.hourly_wage ? formData.hourly_wage.toLocaleString() : ''}
-                          onChange={(e) => {
-                            const value = e.target.value.replace(/[^0-9]/g, '')
-                            setFormData({...formData, hourly_wage: value ? parseInt(value) : 0})
-                          }}
+                          onChange={(e) => handleSalaryInputChange('hourly_wage', e.target.value)}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                           placeholder="0"
                         />
