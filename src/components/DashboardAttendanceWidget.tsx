@@ -601,20 +601,18 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.check_in_time ? 
-                            new Date(`2000-01-01T${record.check_in_time}`).toLocaleTimeString('ko-KR', {
+                            new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
                               hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
+                              minute: '2-digit'
                             })
                             : '--'
                           }
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.check_out_time ? 
-                            new Date(`2000-01-01T${record.check_out_time}`).toLocaleTimeString('ko-KR', {
+                            new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
                               hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
+                              minute: '2-digit'
                             })
                             : '--'
                           }
