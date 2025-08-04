@@ -64,7 +64,7 @@ export default function AdminEmployeeManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'salary' | 'management'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'salary' | 'attendance' | 'management'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
@@ -84,6 +84,16 @@ export default function AdminEmployeeManagement() {
     notes: ''
   })
   const [overtimeSubmitting, setOvertimeSubmitting] = useState(false)
+  
+  // Attendance management states
+  const [attendanceMonth, setAttendanceMonth] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [attendanceData, setAttendanceData] = useState<any>(null)
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<any>(null)
 
 
   useEffect(() => {
@@ -233,6 +243,13 @@ export default function AdminEmployeeManagement() {
       fetchOvertimeRecords()
     }
   }, [selectedMonth, selectedEmployee, activeTab])
+
+  // useEffect to fetch attendance data when attendanceMonth changes
+  useEffect(() => {
+    if (selectedEmployee && activeTab === 'attendance') {
+      fetchAttendanceData()
+    }
+  }, [attendanceMonth, selectedEmployee, activeTab])
 
   const handleSelectEmployee = (employee: Employee) => {
     setSelectedEmployee(employee)
@@ -466,6 +483,46 @@ export default function AdminEmployeeManagement() {
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('ko-KR')
+  }
+
+  // Attendance management functions
+  const fetchAttendanceData = async () => {
+    if (!selectedEmployee) return
+    
+    setAttendanceLoading(true)
+    try {
+      const response = await fetch(`/api/attendance/summary?user_id=${selectedEmployee.id}&month=${attendanceMonth}&include_details=true`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setAttendanceData(result.data)
+      } else {
+        console.error('근무시간 조회 오류:', result.error)
+        setError('근무시간 데이터를 불러올 수 없습니다.')
+      }
+    } catch (err) {
+      console.error('근무시간 조회 API 오류:', err)
+      setError('근무시간 조회 중 오류가 발생했습니다.')
+    } finally {
+      setAttendanceLoading(false)
+    }
+  }
+
+  const handleEditWorkTime = (record: any) => {
+    setEditingRecord(record)
+    setShowEditModal(true)
+  }
+
+  const handleAddAttendanceRecord = () => {
+    setEditingRecord({
+      work_date: new Date().toISOString().split('T')[0],
+      check_in_time: '',
+      check_out_time: '',
+      basic_hours: 0,
+      overtime_hours: 0,
+      had_dinner: false
+    })
+    setShowEditModal(true)
   }
 
   const getStatusBadge = (status: string) => {
@@ -790,6 +847,16 @@ export default function AdminEmployeeManagement() {
                     급여 관리
                   </button>
                   <button
+                    onClick={() => setActiveTab('attendance')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'attendance'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    근무시간 관리
+                  </button>
+                  <button
                     onClick={() => setActiveTab('management')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
                       activeTab === 'management'
@@ -1083,6 +1150,212 @@ export default function AdminEmployeeManagement() {
                       <li>• 연차/병가는 지급 일수와 사용 일수를 별도로 관리합니다</li>
                       <li>• 대체휴가/보상휴가는 보유 시간을 직접 설정합니다</li>
                     </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Attendance Management Tab */}
+              {activeTab === 'attendance' && (
+                <div className="space-y-6">
+                  {/* Month Selector and Summary */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium text-gray-900">근무시간 조회 및 관리</h4>
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <label htmlFor="attendance-month" className="text-sm font-medium text-gray-700">
+                            조회 월:
+                          </label>
+                          <input
+                            type="month"
+                            id="attendance-month"
+                            value={attendanceMonth}
+                            onChange={(e) => setAttendanceMonth(e.target.value)}
+                            className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          />
+                        </div>
+                        <button
+                          onClick={handleAddAttendanceRecord}
+                          className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
+                        >
+                          출퇴근 기록 추가
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Loading State */}
+                    {attendanceLoading && (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+                        <p className="text-gray-600">근무시간 데이터를 불러오는 중...</p>
+                      </div>
+                    )}
+
+                    {/* Attendance Summary */}
+                    {!attendanceLoading && attendanceData && (
+                      <>
+                        {/* Monthly Summary Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">총 근무일수</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {attendanceData.workStats?.totalWorkDays || 0}일
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">총 근무시간</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {attendanceData.workStats?.totalWorkHours || 0}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">초과근무시간</div>
+                            <div className="text-2xl font-bold text-blue-600">
+                              {attendanceData.workStats?.totalOvertimeHours || 0}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">평균 일일 근무시간</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {attendanceData.workStats?.averageDailyHours || 0}시간
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Daily Records Table */}
+                        <div className="bg-white rounded-lg border overflow-hidden">
+                          <div className="px-4 py-3 border-b bg-gray-50">
+                            <h5 className="text-sm font-medium text-gray-900">일별 근무시간 상세</h5>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">날짜</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">출근시간</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">퇴근시간</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">기본근무</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">초과근무</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">관리</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {attendanceData.dailyRecords && attendanceData.dailyRecords.length > 0 ? (
+                                  attendanceData.dailyRecords.map((record: any) => (
+                                    <tr key={record.work_date} className="hover:bg-gray-50">
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {new Date(record.work_date).toLocaleDateString('ko-KR', {
+                                          month: 'long',
+                                          day: 'numeric',
+                                          weekday: 'short'
+                                        })}
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.check_in_time ? 
+                                          new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: false
+                                          }) : '--'
+                                        }
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.check_out_time ? 
+                                          new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: false
+                                          }) : '--'
+                                        }
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.basic_hours || 0}시간
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                        {record.overtime_hours || 0}시간
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                          record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
+                                          record.work_status === '지각' ? 'bg-yellow-100 text-yellow-800' :
+                                          record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
+                                          record.work_status === '결근' ? 'bg-red-100 text-red-800' :
+                                          record.work_status?.includes('누락') ? 'bg-gray-100 text-gray-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {record.work_status || '미확인'}
+                                        </span>
+                                        {record.had_dinner && (
+                                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                            저녁식사
+                                          </span>
+                                        )}
+                                        {record.missing_records && record.missing_records.length > 0 && (
+                                          <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                                            {record.missing_records.join(', ')}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button
+                                          onClick={() => handleEditWorkTime(record)}
+                                          className="text-indigo-600 hover:text-indigo-900"
+                                        >
+                                          수정
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                                      {attendanceMonth} 근무 기록이 없습니다.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Attendance Stats */}
+                        {attendanceData.attendanceStats && (
+                          <div className="mt-4 bg-yellow-50 rounded-lg p-4">
+                            <h5 className="text-sm font-medium text-gray-900 mb-2">출퇴근 통계</h5>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">정상출근: </span>
+                                <span className="font-medium text-green-600">{attendanceData.attendanceStats.onTimeCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">지각: </span>
+                                <span className="font-medium text-yellow-600">{attendanceData.attendanceStats.lateCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">조퇴: </span>
+                                <span className="font-medium text-orange-600">{attendanceData.attendanceStats.earlyLeaveCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">결근: </span>
+                                <span className="font-medium text-red-600">{attendanceData.attendanceStats.absentCount}일</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">근무시간 관리 안내</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div>• <strong>근무시간 수정:</strong> 각 일자의 수정 버튼을 클릭하여 출퇴근 시간 및 근무시간 수정</div>
+                      <div>• <strong>기록 추가:</strong> 누락된 출퇴근 기록 추가 가능</div>
+                      <div>• <strong>자동 계산:</strong> 기본/초과 근무시간은 시스템에서 자동 계산</div>
+                      <div>• <strong>수정 이력:</strong> 모든 수정 내역은 시스템에 기록됨</div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1499,6 +1772,193 @@ export default function AdminEmployeeManagement() {
           )}
         </div>
       </div>
+
+      {/* Work Time Edit Modal */}
+      {showEditModal && editingRecord && selectedEmployee && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              근무시간 수정 - {selectedEmployee.name}
+            </h3>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              
+              const formData = new FormData(e.currentTarget)
+              const checkInTime = formData.get('check_in_time') as string
+              const checkOutTime = formData.get('check_out_time') as string
+              const hadDinner = formData.get('had_dinner') === 'on'
+              const notes = formData.get('notes') as string
+              
+              try {
+                // 출퇴근 기록이 있는 경우 수정
+                if (editingRecord.check_in_time || editingRecord.check_out_time) {
+                  // 근무시간 요약 업데이트
+                  const response = await fetch('/api/attendance/summary', {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      user_id: selectedEmployee.id,
+                      work_date: editingRecord.work_date,
+                      admin_user_id: selectedEmployee.id, // TODO: Get actual admin user ID
+                      check_in_time: checkInTime ? `${editingRecord.work_date}T${checkInTime}:00` : null,
+                      check_out_time: checkOutTime ? `${editingRecord.work_date}T${checkOutTime}:00` : null,
+                      notes
+                    })
+                  })
+                  
+                  const result = await response.json()
+                  if (result.success) {
+                    alert('근무시간이 수정되었습니다.')
+                    setShowEditModal(false)
+                    setEditingRecord(null)
+                    await fetchAttendanceData()
+                  } else {
+                    alert(result.error || '근무시간 수정에 실패했습니다.')
+                  }
+                } else {
+                  // 새로운 기록 추가
+                  const response = await fetch('/api/attendance/missing', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      user_id: selectedEmployee.id,
+                      date_string: editingRecord.work_date,
+                      time_string: checkInTime,
+                      record_type: '출근',
+                      reason: notes || '관리자 추가',
+                      admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
+                    })
+                  })
+                  
+                  const result = await response.json()
+                  if (result.success && checkOutTime) {
+                    // 퇴근 기록도 추가
+                    await fetch('/api/attendance/missing', {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        user_id: selectedEmployee.id,
+                        date_string: editingRecord.work_date,
+                        time_string: checkOutTime,
+                        record_type: '퇴근',
+                        reason: notes || '관리자 추가',
+                        admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
+                      })
+                    })
+                  }
+                  
+                  alert('출퇴근 기록이 추가되었습니다.')
+                  setShowEditModal(false)
+                  setEditingRecord(null)
+                  await fetchAttendanceData()
+                }
+                
+                // 저녁식사 여부 업데이트
+                if (hadDinner !== editingRecord.had_dinner) {
+                  await fetch('/api/attendance/missing', {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      user_id: selectedEmployee.id,
+                      date_string: editingRecord.work_date,
+                      had_dinner: hadDinner,
+                      admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
+                    })
+                  })
+                }
+              } catch (err) {
+                console.error('근무시간 수정 오류:', err)
+                alert('근무시간 수정 중 오류가 발생했습니다.')
+              }
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">날짜</label>
+                <input
+                  type="date"
+                  value={editingRecord.work_date}
+                  disabled
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">출근시간</label>
+                  <input
+                    type="time"
+                    name="check_in_time"
+                    defaultValue={editingRecord.check_in_time ? 
+                      new Date(editingRecord.check_in_time).toTimeString().slice(0, 5) : ''
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">퇴근시간</label>
+                  <input
+                    type="time"
+                    name="check_out_time"
+                    defaultValue={editingRecord.check_out_time ? 
+                      new Date(editingRecord.check_out_time).toTimeString().slice(0, 5) : ''
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="had_dinner"
+                    defaultChecked={editingRecord.had_dinner}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">저녁식사 여부</span>
+                </label>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">메모</label>
+                <textarea
+                  name="notes"
+                  rows={3}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  placeholder="수정 사유 또는 메모"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingRecord(null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  저장
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
