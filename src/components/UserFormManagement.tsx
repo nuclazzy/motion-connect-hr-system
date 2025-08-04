@@ -87,6 +87,11 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     }
   }
 
+  // 서식 타입을 더 구체적으로 표시하는 함수
+  const getDetailedFormType = (request: FormRequest) => {
+    return request.form_type
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('ko-KR', {
       year: 'numeric',
@@ -191,10 +196,28 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                 <tbody className="bg-white divide-y divide-gray-200">
                   {formRequests.map((request) => (
                     <tr key={request.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-6 py-4">
                         <div className="text-sm font-medium text-gray-900">
                           {request.form_type}
                         </div>
+                        {request.form_type === '휴가 신청서' && request.request_data && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            <span className="font-medium">{request.request_data['휴가형태']}</span>
+                            {request.request_data['시작일'] && request.request_data['종료일'] && (
+                              <span className="ml-2">
+                                {request.request_data['시작일'] === request.request_data['종료일'] 
+                                  ? `(${request.request_data['시작일']})` 
+                                  : `(${request.request_data['시작일']} ~ ${request.request_data['종료일']})`
+                                }
+                              </span>
+                            )}
+                            {request.request_data['휴가일수'] && (
+                              <span className="ml-2 text-blue-600">
+                                {request.request_data['휴가일수']}일
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
