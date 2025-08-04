@@ -163,7 +163,7 @@ export default function AdminAttendanceManagement() {
         },
         body: JSON.stringify({
           ...missingFormData,
-          admin_user_id: adminUserId
+          admin_user_id: currentUser.id
         }),
       })
 
