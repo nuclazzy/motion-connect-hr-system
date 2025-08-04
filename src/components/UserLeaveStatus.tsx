@@ -7,33 +7,17 @@ import { supabase } from '@/lib/supabase'
 
 interface LeaveData {
   id: string
-  user_id: string
-  leave_types: {
-    annual_days: number
-    used_annual_days: number
-    sick_days: number
-    used_sick_days: number
-    special_days?: number
-    used_special_days?: number
-    maternity_days?: number
-    used_maternity_days?: number
-    paternity_days?: number
-    used_paternity_days?: number
-    family_care_days?: number
-    used_family_care_days?: number
-    substitute_leave_hours?: number
-    compensatory_leave_hours?: number
-  }
-  substitute_leave_hours?: number
-  compensatory_leave_hours?: number
-  created_at: string
+  name: string
+  department: string
+  position: string
+  hire_date?: string
+  annual_days: number
+  used_annual_days: number
+  sick_days: number
+  used_sick_days: number
+  substitute_leave_hours: number
+  compensatory_leave_hours: number
   updated_at: string
-  user: {
-    name: string
-    department: string
-    position: string
-    hire_date?: string
-  }
 }
 
 interface UserLeaveStatusProps {
@@ -49,44 +33,30 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const fetchLeaveData = useCallback(async () => {
       try {
         setLoading(true)
-        console.log('휴가 데이터 조회 시작 (간소화된 방식):', { userId: user.id, userName: user.name })
+        console.log('휴가 데이터 조회 시작 (users 테이블 직접):', { userId: user.id, userName: user.name })
         
-        // leave_days와 users 테이블을 각각 조회하여 조합
-        const [leaveResult, userResult] = await Promise.all([
-          supabase
-            .from('leave_days')
-            .select('id, user_id, leave_types, created_at, updated_at')
-            .eq('user_id', user.id)
-            .single(),
-          supabase
-            .from('users')
-            .select('name, department, position, hire_date')
-            .eq('id', user.id)
-            .single()
-        ])
+        // users 테이블에서 직접 모든 데이터 조회
+        const { data, error } = await supabase
+          .from('users')
+          .select(`
+            id, name, department, position, hire_date,
+            annual_days, used_annual_days,
+            sick_days, used_sick_days,
+            substitute_leave_hours, compensatory_leave_hours,
+            updated_at
+          `)
+          .eq('id', user.id)
+          .single()
 
-        if (leaveResult.error) {
-          console.error('Supabase 휴가 데이터 조회 오류:', leaveResult.error)
+        if (error) {
+          console.error('Supabase 사용자 데이터 조회 오류:', error)
           setError('휴가 데이터를 불러올 수 없습니다.')
           return
         }
 
-        if (userResult.error) {
-          console.error('Supabase 사용자 데이터 조회 오류:', userResult.error)
-          setError('사용자 데이터를 불러올 수 없습니다.')
-          return
-        }
-
-        console.log('✅ 휴가 데이터 조회 성공:', leaveResult.data.leave_types)
-        console.log('✅ 사용자 데이터 조회 성공:', userResult.data)
+        console.log('✅ 휴가 데이터 조회 성공 (users 테이블):', data)
         
-        // 데이터 조합
-        const formattedData = {
-          ...leaveResult.data,
-          user: userResult.data
-        }
-        
-        setLeaveData(formattedData)
+        setLeaveData(data)
         
       } catch (err) {
         console.error('휴가 데이터 조회 오류:', err)
@@ -163,21 +133,20 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
     )
   }
 
-  const annualRemaining = (leaveData.leave_types.annual_days || 0) - (leaveData.leave_types.used_annual_days || 0)
-  const sickRemaining = (leaveData.leave_types.sick_days || 0) - (leaveData.leave_types.used_sick_days || 0)
+  const annualRemaining = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0)
+  const sickRemaining = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0)
   
-  // 시간 단위 휴가 상태 계산 (JSON 필드에서 조회)
-  const substituteHours = leaveData.leave_types.substitute_leave_hours ?? 0
-  const compensatoryHours = leaveData.leave_types.compensatory_leave_hours ?? 0
+  // 시간 단위 휴가 상태 계산 (users 테이블 컬럼에서 직접 조회)
+  const substituteHours = leaveData.substitute_leave_hours ?? 0
+  const compensatoryHours = leaveData.compensatory_leave_hours ?? 0
   
-  console.log('🔍 직원 대시보드 휴가 시간 확인:', {
+  console.log('🔍 직원 대시보드 휴가 시간 확인 (users 테이블):', {
     userId: user.id,
     userName: user.name,
     substituteHours,
     compensatoryHours,
-    // JSON 필드 값들
-    jsonFieldSubstitute: leaveData.leave_types.substitute_leave_hours,
-    jsonFieldCompensatory: leaveData.leave_types.compensatory_leave_hours
+    annualRemaining,
+    sickRemaining
   })
   const substituteStatus = getLeaveStatus(substituteHours)
   const compensatoryStatus = getLeaveStatus(compensatoryHours)
@@ -213,7 +182,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                   <h4 className="text-sm font-medium text-blue-900">연차</h4>
                   <div className="mt-1">
                     <p className="text-lg font-semibold text-blue-900">
-                      {leaveData.leave_types.used_annual_days || 0}/{leaveData.leave_types.annual_days || 0}일 사용
+                      {leaveData.used_annual_days || 0}/{leaveData.annual_days || 0}일 사용
                     </p>
                   </div>
                 </div>
@@ -241,7 +210,7 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
                   <h4 className="text-sm font-medium text-yellow-900">병가</h4>
                   <div className="mt-1">
                     <p className="text-lg font-semibold text-yellow-900">
-                      {leaveData.leave_types.used_sick_days || 0}/{leaveData.leave_types.sick_days || 0}일 사용
+                      {leaveData.used_sick_days || 0}/{leaveData.sick_days || 0}일 사용
                     </p>
                   </div>
                 </div>
@@ -330,46 +299,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
             )}
           </div>
 
-          {/* 시간 단위 휴가가 초기화되지 않은 경우 안내 */}
-          {!leaveData.leave_types.hasOwnProperty('substitute_leave_hours') && 
-           !leaveData.leave_types.hasOwnProperty('compensatory_leave_hours') && (
-            <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
-              <p className="text-sm text-yellow-800">
-                💡 시간 단위 휴가(대체휴가, 보상휴가)가 아직 초기화되지 않았습니다.
-                관리자에게 문의해주세요.
-              </p>
-            </div>
-          )}
-
-          {/* 추가 휴가 정보 */}
-          {(leaveData.leave_types.special_days || leaveData.leave_types.maternity_days || 
-            leaveData.leave_types.paternity_days || leaveData.leave_types.family_care_days) && (
-            <div className="mt-4 pt-4 border-t border-gray-200 text-center">
-              <h5 className="text-sm font-medium text-gray-700 mb-2">기타 사용 가능한 휴가</h5>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {leaveData.leave_types.special_days && (
-                  <div className="text-gray-600">
-                    특별휴가: {leaveData.leave_types.used_special_days || 0}/{leaveData.leave_types.special_days}일
-                  </div>
-                )}
-                {leaveData.leave_types.maternity_days && (
-                  <div className="text-gray-600">
-                    출산휴가: {leaveData.leave_types.used_maternity_days || 0}/{leaveData.leave_types.maternity_days}일
-                  </div>
-                )}
-                {leaveData.leave_types.paternity_days && (
-                  <div className="text-gray-600">
-                    배우자출산휴가: {leaveData.leave_types.used_paternity_days || 0}/{leaveData.leave_types.paternity_days}일
-                  </div>
-                )}
-                {leaveData.leave_types.family_care_days && (
-                  <div className="text-gray-600">
-                    가족돌봄휴가: {leaveData.leave_types.used_family_care_days || 0}/{leaveData.leave_types.family_care_days}일
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* 기타 휴가 신청 (기존 OtherLeaveWidget 통합) */}
           <div className="mt-6 pt-4 border-t border-gray-200">
