@@ -18,6 +18,7 @@ interface Employee {
   is_active: boolean
   resignation_date?: string
   termination_date?: string
+  contract_end_date?: string
   annual_leave: number
   sick_leave: number
   substitute_leave_hours: number
@@ -36,7 +37,7 @@ export default function AdminEmployeeManagement() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned' | 'contract'>('all')
 
 
   useEffect(() => {
@@ -55,8 +56,8 @@ export default function AdminEmployeeManagement() {
           throw new Error('관리자 권한이 필요합니다.')
         }
 
-        // Supabase에서 직접 users 테이블 조회 (실제 존재하는 컬럼만)
-        const { data: users, error } = await supabase
+        // Supabase에서 직접 users 테이블 조회 (기본 컬럼 먼저 시도)
+        let { data: users, error } = await supabase
           .from('users')
           .select(`
             id, name, email, department, position, hire_date,
@@ -64,6 +65,27 @@ export default function AdminEmployeeManagement() {
             substitute_leave_hours, compensatory_leave_hours
           `)
           .order('hire_date', { ascending: true, nullsFirst: false })
+
+        // termination_date, contract_end_date 컬럼이 존재하는지 확인하고 추가 조회
+        let hasStatusColumns = false
+        try {
+          const { data: usersWithStatus, error: statusError } = await supabase
+            .from('users')
+            .select(`
+              id, name, email, department, position, hire_date,
+              annual_days, used_annual_days, sick_days, used_sick_days,
+              substitute_leave_hours, compensatory_leave_hours,
+              termination_date, contract_end_date
+            `)
+            .order('hire_date', { ascending: true, nullsFirst: false })
+          
+          if (!statusError && usersWithStatus) {
+            users = usersWithStatus
+            hasStatusColumns = true
+          }
+        } catch (statusErr) {
+          console.log('ℹ️ Status columns not found, using basic columns only')
+        }
 
         if (error) {
           console.error('❌ Supabase error:', error)
@@ -73,32 +95,49 @@ export default function AdminEmployeeManagement() {
 
         console.log('✅ Users fetched directly from Supabase:', users?.length, '명')
         
-        // 데이터 변환 (기본 구조)
-        const result = users?.map((userData: any) => ({
-          ...userData,
-          // 기본 필드들
-          work_type: userData.work_type || '정규직',
-          dob: userData.dob || '',
-          phone: userData.phone || '',
-          address: userData.address || '',
-          is_active: userData.is_active !== false,
-          resignation_date: userData.resignation_date || null,
-          termination_date: userData.termination_date || null,
-          updated_at: userData.updated_at || new Date().toISOString(),
-          // 휴가 계산 필드들
-          annual_leave: Math.max(0, (userData.annual_days || 0) - (userData.used_annual_days || 0)),
-          sick_leave: Math.max(0, (userData.sick_days || 0) - (userData.used_sick_days || 0)),
-          substitute_leave_hours: userData.substitute_leave_hours || 0,
-          compensatory_leave_hours: userData.compensatory_leave_hours || 0,
-          leave_data: {
-            annual_days: userData.annual_days || 0,
-            used_annual_days: userData.used_annual_days || 0,
-            sick_days: userData.sick_days || 0,
-            used_sick_days: userData.used_sick_days || 0,
-            substitute_leave_hours: userData.substitute_leave_hours || 0,
-            compensatory_leave_hours: userData.compensatory_leave_hours || 0
+        // 데이터 변환 (퇴사자 및 계약직 분류 포함)
+        const result = users?.map((userData: any) => {
+          // 퇴사자 여부 확인 (컬럼이 있는 경우만)
+          const isTerminated = hasStatusColumns && !!userData.termination_date
+          
+          // 계약직 여부 확인 (컬럼이 있는 경우만)
+          const isContractEmployee = hasStatusColumns && !!userData.contract_end_date
+          
+          // 근무 형태 결정
+          let work_type = '정규직'
+          if (isTerminated) {
+            work_type = '퇴사자'
+          } else if (isContractEmployee) {
+            work_type = '계약직'
           }
-        })) || []
+          
+          return {
+            ...userData,
+            // 기본 필드들
+            work_type,
+            dob: userData.dob || '',
+            phone: userData.phone || '',
+            address: userData.address || '',
+            is_active: !isTerminated, // 퇴사자는 비활성화
+            resignation_date: userData.resignation_date || null,
+            termination_date: userData.termination_date || null,
+            contract_end_date: userData.contract_end_date || null,
+            updated_at: userData.updated_at || new Date().toISOString(),
+            // 휴가 계산 필드들
+            annual_leave: Math.max(0, (userData.annual_days || 0) - (userData.used_annual_days || 0)),
+            sick_leave: Math.max(0, (userData.sick_days || 0) - (userData.used_sick_days || 0)),
+            substitute_leave_hours: userData.substitute_leave_hours || 0,
+            compensatory_leave_hours: userData.compensatory_leave_hours || 0,
+            leave_data: {
+              annual_days: userData.annual_days || 0,
+              used_annual_days: userData.used_annual_days || 0,
+              sick_days: userData.sick_days || 0,
+              used_sick_days: userData.used_sick_days || 0,
+              substitute_leave_hours: userData.substitute_leave_hours || 0,
+              compensatory_leave_hours: userData.compensatory_leave_hours || 0
+            }
+          }
+        }) || []
         
         setEmployees(result)
       } catch (err) {
@@ -384,9 +423,11 @@ export default function AdminEmployeeManagement() {
   const getFilteredEmployees = () => {
     switch (statusFilter) {
       case 'active':
-        return employees.filter(emp => !emp.termination_date)
+        return employees.filter(emp => !emp.termination_date && !emp.contract_end_date)
       case 'resigned':
         return employees.filter(emp => !!emp.termination_date)
+      case 'contract':
+        return employees.filter(emp => !!emp.contract_end_date && !emp.termination_date)
       default:
         return employees
     }
@@ -438,6 +479,12 @@ export default function AdminEmployeeManagement() {
               className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'active' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
             >
               재직중
+            </button>
+            <button
+              onClick={() => setStatusFilter('contract')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'contract' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              계약직
             </button>
             <button
               onClick={() => setStatusFilter('resigned')}
