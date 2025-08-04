@@ -45,6 +45,7 @@ export default function AdminEmployeeManagement() {
     try {
       const headers = getAuthHeaders()
       console.log('🔑 Request headers:', headers)
+      console.log('🌐 Making request to:', window.location.origin + '/api/admin/employees')
       
       const response = await fetch('/api/admin/employees', {
         headers
