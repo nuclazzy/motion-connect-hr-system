@@ -231,7 +231,9 @@ export default function AdminEmployeeManagement() {
   }
 
   const handleFieldSave = async (fieldKey: string, leaveType: string, adjustmentType: 'granted' | 'used') => {
+    // 모든 휴가 관련 값은 소수점 허용
     const newValue = parseFloat(editValue)
+    
     if (isNaN(newValue) || newValue < 0) {
       alert('유효한 숫자를 입력해주세요 (0 이상)')
       return
@@ -648,6 +650,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -676,6 +679,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -716,6 +720,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -744,6 +749,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -783,6 +789,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {
@@ -822,6 +829,7 @@ export default function AdminEmployeeManagement() {
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
+                                step="0.1"
                                 value={editValue}
                                 onChange={(e) => setEditValue(e.target.value)}
                                 onKeyDown={(e) => {

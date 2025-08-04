@@ -13,6 +13,42 @@ ADD COLUMN IF NOT EXISTS contract_end_date DATE;
 ALTER TABLE users 
 ADD COLUMN IF NOT EXISTS work_type VARCHAR(20) DEFAULT '정규직';
 
+-- 휴가 관련 컬럼들 데이터 타입 확인 및 수정
+-- 모든 휴가 관련 컬럼을 NUMERIC 타입으로 설정 (소수점 허용)
+
+-- 기존 컬럼이 INTEGER인 경우 NUMERIC으로 변경
+DO $$
+BEGIN
+    -- annual_days 컬럼 타입 변경
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'annual_days' AND data_type = 'integer') THEN
+        ALTER TABLE users ALTER COLUMN annual_days TYPE NUMERIC(5,1);
+    END IF;
+    
+    -- used_annual_days 컬럼 타입 변경
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'used_annual_days' AND data_type = 'integer') THEN
+        ALTER TABLE users ALTER COLUMN used_annual_days TYPE NUMERIC(5,1);
+    END IF;
+    
+    -- sick_days 컬럼 타입 변경
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'sick_days' AND data_type = 'integer') THEN
+        ALTER TABLE users ALTER COLUMN sick_days TYPE NUMERIC(5,1);
+    END IF;
+    
+    -- used_sick_days 컬럼 타입 변경
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'used_sick_days' AND data_type = 'integer') THEN
+        ALTER TABLE users ALTER COLUMN used_sick_days TYPE NUMERIC(5,1);
+    END IF;
+END $$;
+
+-- 컬럼이 존재하지 않는 경우 NUMERIC 타입으로 추가
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS annual_days NUMERIC(5,1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS used_annual_days NUMERIC(5,1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS sick_days NUMERIC(5,1) DEFAULT 60,
+ADD COLUMN IF NOT EXISTS used_sick_days NUMERIC(5,1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS substitute_leave_hours NUMERIC(5,1) DEFAULT 0,
+ADD COLUMN IF NOT EXISTS compensatory_leave_hours NUMERIC(5,1) DEFAULT 0;
+
 -- 2. 컬럼 설명 추가
 COMMENT ON COLUMN users.termination_date IS '퇴사 일자 - 값이 있으면 퇴사자로 분류';
 COMMENT ON COLUMN users.contract_end_date IS '계약 종료 일자 - 값이 있으면 계약직으로 분류';
