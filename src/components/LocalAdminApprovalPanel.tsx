@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
   id: string
@@ -23,11 +24,27 @@ export default function LocalAdminApprovalPanel() {
 
   const loadRequests = async () => {
     try {
-      const response = await fetch('/api/form-requests')
-      if (response.ok) {
-        const data = await response.json()
-        setRequests(data.requests || [])
+      const { data, error } = await supabase
+        .from('form_requests')
+        .select(`
+          id, user_id, form_type, status, request_data, submitted_at,
+          user:users(name, department, position)
+        `)
+        .eq('status', 'pending')
+        .order('submitted_at', { ascending: false })
+
+      if (error) {
+        console.error('Supabase form requests error:', error)
+        return
       }
+
+      // 조인된 user 데이터 타입 변환
+      const formattedData = data?.map(item => ({
+        ...item,
+        user: Array.isArray(item.user) ? item.user[0] : item.user
+      })) || []
+
+      setRequests(formattedData)
     } catch (error) {
       console.error('신청 내역 로드 오류:', error)
     } finally {
@@ -52,24 +69,30 @@ export default function LocalAdminApprovalPanel() {
 
   const handleApprove = async (requestId: string) => {
     try {
-      const response = await fetch('/api/admin/approve-local-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requestId,
-          action: 'approve'
-        })
-      })
-
-      if (response.ok) {
-        alert('✅ 승인 완료!')
-        loadRequests()
-      } else {
-        const result = await response.json()
-        alert(`❌ 승인 실패: ${result.error}`)
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      if (!user) {
+        alert('로그인이 필요합니다.')
+        return
       }
+
+      const { error } = await supabase
+        .from('form_requests')
+        .update({
+          status: 'approved',
+          processed_at: new Date().toISOString(),
+          processed_by: user.id
+        })
+        .eq('id', requestId)
+
+      if (error) {
+        console.error('Supabase approval error:', error)
+        alert('❌ 승인 처리에 실패했습니다.')
+        return
+      }
+
+      alert('✅ 승인 완료!')
+      loadRequests()
     } catch (error) {
       console.error('승인 처리 오류:', error)
       alert('승인 처리 중 오류가 발생했습니다.')
@@ -81,25 +104,31 @@ export default function LocalAdminApprovalPanel() {
     if (!reason) return
 
     try {
-      const response = await fetch('/api/admin/approve-local-request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          requestId,
-          action: 'reject',
-          reason
-        })
-      })
-
-      if (response.ok) {
-        alert('❌ 거절 완료!')
-        loadRequests()
-      } else {
-        const result = await response.json()
-        alert(`❌ 거절 실패: ${result.error}`)
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      if (!user) {
+        alert('로그인이 필요합니다.')
+        return
       }
+
+      const { error } = await supabase
+        .from('form_requests')
+        .update({
+          status: 'rejected',
+          processed_at: new Date().toISOString(),
+          processed_by: user.id,
+          admin_note: reason
+        })
+        .eq('id', requestId)
+
+      if (error) {
+        console.error('Supabase rejection error:', error)
+        alert('❌ 거절 처리에 실패했습니다.')
+        return
+      }
+
+      alert('❌ 거절 완료!')
+      loadRequests()
     } catch (error) {
       console.error('거절 처리 오류:', error)
       alert('거절 처리 중 오류가 발생했습니다.')

@@ -45,12 +45,23 @@ export default function UserDashboard() {
       setUser(currentUser)
       setLoading(false)
 
-      // 연차 촉진 대상자인지 확인
+      // 연차 촉진 대상자인지 확인 (Supabase 직접 조회)
       try {
-        const response = await fetch(`/api/user/leave-promotion-status?userId=${currentUser.id}`)
-        if (response.ok) {
-          const data = await response.json()
-          setIsPromotionTarget(data.isTarget)
+        const { data, error } = await supabase
+          .from('users')
+          .select('annual_days, used_annual_days, hire_date')
+          .eq('id', currentUser.id)
+          .single()
+
+        if (!error && data) {
+          const remainingDays = (data.annual_days || 0) - (data.used_annual_days || 0)
+          const hireDate = new Date(data.hire_date)
+          const now = new Date()
+          const monthsWorked = (now.getFullYear() - hireDate.getFullYear()) * 12 + now.getMonth() - hireDate.getMonth()
+          
+          // 6개월 이상 근무하고 잔여 연차가 10일 이상인 경우 촉진 대상
+          const isTarget = monthsWorked >= 6 && remainingDays >= 10
+          setIsPromotionTarget(isTarget)
         }
       } catch (error) {
         console.error("Failed to check promotion status:", error)
