@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       })
       .select(`
         *,
-        users(name, department, position)
+        users!overtime_records_user_id_fkey(name, department, position)
       `)
       .single()
 
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
       .from('overtime_records')
       .select(`
         *,
-        users(name, department, position)
+        users!overtime_records_user_id_fkey(name, department, position)
       `)
       .order('work_date', { ascending: false })
 
