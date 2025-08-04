@@ -35,11 +35,7 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     try {
       const { data, error } = await supabase
         .from('form_requests')
-        .select(`
-          id, user_id, form_type, status, submitted_at, request_data,
-          processed_at, processed_by, admin_note,
-          user:users(name, department, position)
-        `)
+        .select('id, user_id, form_type, status, submitted_at, request_data, processed_at, processed_by, admin_note')
         .eq('user_id', user.id)
         .order('submitted_at', { ascending: false })
 
@@ -48,10 +44,15 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
         return
       }
 
-      // 조인된 user 데이터 타입 변환
+      // UserFormManagement는 현재 사용자 본인의 요청만 조회하므로 user 정보가 필요 없음
+      // 그러나 기존 인터페이스 호환성을 위해 현재 사용자 정보를 설정
       const formattedData = data?.map(item => ({
         ...item,
-        user: Array.isArray(item.user) ? item.user[0] : item.user
+        user: {
+          name: user.name,
+          department: user.department,
+          position: user.position
+        }
       })) || []
       
       setFormRequests(formattedData)

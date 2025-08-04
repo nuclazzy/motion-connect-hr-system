@@ -53,19 +53,33 @@ export default function AdminReviewManagement() {
         setUsers(usersData || [])
       }
 
-      // 모든 리뷰 링크 조회
+      // 모든 리뷰 링크 조회 (user 정보 별도 조회)
       const { data: reviewLinksData, error: reviewLinksError } = await supabase
         .from('review_links')
-        .select(`
-          *,
-          user:users!user_id(name, department, position, employee_id)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (reviewLinksError) {
         console.error('리뷰 링크 조회 실패:', reviewLinksError)
       } else {
-        setReviewLinks(reviewLinksData || [])
+        // user 정보를 별도로 조회하여 매핑
+        const reviewLinksWithUser = []
+        if (reviewLinksData) {
+          for (const reviewLink of reviewLinksData) {
+            // 각 리뷰 링크에 대해 user 정보 조회
+            const { data: userData } = await supabase
+              .from('users')
+              .select('name, department, position, employee_id')
+              .eq('id', reviewLink.user_id)
+              .single()
+            
+            reviewLinksWithUser.push({
+              ...reviewLink,
+              user: userData || { name: '알 수 없음', department: '알 수 없음', position: '알 수 없음', employee_id: '' }
+            })
+          }
+        }
+        setReviewLinks(reviewLinksWithUser)
       }
     } catch (err) {
       console.error('데이터 조회 오류:', err)

@@ -26,10 +26,7 @@ export default function LocalAdminApprovalPanel() {
     try {
       const { data, error } = await supabase
         .from('form_requests')
-        .select(`
-          id, user_id, form_type, status, request_data, submitted_at,
-          user:users(name, department, position)
-        `)
+        .select('id, user_id, form_type, status, request_data, submitted_at')
         .eq('status', 'pending')
         .order('submitted_at', { ascending: false })
 
@@ -38,11 +35,23 @@ export default function LocalAdminApprovalPanel() {
         return
       }
 
-      // 조인된 user 데이터 타입 변환
-      const formattedData = data?.map(item => ({
-        ...item,
-        user: Array.isArray(item.user) ? item.user[0] : item.user
-      })) || []
+      // user 정보를 별도로 조회하여 매핑
+      const formattedData = []
+      if (data) {
+        for (const item of data) {
+          // 각 요청에 대해 user 정보 조회
+          const { data: userData } = await supabase
+            .from('users')
+            .select('name, department, position')
+            .eq('id', item.user_id)
+            .single()
+          
+          formattedData.push({
+            ...item,
+            user: userData || { name: '알 수 없음', department: '알 수 없음', position: '알 수 없음' }
+          })
+        }
+      }
 
       setRequests(formattedData)
     } catch (error) {
