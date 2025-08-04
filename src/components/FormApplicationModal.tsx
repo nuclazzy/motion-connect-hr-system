@@ -67,7 +67,11 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   // 휴가 데이터 로드
   const loadLeaveData = useCallback(async () => {
     try {
-      const response = await fetch(`/api/user/leave-data?userId=${user.id}`)
+      const response = await fetch(`/api/user/leave-data?userId=${user.id}`, {
+        headers: {
+          'Authorization': `Bearer ${user.id}`
+        }
+      })
       if (response.ok) {
         const result = await response.json()
         if (result.success) {
