@@ -12,6 +12,7 @@ import {
   ChevronRight,
   User
 } from 'lucide-react'
+import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 
 interface WorkSummaryData {
   user: {
@@ -59,21 +60,37 @@ interface MissingRecord {
 }
 
 export default function AttendanceDashboard() {
-  const [userId, setUserId] = useState('') // 실제로는 인증에서 가져와야 함
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().substring(0, 7))
   const [summaryData, setSummaryData] = useState<WorkSummaryData | null>(null)
   const [missingRecords, setMissingRecords] = useState<MissingRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'summary' | 'missing' | 'recent'>('summary')
 
+  // 사용자 인증 확인
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await getCurrentUser()
+        setCurrentUser(user)
+      } catch (error) {
+        console.error('사용자 인증 확인 오류:', error)
+      } finally {
+        setAuthLoading(false)
+      }
+    }
+    checkAuth()
+  }, [])
+
   // 월별 요약 데이터 조회
   const fetchSummaryData = async () => {
-    if (!userId) return
+    if (!currentUser?.id) return
 
     setLoading(true)
     try {
       const response = await fetch(
-        `/api/attendance/summary?user_id=${userId}&month=${currentMonth}&include_details=true`
+        `/api/attendance/summary?user_id=${currentUser.id}&month=${currentMonth}&include_details=true`
       )
       const data = await response.json()
       
@@ -91,7 +108,7 @@ export default function AttendanceDashboard() {
 
   // 누락 기록 조회
   const fetchMissingRecords = async () => {
-    if (!userId) return
+    if (!currentUser?.id) return
 
     try {
       const startDate = `${currentMonth}-01`
@@ -101,7 +118,7 @@ export default function AttendanceDashboard() {
       const endDateStr = endDate.toISOString().split('T')[0]
 
       const response = await fetch(
-        `/api/attendance/missing?user_id=${userId}&start_date=${startDate}&end_date=${endDateStr}`
+        `/api/attendance/missing?user_id=${currentUser.id}&start_date=${startDate}&end_date=${endDateStr}`
       )
       const data = await response.json()
       
@@ -117,11 +134,11 @@ export default function AttendanceDashboard() {
 
   // 데이터 로드
   useEffect(() => {
-    if (userId) {
+    if (currentUser?.id) {
       fetchSummaryData()
       fetchMissingRecords()
     }
-  }, [userId, currentMonth])
+  }, [currentUser, currentMonth])
 
   // 월 변경
   const changeMonth = (direction: 'prev' | 'next') => {
@@ -139,19 +156,33 @@ export default function AttendanceDashboard() {
     return date.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long' })
   }
 
-  if (!userId) {
+  if (authLoading) {
     return (
       <div className="max-w-4xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
         <div className="text-center">
-          <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-4">사용자 인증 필요</h3>
-          <input
-            type="text"
-            placeholder="사용자 ID를 입력하세요"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <User className="mx-auto h-12 w-12 text-gray-400 mb-4 animate-pulse" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">인증 정보 확인 중...</h3>
+          <div className="w-full max-w-xs mx-auto h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="max-w-4xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
+        <div className="text-center">
+          <User className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">로그인이 필요합니다</h3>
+          <p className="text-gray-600 mb-4">근무시간 현황을 확인하기 위해 먼저 로그인해주세요.</p>
+          <a 
+            href="/auth/login"
+            className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            로그인하기
+          </a>
         </div>
       </div>
     )

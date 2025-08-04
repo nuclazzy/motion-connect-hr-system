@@ -15,6 +15,7 @@ import {
   XCircle,
   Upload
 } from 'lucide-react'
+import { getCurrentUser, checkPermission, type User as AuthUser } from '@/lib/auth'
 import CapsUploadManager from './CapsUploadManager'
 
 interface Employee {
@@ -49,7 +50,8 @@ interface MissingRecordRequest {
 }
 
 export default function AdminAttendanceManagement() {
-  const [adminUserId, setAdminUserId] = useState('') // 실제로는 인증에서 가져와야 함
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -65,6 +67,25 @@ export default function AdminAttendanceManagement() {
     record_type: '출근',
     reason: ''
   })
+
+  // 관리자 인증 확인
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await getCurrentUser()
+        if (user && checkPermission(user, 'admin')) {
+          setCurrentUser(user)
+        } else {
+          console.error('관리자 권한이 필요합니다')
+        }
+      } catch (error) {
+        console.error('관리자 인증 확인 오류:', error)
+      } finally {
+        setAuthLoading(false)
+      }
+    }
+    checkAuth()
+  }, [])
 
   // 직원 목록 조회
   const fetchEmployees = async () => {
@@ -123,7 +144,7 @@ export default function AdminAttendanceManagement() {
 
   // 누락 기록 추가
   const addMissingRecord = async () => {
-    if (!adminUserId) {
+    if (!currentUser?.id) {
       alert('관리자 인증이 필요합니다.')
       return
     }
@@ -170,12 +191,17 @@ export default function AdminAttendanceManagement() {
 
   // 데이터 로드
   useEffect(() => {
-    fetchEmployees()
-  }, [])
+    if (currentUser) {
+      fetchEmployees()
+      fetchAttendanceRecords()
+    }
+  }, [currentUser])
 
   useEffect(() => {
-    fetchAttendanceRecords()
-  }, [selectedDate, filterType, searchTerm])
+    if (currentUser) {
+      fetchAttendanceRecords()
+    }
+  }, [selectedDate, filterType, searchTerm, currentUser])
 
   // 출근/퇴근 상태 분석
   const getAttendanceStatus = () => {
@@ -222,19 +248,41 @@ export default function AdminAttendanceManagement() {
   const missingCount = attendanceStatus.filter(s => s.status.includes('미기록')).length
   const absentCount = attendanceStatus.filter(s => s.status === '결근').length
 
-  if (!adminUserId) {
+  if (authLoading) {
     return (
       <div className="max-w-4xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
         <div className="text-center">
-          <Users className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-4">관리자 인증 필요</h3>
-          <input
-            type="text"
-            placeholder="관리자 ID를 입력하세요"
-            value={adminUserId}
-            onChange={(e) => setAdminUserId(e.target.value)}
-            className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <Users className="mx-auto h-12 w-12 text-gray-400 mb-4 animate-pulse" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">관리자 인증 확인 중...</h3>
+          <div className="w-full max-w-xs mx-auto h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="max-w-4xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
+        <div className="text-center">
+          <Users className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">관리자 권한이 필요합니다</h3>
+          <p className="text-gray-600 mb-4">출퇴근 관리 기능은 관리자만 접근할 수 있습니다.</p>
+          <div className="space-x-3">
+            <a 
+              href="/auth/login"
+              className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+            >
+              로그인하기
+            </a>
+            <a 
+              href="/admin"
+              className="inline-flex items-center px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors"
+            >
+              관리자 대시보드
+            </a>
+          </div>
         </div>
       </div>
     )

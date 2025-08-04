@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Clock, MapPin, Coffee, User, Calendar, AlertCircle } from 'lucide-react'
+import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 
 interface User {
   id: string
@@ -48,7 +49,23 @@ export default function AttendanceRecorder() {
   const [hadDinner, setHadDinner] = useState(false)
   const [location, setLocation] = useState<{lat: number, lng: number, accuracy: number} | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
-  const [userId, setUserId] = useState('') // 실제로는 인증에서 가져와야 함
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  // 사용자 인증 확인
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const user = await getCurrentUser()
+        setCurrentUser(user)
+      } catch (error) {
+        console.error('사용자 인증 확인 오류:', error)
+      } finally {
+        setAuthLoading(false)
+      }
+    }
+    checkAuth()
+  }, [])
 
   // 현재 시간 업데이트
   useEffect(() => {
@@ -78,10 +95,10 @@ export default function AttendanceRecorder() {
 
   // 출퇴근 현황 조회
   const fetchAttendanceStatus = async () => {
-    if (!userId) return
+    if (!currentUser?.id) return
 
     try {
-      const response = await fetch(`/api/attendance/status?user_id=${userId}`)
+      const response = await fetch(`/api/attendance/status?user_id=${currentUser.id}`)
       const data = await response.json()
       
       if (data.success) {
@@ -94,17 +111,17 @@ export default function AttendanceRecorder() {
     }
   }
 
-  // 컴포넌트 마운트 시 상태 조회
+  // 사용자 인증 완료 후 상태 조회
   useEffect(() => {
-    if (userId) {
+    if (currentUser?.id) {
       fetchAttendanceStatus()
     }
-  }, [userId])
+  }, [currentUser])
 
   // 출퇴근 기록
   const recordAttendance = async (recordType: '출근' | '퇴근') => {
-    if (!userId) {
-      alert('사용자 ID가 필요합니다.')
+    if (!currentUser?.id) {
+      alert('사용자 인증이 필요합니다.')
       return
     }
 
@@ -122,7 +139,7 @@ export default function AttendanceRecorder() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: userId,
+          user_id: currentUser.id,
           record_type: recordType,
           reason: reason.trim() || null,
           had_dinner: recordType === '퇴근' ? hadDinner : false,
@@ -169,19 +186,33 @@ export default function AttendanceRecorder() {
     })
   }
 
-  if (!userId) {
+  if (authLoading) {
     return (
       <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
         <div className="text-center">
-          <User className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-4">사용자 인증 필요</h3>
-          <input
-            type="text"
-            placeholder="사용자 ID를 입력하세요"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          <User className="mx-auto h-12 w-12 text-gray-400 mb-4 animate-pulse" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">인증 정보 확인 중...</h3>
+          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full animate-pulse"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
+        <div className="text-center">
+          <User className="mx-auto h-12 w-12 text-red-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-4">로그인이 필요합니다</h3>
+          <p className="text-gray-600 mb-4">출퇴근 기록을 위해 먼저 로그인해주세요.</p>
+          <a 
+            href="/auth/login"
+            className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+          >
+            로그인하기
+          </a>
         </div>
       </div>
     )
