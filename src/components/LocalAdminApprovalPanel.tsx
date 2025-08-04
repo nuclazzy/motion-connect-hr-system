@@ -126,7 +126,7 @@ export default function LocalAdminApprovalPanel() {
           status: 'rejected',
           processed_at: new Date().toISOString(),
           processed_by: user.id,
-          admin_note: reason
+          admin_notes: reason
         })
         .eq('id', requestId)
 

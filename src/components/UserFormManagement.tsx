@@ -14,7 +14,7 @@ interface FormRequest {
   request_data: any
   processed_at?: string
   processed_by?: string
-  admin_note?: string
+  admin_notes?: string
   user?: {
     name: string
     department: string
@@ -35,7 +35,7 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     try {
       const { data, error } = await supabase
         .from('form_requests')
-        .select('id, user_id, form_type, status, submitted_at, request_data, processed_at, processed_by, admin_note')
+        .select('id, user_id, form_type, status, submitted_at, request_data, processed_at, processed_by, admin_notes')
         .eq('user_id', user.id)
         .order('submitted_at', { ascending: false })
 
@@ -261,9 +261,9 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
                         {request.status === 'rejected' && (
                           <div>
                             <span className="text-red-600">거절됨</span>
-                            {request.admin_note && (
+                            {request.admin_notes && (
                               <div className="mt-1 text-xs text-red-500">
-                                사유: {request.admin_note}
+                                사유: {request.admin_notes}
                               </div>
                             )}
                           </div>

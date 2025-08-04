@@ -132,7 +132,7 @@ export default function AdminFormManagement() {
           status: newStatus,
           processed_at: new Date().toISOString(),
           processed_by: user.id,
-          admin_note: adminNote || null
+          admin_notes: adminNote || null
         })
         .eq('id', request.id)
 
