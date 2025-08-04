@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2025-08-04
+
+### Fixed
+- **출퇴근 링크 완전 통합** - 사용자 대시보드의 출퇴근 링크를 Google Apps Script에서 새로운 출퇴근 시스템(`/attendance`)으로 완전 교체
+
+### Changed
+- 사용자 대시보드 출퇴근 위젯 링크 업데이트
+- 외부 Google Apps Script URL → 내부 `/attendance` 페이지로 변경
+- 출퇴근 링크에 아이콘 추가로 시각적 개선
+- "캡스로 출퇴근 체크를 하지 못한 경우 이용해주세요!" → "실시간 출퇴근 기록 및 근무시간 현황을 확인하세요!" 텍스트 변경
+
+### Technical Details
+- 모든 출퇴근 관련 기능이 통합된 내부 시스템으로 완전히 연결
+- 일관된 디자인 시스템 적용
+- 사용자 경험 개선
+
+---
+
 ## [2.0.0] - 2025-08-04
 
 ### Added
