@@ -12,6 +12,7 @@ import UserFormManagement from '@/components/UserFormManagement'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import UserLeaveStatus from '@/components/UserLeaveStatus'
 import FormApplicationModal from '@/components/FormApplicationModal'
+import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
 
 interface ReviewLink {
   id: string
@@ -204,57 +205,8 @@ export default function UserDashboard() {
             {/* 내 정보 위젯 */}
             <UserProfile user={user} onProfileUpdate={handleProfileUpdate} />
 
-            {/* 근태 관리 위젯 */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        근태 관리
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        출퇴근 기록
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <p className="text-xs text-gray-500">
-                    실시간 출퇴근 기록 및 근무시간 현황을 확인하세요!
-                  </p>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3 space-y-2">
-                <div className="text-sm">
-                  <a 
-                    href="/attendance"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block flex items-center"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    출퇴근 기록하기
-                  </a>
-                </div>
-                <div className="text-sm">
-                  <a 
-                    href="/attendance"
-                    className="font-medium text-indigo-600 hover:text-indigo-500 block flex items-center"
-                  >
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                    </svg>
-                    근무시간 조회하기
-                  </a>
-                </div>
-              </div>
-            </div>
+            {/* 근태 관리 위젯 - 새로운 컴포넌트 */}
+            <DashboardAttendanceWidget user={user} />
 
             {/* 나의 휴가 현황 위젯 */}
             <UserLeaveStatus
