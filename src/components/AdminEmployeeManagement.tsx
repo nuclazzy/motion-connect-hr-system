@@ -55,39 +55,48 @@ export default function AdminEmployeeManagement() {
           throw new Error('관리자 권한이 필요합니다.')
         }
 
-        // Supabase에서 직접 users 테이블 조회
+        // Supabase에서 직접 users 테이블 조회 (실제 존재하는 컬럼만)
         const { data: users, error } = await supabase
           .from('users')
           .select(`
-            id, name, email, department, position, work_type, hire_date, dob, phone, address, 
-            is_active, resignation_date, termination_date,
+            id, name, email, department, position, hire_date,
             annual_days, used_annual_days, sick_days, used_sick_days,
-            substitute_leave_hours, compensatory_leave_hours,
-            updated_at
+            substitute_leave_hours, compensatory_leave_hours
           `)
-          .order('hire_date', { ascending: true })
+          .order('hire_date', { ascending: true, nullsFirst: false })
 
         if (error) {
           console.error('❌ Supabase error:', error)
-          throw new Error('직원 데이터를 불러올 수 없습니다.')
+          setError(`직원 데이터를 불러올 수 없습니다: ${error.message}`)
+          return
         }
 
         console.log('✅ Users fetched directly from Supabase:', users?.length, '명')
         
-        // 데이터 변환
-        const result = users?.map((user: any) => ({
-          ...user,
-          annual_leave: Math.max(0, (user.annual_days || 0) - (user.used_annual_days || 0)),
-          sick_leave: Math.max(0, (user.sick_days || 0) - (user.used_sick_days || 0)),
-          substitute_leave_hours: user.substitute_leave_hours || 0,
-          compensatory_leave_hours: user.compensatory_leave_hours || 0,
+        // 데이터 변환 (기본 구조)
+        const result = users?.map((userData: any) => ({
+          ...userData,
+          // 기본 필드들
+          work_type: userData.work_type || '정규직',
+          dob: userData.dob || '',
+          phone: userData.phone || '',
+          address: userData.address || '',
+          is_active: userData.is_active !== false,
+          resignation_date: userData.resignation_date || null,
+          termination_date: userData.termination_date || null,
+          updated_at: userData.updated_at || new Date().toISOString(),
+          // 휴가 계산 필드들
+          annual_leave: Math.max(0, (userData.annual_days || 0) - (userData.used_annual_days || 0)),
+          sick_leave: Math.max(0, (userData.sick_days || 0) - (userData.used_sick_days || 0)),
+          substitute_leave_hours: userData.substitute_leave_hours || 0,
+          compensatory_leave_hours: userData.compensatory_leave_hours || 0,
           leave_data: {
-            annual_days: user.annual_days || 0,
-            used_annual_days: user.used_annual_days || 0,
-            sick_days: user.sick_days || 0,
-            used_sick_days: user.used_sick_days || 0,
-            substitute_leave_hours: user.substitute_leave_hours || 0,
-            compensatory_leave_hours: user.compensatory_leave_hours || 0
+            annual_days: userData.annual_days || 0,
+            used_annual_days: userData.used_annual_days || 0,
+            sick_days: userData.sick_days || 0,
+            used_sick_days: userData.used_sick_days || 0,
+            substitute_leave_hours: userData.substitute_leave_hours || 0,
+            compensatory_leave_hours: userData.compensatory_leave_hours || 0
           }
         })) || []
         

@@ -34,16 +34,10 @@ export default function AdminFormManagement() {
     }
     setError(null)
     try {
-      // Supabase에서 직접 form_requests 조회
+      // Supabase에서 직접 form_requests 조회 (user 정보 별도로 조회)
       let query = supabase
         .from('form_requests')
-        .select(`
-          *,
-          user:users!user_id (
-            name,
-            department
-          )
-        `)
+        .select('*')
         .order('submitted_at', { ascending: false })
 
       // 필터 적용
@@ -55,11 +49,23 @@ export default function AdminFormManagement() {
 
       if (fetchError) throw fetchError
 
-      // 데이터 형식 변환
-      const mappedRequests = formRequests?.map(req => ({
-        ...req,
-        user: req.user || { name: '알 수 없음', department: '알 수 없음' }
-      })) || []
+      // user 정보를 별도로 조회하여 매핑
+      const mappedRequests = []
+      if (formRequests) {
+        for (const req of formRequests) {
+          // 각 요청에 대해 user 정보 조회
+          const { data: userData } = await supabase
+            .from('users')
+            .select('name, department')
+            .eq('id', req.user_id)
+            .single()
+          
+          mappedRequests.push({
+            ...req,
+            user: userData || { name: '알 수 없음', department: '알 수 없음' }
+          })
+        }
+      }
 
       setRequests(mappedRequests)
     } catch (err) {
