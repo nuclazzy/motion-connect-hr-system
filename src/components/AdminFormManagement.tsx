@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
   id: string
@@ -33,15 +34,36 @@ export default function AdminFormManagement() {
     }
     setError(null)
     try {
-      const response = await fetch(`/api/admin/form-requests?filter=${filter}`, {
-        headers: getAuthHeaders()
-      })
-      if (!response.ok) {
-        throw new Error('서식 신청 내역을 불러오는데 실패했습니다.')
+      // Supabase에서 직접 form_requests 조회
+      let query = supabase
+        .from('form_requests')
+        .select(`
+          *,
+          user:users!user_id (
+            name,
+            department
+          )
+        `)
+        .order('submitted_at', { ascending: false })
+
+      // 필터 적용
+      if (filter === 'pending') {
+        query = query.eq('status', 'pending')
       }
-      const data = await response.json()
-      setRequests(data.requests || [])
+
+      const { data: formRequests, error: fetchError } = await query
+
+      if (fetchError) throw fetchError
+
+      // 데이터 형식 변환
+      const mappedRequests = formRequests?.map(req => ({
+        ...req,
+        user: req.user || { name: '알 수 없음', department: '알 수 없음' }
+      })) || []
+
+      setRequests(mappedRequests)
     } catch (err) {
+      console.error('서식 신청 조회 오류:', err)
       setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
     } finally {
       setLoading(false)
