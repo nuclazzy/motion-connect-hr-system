@@ -172,6 +172,9 @@ export default function AdminDashboard() {
                   {/* 일정 관리 */}
                   <UserWeeklySchedule />
                   
+                  {/* 팀 일정 관리 */}
+                  <AdminTeamSchedule user={user} />
+                  
                   {/* 서식 신청 컴포넌트 */}
                   <UserFormManagement
                     user={user}
@@ -192,12 +195,6 @@ export default function AdminDashboard() {
                   <AdminFormManagement />
                   <AdminLeaveManagement />
                   <AdminDocumentManagement />
-                  
-                  {/* 관리자도 팀 일정은 볼 수 있도록 */}
-                  <div className="bg-white rounded-lg shadow p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">팀 일정 관리</h3>
-                    <AdminTeamSchedule user={user} />
-                  </div>
                 </div>
               </div>
             </div>
