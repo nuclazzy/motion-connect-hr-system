@@ -179,6 +179,46 @@ export async function POST(request: NextRequest) {
       }
       
       console.log('✅ 휴가일수 차감 완료')
+
+      // 🆕 연차 사용일에 8시간 근무시간 자동 인정 (Google Apps Script 로직)
+      if (leaveType === '연차' || leaveType?.includes('반차')) {
+        console.log('🕒 연차 사용일 근무시간 8시간 자동 인정 시작')
+        
+        // 휴가 기간 내 모든 날짜에 대해 처리
+        const start = new Date(startDate)
+        const end = new Date(endDate)
+        
+        for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+          const workDate = date.toISOString().split('T')[0]
+          const workHours = leaveType?.includes('반차') ? 4.0 : 8.0
+          const workStatus = leaveType?.includes('반차') ? '반차(유급)' : '연차(유급)'
+          
+          console.log(`📅 ${workDate}에 ${workHours}시간 인정 처리`)
+          
+          // daily_work_summary에 유급휴가 기록 생성
+          const { error: summaryError } = await supabase
+            .from('daily_work_summary')
+            .upsert({
+              user_id: formRequest.user_id,
+              work_date: workDate,
+              basic_hours: workHours,
+              overtime_hours: 0,
+              night_hours: 0,
+              work_status: workStatus,
+              auto_calculated: true,
+              calculated_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+          
+          if (summaryError) {
+            console.error(`❌ ${workDate} 근무시간 인정 실패:`, summaryError)
+          } else {
+            console.log(`✅ ${workDate} 근무시간 ${workHours}시간 인정 완료`)
+          }
+        }
+        
+        console.log('🎉 연차 사용일 근무시간 자동 인정 완료!')
+      }
     }
 
     // 7. 상태 업데이트

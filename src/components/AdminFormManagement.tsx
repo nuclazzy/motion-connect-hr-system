@@ -25,6 +25,8 @@ export default function AdminFormManagement() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<'pending' | 'all'>('pending')
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<any>(null)
 
   const fetchRequests = useCallback(async (isInitialLoad = false) => {
     if (isInitialLoad) {
@@ -80,6 +82,52 @@ export default function AdminFormManagement() {
   useEffect(() => {
     fetchRequests(true)
   }, [fetchRequests])
+
+  // Google Calendar 연차 데이터 동기화
+  const handleSyncLeaveData = async () => {
+    setIsSyncing(true)
+    setSyncResult(null)
+    setError(null)
+
+    try {
+      // 먼저 연차 캘린더 설정 조회
+      const calendarResponse = await fetch('/api/calendar/sync-leave-data')
+      const calendarData = await calendarResponse.json()
+
+      if (!calendarData.leaveCalendars || calendarData.leaveCalendars.length === 0) {
+        setError('연차 캘린더가 설정되지 않았습니다. 먼저 캘린더 설정에서 연차 캘린더를 등록해주세요.')
+        return
+      }
+
+      // 첫 번째 연차 캘린더로 동기화 실행
+      const leaveCalendar = calendarData.leaveCalendars[0]
+      const syncResponse = await fetch('/api/calendar/sync-leave-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          calendarId: leaveCalendar.calendar_id,
+          startDate: new Date('2025-08-01').toISOString(), // 8월부터
+          endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 3개월 후까지
+        })
+      })
+
+      const syncData = await syncResponse.json()
+
+      if (syncData.success) {
+        setSyncResult(syncData)
+        // 동기화 후 요청 목록 새로고침
+        fetchRequests()
+      } else {
+        setError(syncData.error || 'Google Calendar 동기화에 실패했습니다.')
+      }
+
+    } catch (error) {
+      console.error('Google Calendar 동기화 오류:', error)
+      setError('Google Calendar 동기화 중 오류가 발생했습니다.')
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
   const handleUpdateRequest = async (requestId: string, newStatus: 'approved' | 'rejected') => {
     const adminNote = newStatus === 'rejected' ? prompt('거절 사유를 입력하세요:') : undefined
@@ -330,21 +378,100 @@ export default function AdminFormManagement() {
       <div className="p-5">
         <div className="flex justify-between items-center">
           <h3 className="text-lg font-medium text-gray-900">전체 서식 신청 내역</h3>
-          <div className="space-x-2">
+          <div className="flex items-center space-x-4">
+            <div className="space-x-2">
+              <button
+                onClick={() => setFilter('pending')}
+                className={`px-3 py-1 text-sm rounded-md ${filter === 'pending' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              >
+                승인 대기
+              </button>
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-3 py-1 text-sm rounded-md ${filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              >
+                전체 보기
+              </button>
+            </div>
             <button
-              onClick={() => setFilter('pending')}
-              className={`px-3 py-1 text-sm rounded-md ${filter === 'pending' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+              onClick={handleSyncLeaveData}
+              disabled={isSyncing}
+              className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium transition-colors"
             >
-              승인 대기
-            </button>
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-3 py-1 text-sm rounded-md ${filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
-            >
-              전체 보기
+              {isSyncing ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                  <span>동기화 중...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Google Calendar 동기화</span>
+                </>
+              )}
             </button>
           </div>
         </div>
+
+        {/* 동기화 결과 표시 */}
+        {syncResult && (
+          <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-green-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h4 className="text-sm font-medium text-green-800">Google Calendar 동기화 완료</h4>
+            </div>
+            <div className="mt-2 text-sm text-green-700">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <span className="font-medium">처리된 이벤트:</span> {syncResult.results?.processed || 0}개
+                </div>
+                <div>
+                  <span className="font-medium">매칭 성공:</span> {syncResult.results?.matched || 0}개
+                </div>
+                <div>
+                  <span className="font-medium">매칭 실패:</span> {syncResult.results?.unmatched || 0}개
+                </div>
+                <div>
+                  <span className="font-medium">오류:</span> {syncResult.results?.errors || 0}개
+                </div>
+              </div>
+              {syncResult.totalLeaveEvents > 0 && (
+                <div className="mt-2">
+                  <span className="font-medium">총 연차 이벤트:</span> {syncResult.totalLeaveEvents}개
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => setSyncResult(null)}
+              className="inline-flex items-center mt-2 text-xs text-green-600 hover:text-green-800"
+            >
+              닫기
+            </button>
+          </div>
+        )}
+
+        {/* 에러 메시지 표시 */}
+        {error && (
+          <div className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 text-red-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <h4 className="text-sm font-medium text-red-800">동기화 오류</h4>
+            </div>
+            <div className="mt-1 text-sm text-red-700">{error}</div>
+            <button
+              onClick={() => setError(null)}
+              className="inline-flex items-center mt-2 text-xs text-red-600 hover:text-red-800"
+            >
+              닫기
+            </button>
+          </div>
+        )}
 
         <div className="mt-6 overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-300">
