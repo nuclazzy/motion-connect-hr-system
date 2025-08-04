@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // 전체 직원 목록 조회 (관리자용)
 export async function GET(request: NextRequest) {
   try {
     console.log('👥 관리자 - 전체 직원 목록 조회 요청')
+
+    const supabase = await createServiceRoleClient()
 
     // 전체 직원 정보 조회
     const { data: employees, error } = await supabase
@@ -86,6 +88,8 @@ export async function POST(request: NextRequest) {
         error: '필수 정보가 누락되었습니다.'
       }, { status: 400 })
     }
+
+    const supabase = await createServiceRoleClient()
 
     // 이메일 중복 확인
     const { data: existingUser } = await supabase

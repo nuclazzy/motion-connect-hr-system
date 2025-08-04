@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // 누락된 출퇴근 기록 추가
 export async function POST(request: NextRequest) {
@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
         error: '기록 유형이 올바르지 않습니다.'
       }, { status: 400 })
     }
+
+    const supabase = await createServiceRoleClient()
 
     // 관리자 권한 확인 (다른 사용자의 기록 추가 시)
     if (admin_user_id && user_id !== admin_user_id) {
@@ -176,6 +178,8 @@ export async function PATCH(request: NextRequest) {
       }, { status: 400 })
     }
 
+    const supabase = await createServiceRoleClient()
+
     // 관리자 권한 확인 (다른 사용자의 기록 수정 시)
     if (admin_user_id && user_id !== admin_user_id) {
       const { data: admin, error: adminError } = await supabase
@@ -275,6 +279,8 @@ export async function GET(request: NextRequest) {
       end_date,
       admin_user_id
     })
+
+    const supabase = await createServiceRoleClient()
 
     // 관리자 권한 확인 (다른 사용자 조회 시)
     if (admin_user_id && user_id !== admin_user_id) {

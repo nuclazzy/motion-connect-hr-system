@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // 사용자의 출퇴근 현황 조회
 export async function GET(request: NextRequest) {
@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
         error: '사용자 ID가 필요합니다.'
       }, { status: 400 })
     }
+
+    const supabase = await createServiceRoleClient()
 
     // 사용자 정보 조회
     const { data: user, error: userError } = await supabase

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // 근무시간 요약 조회 (개인용/관리자용)
 export async function GET(request: NextRequest) {
@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
       admin_user_id,
       include_details
     })
+
+    const supabase = await createServiceRoleClient()
 
     // 관리자 권한 확인 (다른 사용자 조회 시)
     if (admin_user_id && user_id !== admin_user_id) {
@@ -273,6 +275,8 @@ export async function PATCH(request: NextRequest) {
       basic_hours,
       overtime_hours
     })
+
+    const supabase = await createServiceRoleClient()
 
     // 관리자 권한 확인
     const { data: admin, error: adminError } = await supabase

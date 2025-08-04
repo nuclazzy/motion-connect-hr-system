@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 
 // 출퇴근 기록 생성
 export async function POST(request: NextRequest) {
@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
         error: '기록 유형이 올바르지 않습니다.'
       }, { status: 400 })
     }
+
+    const supabase = await createServiceRoleClient()
 
     // 사용자 존재 여부 확인
     const { data: user, error: userError } = await supabase
@@ -181,6 +183,8 @@ export async function GET(request: NextRequest) {
       limit
     })
 
+    const supabase = await createServiceRoleClient()
+
     let query = supabase
       .from('attendance_records')
       .select(`
@@ -277,6 +281,8 @@ export async function PATCH(request: NextRequest) {
         error: '기록 ID와 관리자 ID는 필수입니다.'
       }, { status: 400 })
     }
+
+    const supabase = await createServiceRoleClient()
 
     // 관리자 권한 확인
     const { data: admin, error: adminError } = await supabase
