@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { type User, authenticatedFetch } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
+import { supabase } from '@/lib/supabase'
 
 interface LeaveData {
   id: string
@@ -48,29 +49,36 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const fetchLeaveData = useCallback(async () => {
       try {
         setLoading(true)
-        console.log('휴가 데이터 조회 시작:', { userId: user.id, userName: user.name })
+        console.log('휴가 데이터 조회 시작 (Supabase 직접 호출):', { userId: user.id, userName: user.name })
         
-        const response = await authenticatedFetch(`/api/user/leave-data?userId=${user.id}`, {
-          method: 'GET'
-        })
-        
-        console.log('API 응답 상태:', response.status)
-        
-        if (response.ok) {
-          const result = await response.json()
-          console.log('API 응답 데이터:', result)
-          
-          if (result.success) {
-            setLeaveData(result.data)
-          } else {
-            console.error('API 오류:', result.error)
-            setError(result.error || '휴가 데이터를 불러올 수 없습니다.')
-          }
-        } else {
-          const errorText = await response.text()
-          console.error('HTTP 오류:', response.status, errorText)
-          setError(`휴가 데이터를 불러오는 중 오류가 발생했습니다. (${response.status})`)
+        // Supabase에서 직접 휴가 데이터 조회
+        const { data: leaveDataResult, error: leaveError } = await supabase
+          .from('leave_days')
+          .select(`
+            id,
+            user_id,
+            leave_types,
+            created_at,
+            updated_at,
+            user:users!user_id(
+              name,
+              department,
+              position,
+              hire_date
+            )
+          `)
+          .eq('user_id', user.id)
+          .single()
+
+        if (leaveError) {
+          console.error('Supabase 휴가 데이터 조회 오류:', leaveError)
+          setError('휴가 데이터를 불러올 수 없습니다.')
+          return
         }
+
+        console.log('✅ Supabase 직접 조회 성공:', leaveDataResult)
+        setLeaveData(leaveDataResult)
+        
       } catch (err) {
         console.error('휴가 데이터 조회 오류:', err)
         setError('휴가 데이터를 불러오는 중 오류가 발생했습니다.')
