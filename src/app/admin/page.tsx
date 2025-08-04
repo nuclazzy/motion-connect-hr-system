@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, logoutUser, checkPermission, type User } from '@/lib/auth'
-import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
-import AdminEmployeeManagementSimple from '@/components/AdminEmployeeManagementSimple'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import UserFormManagement from '@/components/UserFormManagement'
