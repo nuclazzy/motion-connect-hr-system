@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Employee {
   id: string
@@ -17,13 +17,10 @@ interface Employee {
 
 export default function EmployeeManagement() {
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
 
   const loadEmployees = async () => {
-    if (loading) return
-    
     setLoading(true)
     setError(null)
     
@@ -51,7 +48,6 @@ export default function EmployeeManagement() {
       
       if (data.success && data.employees) {
         setEmployees(data.employees)
-        setLoaded(true)
       } else {
         throw new Error('직원 데이터를 불러올 수 없습니다')
       }
@@ -63,6 +59,10 @@ export default function EmployeeManagement() {
     }
   }
 
+  useEffect(() => {
+    loadEmployees()
+  }, [])
+
   return (
     <div className="bg-white shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
@@ -70,15 +70,9 @@ export default function EmployeeManagement() {
           직원 관리
         </h3>
         
-        {!loaded && (
+        {loading && (
           <div className="text-center py-4">
-            <button
-              onClick={loadEmployees}
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium"
-            >
-              {loading ? '로딩 중...' : '직원 목록 불러오기'}
-            </button>
+            <div className="text-gray-600">직원 목록을 불러오는 중...</div>
           </div>
         )}
 
@@ -95,7 +89,7 @@ export default function EmployeeManagement() {
           </div>
         )}
 
-        {loaded && employees.length > 0 && (
+        {!loading && !error && employees.length > 0 && (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
@@ -160,7 +154,7 @@ export default function EmployeeManagement() {
           </div>
         )}
 
-        {loaded && employees.length === 0 && (
+        {!loading && !error && employees.length === 0 && (
           <div className="text-center py-4 text-gray-500">
             등록된 직원이 없습니다.
           </div>
