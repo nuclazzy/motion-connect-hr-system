@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, FormEvent } from 'react'
-import { getAuthHeaders, getCurrentUser } from '@/lib/auth'
+import { useState, useEffect } from 'react'
 
 // Assuming a more complete User type
 interface Employee {
@@ -39,74 +38,50 @@ export default function AdminEmployeeManagement() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned'>('all')
 
 
-  const fetchEmployees = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const headers = getAuthHeaders()
-      console.log('🔑 Request headers:', headers)
-      console.log('🌐 Making request to:', window.location.origin + '/api/admin/employees')
-      
-      const response = await fetch('/api/admin/employees', {
-        headers
-      })
-      
-      console.log('📡 Response status:', response.status)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '서버에서 응답을 받을 수 없습니다.' }))
-        console.error('❌ API Error:', errorData)
-        
-        if (response.status === 401) {
-          throw new Error('인증이 필요합니다. 다시 로그인해주세요.')
-        } else if (response.status === 403) {
-          throw new Error('관리자 권한이 필요합니다.')
-        } else {
-          throw new Error(errorData.error || '직원 목록을 불러오는데 실패했습니다.')
-        }
-      }
-      
-      const data = await response.json()
-      console.log('✅ Employee data received:', data.employees?.length, '명')
-      
-      const newEmployees = data.employees || []
-      setEmployees(newEmployees)
-    } catch (err) {
-      console.error('❌ fetchEmployees error:', err)
-      setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    // 현재 사용자 인증 상태 확인
-    const checkAuthAndFetch = async () => {
+    const fetchData = async () => {
       try {
-        const currentUser = await getCurrentUser()
-        if (!currentUser) {
-          setError('로그인이 필요합니다. 다시 로그인해주세요.')
-          setLoading(false)
-          return
+        console.log('🚀 Fetching employees...')
+        
+        // localStorage에서 사용자 정보 가져오기
+        const userStr = localStorage.getItem('motion-connect-user')
+        if (!userStr) {
+          throw new Error('로그인이 필요합니다.')
         }
         
-        if (currentUser.role !== 'admin') {
-          setError('관리자 권한이 필요합니다.')
-          setLoading(false)
-          return
+        const user = JSON.parse(userStr)
+        if (user.role !== 'admin') {
+          throw new Error('관리자 권한이 필요합니다.')
         }
+
+        const response = await fetch('/api/admin/employees', {
+          headers: {
+            'Authorization': `Bearer ${user.id}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        console.log('📡 Response status:', response.status)
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || `HTTP ${response.status}`)
+        }
+
+        const data = await response.json()
+        console.log('✅ Data received:', data.employees?.length, '명')
         
-        console.log('✅ 관리자 인증 확인:', currentUser.name)
-        fetchEmployees()
-      } catch (error) {
-        console.error('❌ Auth check failed:', error)
-        setError('인증 확인 중 오류가 발생했습니다.')
+        setEmployees(data.employees || [])
+      } catch (err) {
+        console.error('❌ Error:', err)
+        setError(err instanceof Error ? err.message : '알 수 없는 오류')
+      } finally {
         setLoading(false)
       }
     }
-    
-    checkAuthAndFetch()
-  }, []) // fetchEmployees 의존성 제거하여 무한 루프 방지
+
+    fetchData()
+  }, [])
 
   // employees가 변경될 때 선택된 직원 정보 업데이트 (순환 참조 방지)
   useEffect(() => {
@@ -142,7 +117,7 @@ export default function AdminEmployeeManagement() {
     setFormData(prev => ({ ...prev, [name]: finalValue }))
   }
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedEmployee) return
 
@@ -150,9 +125,15 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
         method: 'PATCH',
-        headers: getAuthHeaders(),
+        headers: {
+          'Authorization': `Bearer ${user?.id}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify(formData),
       })
 
@@ -162,8 +143,8 @@ export default function AdminEmployeeManagement() {
       }
       
       alert('직원 정보가 성공적으로 업데이트되었습니다.')
-      // Refresh the list to show updated data
-      fetchEmployees()
+      // Refresh the page to show updated data
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : '업데이트 중 오류가 발생했습니다.')
     } finally {
@@ -222,9 +203,15 @@ export default function AdminEmployeeManagement() {
     if (!selectedEmployee) return
 
     try {
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/adjust-leave`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Authorization': `Bearer ${user?.id}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ leaveType, adjustmentType, amount }),
       })
 
@@ -270,7 +257,7 @@ export default function AdminEmployeeManagement() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '휴가 일수 조정 중 오류가 발생했습니다.')
       // 오류 발생 시에만 새로고침
-      fetchEmployees()
+      window.location.reload()
     }
   }
 
@@ -281,9 +268,15 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}/resign`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: {
+          'Authorization': `Bearer ${user?.id}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({ resignation_date: formData.resignation_date }),
       })
 
@@ -293,7 +286,7 @@ export default function AdminEmployeeManagement() {
       }
       
       alert('퇴사 처리가 완료되었습니다.')
-      fetchEmployees()
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : '퇴사 처리 중 오류가 발생했습니다.')
     } finally {
@@ -308,9 +301,15 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
+      const userStr = localStorage.getItem('motion-connect-user')
+      const user = userStr ? JSON.parse(userStr) : null
+      
       const response = await fetch(`/api/admin/employees/${selectedEmployee.id}`, {
         method: 'DELETE',
-        headers: getAuthHeaders()
+        headers: {
+          'Authorization': `Bearer ${user?.id}`,
+          'Content-Type': 'application/json'
+        }
       })
 
       if (!response.ok) {
@@ -321,7 +320,7 @@ export default function AdminEmployeeManagement() {
       alert('직원이 성공적으로 삭제되었습니다.')
       setSelectedEmployee(null)
       setShowDeleteConfirm(false)
-      fetchEmployees()
+      window.location.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : '직원 삭제 중 오류가 발생했습니다.')
     } finally {
