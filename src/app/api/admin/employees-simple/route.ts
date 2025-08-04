@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     
     console.log('📡 Fetching from Supabase REST API...')
     
-    // 사용자 목록 조회
+    // users 테이블에서 직접 모든 데이터 조회 (휴가 데이터 포함)
     const usersResponse = await fetch(`${supabaseUrl}/rest/v1/users?select=*&order=hire_date.asc`, {
       method: 'GET',
       headers: {
@@ -49,46 +49,24 @@ export async function GET(request: NextRequest) {
     }
 
     const users = await usersResponse.json()
-    console.log('✅ Users fetched:', users.length)
+    console.log('✅ Users fetched from users table (with leave data):', users.length)
 
-    // 휴가 데이터 조회
-    const leaveResponse = await fetch(`${supabaseUrl}/rest/v1/leave_days?select=user_id,leave_types`, {
-      method: 'GET',
-      headers: {
-        'apikey': serviceKey,
-        'Authorization': `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json'
-      }
-    })
-
-    if (!leaveResponse.ok) {
-      const errorText = await leaveResponse.text()
-      console.error('❌ Leave data fetch failed:', errorText)
-      return NextResponse.json({ 
-        error: 'Failed to fetch leave data',
-        status: leaveResponse.status,
-        details: errorText
-      }, { status: 500 })
-    }
-
-    const leaveData = await leaveResponse.json()
-    console.log('✅ Leave data fetched:', leaveData.length)
-
-    // 데이터 결합
-    const leaveMap = new Map()
-    leaveData.forEach((leave: any) => {
-      leaveMap.set(leave.user_id, leave.leave_types)
-    })
-
+    // users 테이블에서 직접 휴가 데이터 사용
     const result = users.map((user: any) => {
-      const leave = leaveMap.get(user.id) || {}
       return {
         ...user,
-        annual_leave: Math.max(0, (leave.annual_days || 0) - (leave.used_annual_days || 0)),
-        sick_leave: Math.max(0, (leave.sick_days || 0) - (leave.used_sick_days || 0)),
-        substitute_leave_hours: leave.substitute_leave_hours || 0,
-        compensatory_leave_hours: leave.compensatory_leave_hours || 0,
-        leave_data: leave
+        annual_leave: Math.max(0, (user.annual_days || 0) - (user.used_annual_days || 0)),
+        sick_leave: Math.max(0, (user.sick_days || 0) - (user.used_sick_days || 0)),
+        substitute_leave_hours: user.substitute_leave_hours || 0,
+        compensatory_leave_hours: user.compensatory_leave_hours || 0,
+        leave_data: {
+          annual_days: user.annual_days || 0,
+          used_annual_days: user.used_annual_days || 0,
+          sick_days: user.sick_days || 0,
+          used_sick_days: user.used_sick_days || 0,
+          substitute_leave_hours: user.substitute_leave_hours || 0,
+          compensatory_leave_hours: user.compensatory_leave_hours || 0
+        }
       }
     })
 
