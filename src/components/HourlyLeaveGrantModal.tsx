@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
+import { supabase } from '@/lib/supabase'
 
 interface Employee {
   id: string
@@ -48,29 +49,33 @@ export default function HourlyLeaveGrantModal({
     setError('')
 
     try {
-      const response = await fetch('/api/admin/grant-hourly-leave', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          leaveType,
-          hours,
-          reason
-        })
-      })
+      // Supabase로 직접 시간 단위 휴가 부여
+      const fieldName = leaveType === 'substitute' ? 'substitute_leave_hours' : 'compensatory_leave_hours';
+      
+      const { data: currentData } = await supabase
+        .from('users')
+        .select(fieldName)
+        .eq('id', employee.id)
+        .single();
 
-      const result = await response.json()
+      const currentHours = (currentData as any)?.[fieldName] || 0;
+      const newHours = currentHours + hours;
 
-      if (response.ok && result.success) {
-        const leaveTypeName = LEAVE_TYPE_NAMES[leaveType]
-        alert(`✅ ${employee.name}님에게 ${leaveTypeName} ${hours}시간(${leaveStatus.days}일)이 지급되었습니다.`)
-        onSuccess()
-        handleClose()
-      } else {
-        setError(result.error || '지급 처리 중 오류가 발생했습니다.')
+      const { error } = await supabase
+        .from('users')
+        .update({ [fieldName]: newHours })
+        .eq('id', employee.id);
+
+      if (error) {
+        console.error('Supabase hourly leave grant error:', error);
+        throw new Error('시간 단위 휴가 부여에 실패했습니다.');
       }
+
+      // 성공 처리
+      const leaveTypeName = LEAVE_TYPE_NAMES[leaveType]
+      alert(`✅ ${employee.name}님에게 ${leaveTypeName} ${hours}시간(${leaveStatus.days}일)이 지급되었습니다.`)
+      onSuccess()
+      handleClose()
     } catch (err) {
       console.error('시간 단위 휴가 지급 오류:', err)
       setError('지급 처리 중 오류가 발생했습니다.')

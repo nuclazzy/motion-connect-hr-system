@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
   id: string
@@ -32,13 +33,28 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
 
   const fetchMyFormRequests = useCallback(async () => {
     try {
-      const response = await fetch('/api/form-requests')
-      if (response.ok) {
-        const data = await response.json()
-        // 현재 사용자의 신청만 필터링
-        const myRequests = data.requests.filter((req: FormRequest) => req.user_id === user.id)
-        setFormRequests(myRequests)
+      const { data, error } = await supabase
+        .from('form_requests')
+        .select(`
+          id, user_id, form_type, status, submitted_at, request_data,
+          processed_at, processed_by, admin_note,
+          user:users(name, department, position)
+        `)
+        .eq('user_id', user.id)
+        .order('submitted_at', { ascending: false })
+
+      if (error) {
+        console.error('Supabase form requests error:', error)
+        return
       }
+
+      // 조인된 user 데이터 타입 변환
+      const formattedData = data?.map(item => ({
+        ...item,
+        user: Array.isArray(item.user) ? item.user[0] : item.user
+      })) || []
+      
+      setFormRequests(formattedData)
     } catch (err) {
       console.error('서식 신청 조회 오류:', err)
     } finally {

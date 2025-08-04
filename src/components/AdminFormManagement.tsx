@@ -79,6 +79,21 @@ export default function AdminFormManagement() {
     const adminNote = newStatus === 'rejected' ? prompt('거절 사유를 입력하세요:') : undefined
     if (newStatus === 'rejected' && !adminNote) return
 
+    // 현재 사용자 정보 가져오기
+    const userStr = localStorage.getItem('motion-connect-user')
+    const user = userStr ? JSON.parse(userStr) : null
+    if (!user) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+
+    // 요청 정보 찾기
+    const request = requests.find(r => r.id === requestId)
+    if (!request) {
+      alert('요청을 찾을 수 없습니다.')
+      return
+    }
+
     // Optimistic update
     const originalRequests = [...requests]
     setRequests(currentRequests =>
@@ -104,39 +119,56 @@ export default function AdminFormManagement() {
         timestamp: new Date().toISOString()
       })
       
-      const response = await fetch('/api/admin/approve-request', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      })
-
-      if (!response.ok) {
-        let result = { error: 'Unknown error' }
-        try {
-          result = await response.json()
-        } catch (parseError) {
-          console.error('❌ 응답 파싱 실패:', parseError)
-        }
-        
-        console.error('❌ 휴가 승인 API 오류:', {
-          url: '/api/admin/approve-request',
-          method: 'POST',
-          status: response.status,
-          statusText: response.statusText,
-          headers: headers,
-          requestBody: requestBody,
-          responseError: result.error,
-          requestId,
-          action: newStatus
+      // Supabase로 직접 승인 처리
+      const { error: updateError } = await supabase
+        .from('form_requests')
+        .update({
+          status: newStatus,
+          processed_at: new Date().toISOString(),
+          processed_by: user.id,
+          admin_note: adminNote || null
         })
-        throw new Error(result.error || `상태 업데이트에 실패했습니다. (${response.status}: ${response.statusText})`)
+        .eq('id', request.id)
+
+      if (updateError) {
+        console.error('❌ Supabase 승인 처리 오류:', updateError)
+        throw new Error('승인 처리에 실패했습니다.')
       }
+
+      // 휴가 신청인 경우 users 테이블 휴가 데이터도 업데이트
+      if (newStatus === 'approved' && request.form_type.includes('휴가')) {
+        const leaveType = request.request_data?.['휴가형태'] || '';
+        const leaveDays = parseFloat(request.request_data?.['신청일수'] || '0');
+
+        if (leaveDays > 0) {
+          let updateField = '';
+          if (leaveType === '연차') {
+            updateField = 'used_annual_days';
+          } else if (leaveType === '병가') {
+            updateField = 'used_sick_days';
+          }
+
+          if (updateField) {
+            const { data: userData } = await supabase
+              .from('users')
+              .select(updateField)
+              .eq('id', request.user_id)
+              .single();
+
+            const currentUsed = (userData as any)?.[updateField] || 0;
+            await supabase
+              .from('users')
+              .update({ [updateField]: currentUsed + leaveDays })
+              .eq('id', request.user_id);
+          }
+        }
+      }
+
+      const successMessage = newStatus === 'approved' ? '승인되었습니다.' : '반려되었습니다.';
       
-      const responseData = await response.json()
-      console.log('✅ 휴가 승인 성공:', {
+      console.log('✅ 서식 승인 성공:', {
         requestId,
-        action: newStatus,
-        response: responseData
+        action: newStatus
       })
       
       // 성공 시 자동으로 전체보기로 전환하고 목록 갱신

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { User } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
+import { supabase } from '@/lib/supabase'
 
 interface FormField {
   name: string
@@ -45,17 +46,23 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [leaveData, setLeaveData] = useState<any>(null)
 
-  // 폼 템플릿 목록 로드
+  // 폼 템플릿 목록 로드 (Supabase 직접 연동)
   const loadTemplates = useCallback(async () => {
     try {
       setLoading(true)
-      const response = await fetch('/api/form-templates')
-      if (response.ok) {
-        const data = await response.json()
-        setTemplates(data.templates)
-      } else {
+      
+      const { data, error } = await supabase
+        .from('form_templates')
+        .select('*')
+        .order('name')
+
+      if (error) {
+        console.error('Supabase form templates error:', error)
         setError('폼 템플릿을 불러올 수 없습니다.')
+        return
       }
+
+      setTemplates(data || [])
     } catch (err) {
       setError('폼 템플릿 로드 중 오류가 발생했습니다.')
       console.error('Error loading templates:', err)
@@ -64,20 +71,43 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     }
   }, [])
 
-  // 휴가 데이터 로드
+  // 휴가 데이터 로드 (Supabase 직접 연동)
   const loadLeaveData = useCallback(async () => {
     try {
-      const response = await fetch(`/api/user/leave-data?userId=${user.id}`, {
-        headers: {
-          'Authorization': `Bearer ${user.id}`
-        }
-      })
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setLeaveData(result.data)
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          id, name, department, position, hire_date,
+          annual_days, used_annual_days,
+          sick_days, used_sick_days,
+          substitute_leave_hours, compensatory_leave_hours
+        `)
+        .eq('id', user.id)
+        .single()
+
+      if (error) {
+        console.error('Supabase leave data error:', error)
+        return
+      }
+
+      const leaveInfo = {
+        user: {
+          name: data.name,
+          department: data.department,
+          position: data.position,
+          hire_date: data.hire_date
+        },
+        leave_types: {
+          annual_days: data.annual_days || 0,
+          used_annual_days: data.used_annual_days || 0,
+          sick_days: data.sick_days || 0,
+          used_sick_days: data.used_sick_days || 0,
+          substitute_leave_hours: data.substitute_leave_hours || 0,
+          compensatory_leave_hours: data.compensatory_leave_hours || 0
         }
       }
+
+      setLeaveData(leaveInfo)
     } catch (err) {
       console.error('휴가 데이터 로드 오류:', err)
     }
@@ -524,33 +554,32 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         return
       }
 
-      // 1. 서식 신청 제출
-      const response = await fetch('/api/form-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.id}`, // 로컬 테스트용 임시 인증
-        },
-        body: JSON.stringify({
-          formType: selectedTemplate.name,
-          requestData: formData
+      // 1. 서식 신청 제출 (Supabase 직접 연동)
+      const { data, error } = await supabase
+        .from('form_requests')
+        .insert({
+          user_id: user.id,
+          form_type: selectedTemplate.name,
+          request_data: formData,
+          status: 'pending',
+          created_at: new Date().toISOString()
         })
-      })
+        .select()
 
-      const result = await response.json()
-
-      if (response.ok) {
-        // 대체휴가 우선 사용 독려 메시지 비활성화
-        
-        // 2. PDF 생성 및 출력
-        await generatePDF()
-        
-        alert(`✅ ${selectedTemplate.name} 신청이 완료되었습니다!`)
-        onSuccess()
-        handleClose()
-      } else {
-        setError(result.error || '신청 처리 중 오류가 발생했습니다.')
+      if (error) {
+        console.error('Supabase form request error:', error)
+        setError('신청 처리 중 오류가 발생했습니다.')
+        return
       }
+
+      // 대체휴가 우선 사용 독려 메시지 비활성화
+      
+      // 2. PDF 생성 및 출력
+      await generatePDF()
+      
+      alert(`✅ ${selectedTemplate.name} 신청이 완료되었습니다!`)
+      onSuccess()
+      handleClose()
     } catch (err) {
       setError('신청 처리 중 오류가 발생했습니다.')
       console.error('Error submitting form:', err)

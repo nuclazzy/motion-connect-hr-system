@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 
 interface GrantSpecialLeaveModalProps {
   employee: {
@@ -50,32 +51,48 @@ export default function GrantSpecialLeaveModal({ employee, isOpen, onClose, onSu
     setError('')
 
     try {
-      const response = await fetch('/api/admin/grant-leave', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          leaveType: formData.leaveType,
-          days: days,
-          reason: formData.reason,
-          validUntil: formData.validUntil || null
-        })
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        alert(`✅ ${employee.name}님에게 ${formData.leaveType === 'compensatory' ? '보상휴가' : 
-               formData.leaveType === 'substitute' ? '대체휴가' :
-               formData.leaveType === 'special' ? '특별휴가' :
-               formData.leaveType === 'reward' ? '포상휴가' : '기타휴가'} ${days}일이 지급되었습니다.`)
-        onSuccess()
-        handleClose()
-      } else {
-        setError(result.error || '특별휴가 지급에 실패했습니다.')
+      // Supabase로 직접 휴가 부여
+      let updateData: any = {};
+      
+      if (formData.leaveType === 'compensatory') {
+        // 보상휴가는 시간 단위
+        const { data: currentData } = await supabase
+          .from('users')
+          .select('compensatory_leave_hours')
+          .eq('id', employee.id)
+          .single();
+        
+        const currentHours = currentData?.compensatory_leave_hours || 0;
+        updateData.compensatory_leave_hours = currentHours + (days * 8); // 일 단위를 시간으로 변환
+      } else if (formData.leaveType === 'substitute') {
+        // 대체휴가는 시간 단위
+        const { data: currentData } = await supabase
+          .from('users')
+          .select('substitute_leave_hours')
+          .eq('id', employee.id)
+          .single();
+        
+        const currentHours = currentData?.substitute_leave_hours || 0;
+        updateData.substitute_leave_hours = currentHours + (days * 8); // 일 단위를 시간으로 변환
       }
+
+      const { error } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', employee.id);
+
+      if (error) {
+        console.error('Supabase grant leave error:', error);
+        throw new Error('휴가 부여에 실패했습니다.');
+      }
+
+      // 성공 처리
+      alert(`✅ ${employee.name}님에게 ${formData.leaveType === 'compensatory' ? '보상휴가' : 
+             formData.leaveType === 'substitute' ? '대체휴가' :
+             formData.leaveType === 'special' ? '특별휴가' :
+             formData.leaveType === 'reward' ? '포상휴가' : '기타휴가'} ${days}일이 지급되었습니다.`)
+      onSuccess()
+      handleClose()
     } catch (err) {
       setError('서버 오류가 발생했습니다.')
       console.error('Special leave grant error:', err)
