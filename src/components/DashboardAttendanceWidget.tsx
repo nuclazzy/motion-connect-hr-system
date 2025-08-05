@@ -338,6 +338,17 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
               {loading && selectedAction === '퇴근' ? '처리중...' : '퇴근'}
             </button>
           </div>
+
+          {/* CAPS 우선 사용 안내 */}
+          <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start">
+              <AlertCircle className="h-3 w-3 text-blue-500 mr-2 mt-0.5 flex-shrink-0" />
+              <div className="text-xs text-blue-800">
+                <p className="mb-1">• <strong>평소에는 CAPS(지문인식기)로 출퇴근 처리해주세요</strong></p>
+                <p>• CAPS로 처리가 불가능한 경우에만 이 버튼을 사용해주세요</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 월별 근무시간 요약 */}

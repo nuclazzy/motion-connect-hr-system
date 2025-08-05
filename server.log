@@ -250,7 +250,9 @@
 🎉 잘못된 연차 데이터 정리 완료!
 📊 처리 결과: 수정 2건, 오류 0건
  POST /api/calendar/fix-incorrect-leave 200 in 988ms
-sers/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
+ ✓ Compiled in 309ms (507 modules)
+ ✓ Compiled in 226ms (507 modules)
+andle-externals.js
 <w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at resolve commonjs /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
@@ -594,3 +596,5 @@ sers/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-
  ✓ Compiled in 168ms (274 modules)
  ✓ Compiled in 205ms (274 modules)
  ✓ Compiled in 99ms (274 modules)
+ ✓ Compiled in 179ms (274 modules)
+ ✓ Compiled in 141ms (274 modules)
