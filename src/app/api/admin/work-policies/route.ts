@@ -12,14 +12,25 @@ export async function GET(request: NextRequest) {
 
     console.log('🔍 근무정책 조회 요청:', { policyType })
 
+    // 먼저 work_policies 테이블 존재 확인
+    const { data: tableCheck, error: tableError } = await supabase
+      .from('work_policies')
+      .select('id')
+      .limit(1)
+
+    if (tableError) {
+      if (tableError.code === 'PGRST116' || tableError.message.includes('does not exist')) {
+        return NextResponse.json({
+          success: true,
+          data: [],
+          message: 'work_policies 테이블이 아직 생성되지 않았습니다. 스키마를 먼저 실행해주세요.'
+        })
+      }
+    }
+
     let query = supabase
       .from('work_policies')
-      .select(`
-        *,
-        flexible_work_settings(*),
-        overtime_night_settings(*),
-        leave_calculation_settings(*)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (policyType) {

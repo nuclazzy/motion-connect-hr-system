@@ -223,8 +223,17 @@
  ✓ Compiled in 28ms (48 modules)
  ✓ Compiled in 145ms (507 modules)
  ✓ Compiled in 318ms (507 modules)
-ecific-user'
-<w> [webpack.cache.PackFileCacheStrategy/webpack.FileSystemInfo] Resolving '../../../../.next/server/app/api/debug/check-specific-user/route' in /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server for build dependencies doesn't lead to expected result '/Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js', but to 'Error: Can't resolve '../../../../.next/server/app/api/debug/check-specific-user/route' in '/Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server'' instead. Resolving dependencies are ignored for this path.
+ ✓ Compiled /api/admin/work-policies in 122ms (190 modules)
+🔍 근무정책 조회 요청: { policyType: null }
+❌ 근무정책 조회 오류: {
+  code: 'PGRST200',
+  details: "Searched for a foreign key relationship between 'work_policies' and 'flexible_work_settings' in the schema 'public', but no matches were found.",
+  hint: "Perhaps you meant 'work_calendar' instead of 'work_policies'.",
+  message: "Could not find a relationship between 'work_policies' and 'flexible_work_settings' in the schema cache"
+}
+ GET /api/admin/work-policies 500 in 387ms
+ ✓ Compiled in 56ms (190 modules)
+ncies are ignored for this path.
 <w>  at resolve commonjs file ../../../../.next/server/app/api/debug/check-specific-user/route (expected /Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js)
 <w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
 <w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
