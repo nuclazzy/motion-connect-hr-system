@@ -108,9 +108,18 @@ export default function FlexibleWorkNotification() {
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded mt-2">
-                  💡 정산기간 평균 주 40시간 이하 유지하며, 특정 주/일은 기준 초과 가능 (주 52시간, 일 12시간 한도)
-                </p>
+                <div className="text-xs space-y-2 mt-3">
+                  <p className="text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                    💡 정산기간 평균 주 40시간 이하 유지하며, 특정 주/일은 기준 초과 가능 (주 52시간, 일 12시간 한도)
+                  </p>
+                  <div className="bg-yellow-50 border border-yellow-200 px-2 py-2 rounded">
+                    <p className="text-yellow-800 font-medium mb-1">⚠️ 수당 지급 기준</p>
+                    <div className="text-yellow-700 space-y-1">
+                      <p>• <strong>초과근무:</strong> 계획 시간 내 + 평균 40h 이하일 때 미지급</p>
+                      <p>• <strong>야간근무:</strong> 항상 지급 (22:00~06:00, +50%)</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

@@ -152,15 +152,27 @@ export default function WorkPolicyExplanationModal({
                   <div className="w-full">
                     <h4 className="text-lg font-semibold text-orange-900 mb-4">🌙 야간근무 & ⏰ 초과근무 계산</h4>
                     
+                    {/* 탄력근무제 기간 중 중요 안내 */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                      <h5 className="font-semibold text-red-900 mb-2 flex items-center">
+                        ⚠️ 탄력근무제 기간 중 수당 지급 기준
+                      </h5>
+                      <div className="text-sm text-red-800 space-y-2">
+                        <p><strong>📊 초과근무 수당:</strong> 계획된 시간 내 근무 및 3개월 평균 주 40시간 이하일 때는 미지급</p>
+                        <p><strong>🌙 야간근무 수당:</strong> 탄력근무제와 관계없이 항상 지급 (22:00~06:00)</p>
+                      </div>
+                    </div>
+                    
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                       <div className="bg-orange-100 rounded-lg p-4">
                         <h5 className="font-semibold text-orange-900 mb-3 flex items-center">
                           <Moon className="w-4 h-4 mr-2" />
-                          야간근무 계산
+                          야간근무 수당 (항상 지급)
                         </h5>
                         <div className="text-sm text-orange-800 space-y-2">
                           <p><strong>적용 시간:</strong> 22:00 ~ 06:00</p>
-                          <p><strong>가산율:</strong> 기본 시급 + 50% 추가</p>
+                          <p><strong>가산율:</strong> 통상임금 + 50% 추가</p>
+                          <p><strong>탄력근무제 영향:</strong> 없음 (항상 지급)</p>
                           <div className="bg-orange-200 p-3 rounded mt-3">
                             <p className="font-semibold">💰 계산 예시</p>
                             <p>시급 10,000원 × 야간 4시간</p>
@@ -173,17 +185,50 @@ export default function WorkPolicyExplanationModal({
                       <div className="bg-orange-100 rounded-lg p-4">
                         <h5 className="font-semibold text-orange-900 mb-3 flex items-center">
                           <Clock className="w-4 h-4 mr-2" />
-                          초과근무 계산
+                          초과근무 수당 (조건부 지급)
                         </h5>
                         <div className="text-sm text-orange-800 space-y-2">
-                          <p><strong>적용 기준:</strong> 8시간 초과 근무 시</p>
-                          <p><strong>가산율:</strong> 기본 시급 × 150%</p>
+                          <p><strong>탄력근무제 중 미지급:</strong></p>
+                          <ul className="text-xs space-y-1 ml-4">
+                            <li>• 계획된 근무시간 내에서 근무</li>
+                            <li>• 3개월 평균 주 40시간 이하</li>
+                          </ul>
+                          <p><strong>지급되는 경우:</strong></p>
+                          <ul className="text-xs space-y-1 ml-4">
+                            <li>• 계획 시간 초과 근무</li>
+                            <li>• 3개월 평균 주 40시간 초과</li>
+                          </ul>
                           <div className="bg-orange-200 p-3 rounded mt-3">
                             <p className="font-semibold">💰 계산 예시</p>
-                            <p>10시간 근무 (8시간 + 2시간 초과)</p>
-                            <p>= (10,000원 × 8시간) + (10,000원 × 1.5 × 2시간)</p>
-                            <p className="font-bold text-orange-900">= 80,000원 + 30,000원 = 110,000원</p>
+                            <p>계획 10시간 → 실제 11시간 근무</p>
+                            <p>= 초과 1시간 × 시급 × 1.5배</p>
+                            <p className="font-bold text-orange-900">= 1시간 × 10,000원 × 1.5 = 15,000원</p>
                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 상세 설명 섹션 */}
+                    <div className="bg-white border border-orange-200 rounded-lg p-4 mb-4">
+                      <h5 className="font-semibold text-orange-900 mb-3 flex items-center">
+                        📋 탄력근무제 초과근무 수당 상세 기준
+                      </h5>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-orange-800">
+                        <div className="bg-green-50 p-3 rounded border border-green-200">
+                          <p className="font-semibold text-green-900 mb-2">✅ 수당 미지급 조건</p>
+                          <ul className="space-y-1 text-xs">
+                            <li>• 직원 대표와 합의한 근무계획표 시간 내 근무</li>
+                            <li>• 3개월 단위기간 평균 주 40시간 이하</li>
+                            <li>• 예: 10시간 계획일에 정확히 10시간 근무</li>
+                          </ul>
+                        </div>
+                        <div className="bg-red-50 p-3 rounded border border-red-200">
+                          <p className="font-semibold text-red-900 mb-2">💰 수당 지급 조건</p>
+                          <ul className="space-y-1 text-xs">
+                            <li>• 계획된 근무시간을 초과한 시간</li>
+                            <li>• 3개월 정산 후 주 평균 40시간 초과분</li>
+                            <li>• 예: 10시간 계획일에 11시간 근무 시 1시간</li>
+                          </ul>
                         </div>
                       </div>
                     </div>
