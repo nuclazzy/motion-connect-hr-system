@@ -46,19 +46,32 @@ export default function APITestPanel() {
     }
   }
 
-  // Supabase 연결 테스트 (인증 상태 확인)
+  // Supabase 연결 테스트 (쿠키 기반 인증)
   const testSupabaseConnection = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      // 현재 로그인 상태 확인
-      const response = await fetch('/api/auth/me')
+      // 쿠키에서 userId 가져오기
+      const cookies = document.cookie.split(';')
+      const userIdCookie = cookies.find(c => c.trim().startsWith('userId='))
+      const userId = userIdCookie ? userIdCookie.split('=')[1] : null
+
+      if (!userId) {
+        throw new Error('로그인이 필요합니다 (쿠키 없음)')
+      }
+
+      // Authorization 헤더와 함께 요청
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${userId}`
+        }
+      })
       const data = await response.json()
       
       if (!response.ok) {
         if (response.status === 401) {
           throw new Error('로그인이 필요합니다')
         }
-        throw new Error(`HTTP ${response.status}: ${data.message || '알 수 없는 오류'}`)
+        throw new Error(`HTTP ${response.status}: ${data.error || '알 수 없는 오류'}`)
       }
 
       const duration = Date.now() - startTime
@@ -115,8 +128,21 @@ export default function APITestPanel() {
   const testDatabaseFunctions = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      // 인증 상태 확인을 통해 DB 연결 테스트
-      const response = await fetch('/api/auth/me')
+      // 쿠키에서 userId 가져오기
+      const cookies = document.cookie.split(';')
+      const userIdCookie = cookies.find(c => c.trim().startsWith('userId='))
+      const userId = userIdCookie ? userIdCookie.split('=')[1] : null
+
+      if (!userId) {
+        throw new Error('로그인이 필요합니다 (쿠키 없음)')
+      }
+
+      // Authorization 헤더와 함께 요청
+      const response = await fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${userId}`
+        }
+      })
       
       if (response.status === 401) {
         throw new Error('로그인이 필요합니다')
