@@ -1354,7 +1354,7 @@ export default function AdminEmployeeManagement() {
                           <div className="bg-white rounded-lg p-4 border">
                             <div className="text-sm text-gray-500">총 근무시간</div>
                             <div className="text-2xl font-bold text-gray-900">
-                              {(attendanceData.summary?.total_basic_hours || 0) + (attendanceData.summary?.total_overtime_hours || 0)}시간
+                              {Math.round(((attendanceData.summary?.total_basic_hours || 0) + (attendanceData.summary?.total_overtime_hours || 0)) * 10) / 10}시간
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-4 border">
