@@ -246,42 +246,36 @@ export default function CapsUploadManager() {
 
         console.log(`🔍 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
 
-        // 2. 개별 레코드 upsert (배치 내 중복 완전 제거됨)
+        // 2. 안전한 CAPS 전용 함수 사용 (UPSERT 충돌 완전 방지)
         for (const record of uniqueRecords) {
           try {
-            // 개별 upsert 실행 (배치 충돌 방지)
+            // PostgreSQL 안전한 UPSERT 함수 호출
             const { data: upsertResult, error: upsertError } = await supabase
-              .from('attendance_records')
-              .upsert({
-                user_id: record.user_id,
-                record_date: record.record_date,
-                record_time: record.record_time,
-                record_timestamp: record.record_timestamp,
-                record_type: record.record_type,
-                reason: record.reason,
-                source: record.source,
-                is_manual: record.is_manual,
-                had_dinner: false,
-                location_lat: null,
-                location_lng: null,
-                location_accuracy: null,
-                notes: null
-              }, {
-                onConflict: 'user_id,record_timestamp,record_type',
-                ignoreDuplicates: false // 중복 시 업데이트
+              .rpc('safe_upsert_caps_record', {
+                p_user_id: record.user_id,
+                p_record_date: record.record_date,
+                p_record_time: record.record_time,
+                p_record_timestamp: record.record_timestamp,
+                p_record_type: record.record_type,
+                p_reason: record.reason,
+                p_device_id: record.device_id
               })
-              .select('id')
-              .single()
 
             if (upsertError) {
-              console.error('❌ 개별 UPSERT 오류:', upsertError, 'Record:', record)
+              console.error('❌ 안전한 UPSERT 오류:', upsertError, 'Record:', record)
               upsertErrors++
-            } else if (upsertResult) {
-              insertedCount++
-              console.log(`✅ 개별 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+            } else if (upsertResult && upsertResult.length > 0) {
+              const result = upsertResult[0]
+              if (result.success) {
+                insertedCount++
+                console.log(`✅ 안전한 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type} (${result.action_taken})`)
+              } else {
+                console.error('❌ UPSERT 함수 실패:', record)
+                upsertErrors++
+              }
             }
           } catch (error) {
-            console.error('❌ 개별 UPSERT 처리 중 예외:', error, 'Record:', record)
+            console.error('❌ 안전한 UPSERT 처리 중 예외:', error, 'Record:', record)
             upsertErrors++
           }
         }

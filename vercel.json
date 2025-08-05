@@ -2,12 +2,19 @@
   "functions": {
     "src/app/api/admin/approve-request/route.ts": {
       "maxDuration": 30
+    },
+    "src/app/api/cron/sync-holidays/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/cron/update-all-leave",
       "schedule": "0 5 1 1 *"
+    },
+    {
+      "path": "/api/cron/sync-holidays",
+      "schedule": "0 2 1 * *"
     }
   ]
 }
