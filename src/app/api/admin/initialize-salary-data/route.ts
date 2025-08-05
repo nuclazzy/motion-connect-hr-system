@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 import { supabase } from '@/lib/supabase'
 
 // 기존 직원들의 급여 데이터 초기화 API

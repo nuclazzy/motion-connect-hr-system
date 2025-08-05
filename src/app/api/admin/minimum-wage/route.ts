@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
+
 // 백업용 최저임금 데이터 (API 연동 실패 시 사용)
 const FALLBACK_MINIMUM_WAGE_DATA = {
   2024: 9860, // 2024년 최저시급 (원)

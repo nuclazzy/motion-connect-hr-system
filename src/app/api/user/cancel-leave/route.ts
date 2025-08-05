@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 import { createClient, createServiceRoleClient } from '@/lib/supabase/server'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 

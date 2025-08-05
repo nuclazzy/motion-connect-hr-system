@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+
+// Force dynamic rendering for this API route
+export const dynamic = 'force-dynamic'
 import { supabase } from '@/lib/supabase';
 
 interface GoogleEvent {

@@ -231,32 +231,60 @@ export default function CapsUploadManager() {
         errorCount: errors.length
       })
 
-      // 안전한 UPSERT 함수를 사용하여 데이터베이스에 삽입
+      // 중복 제거 후 안전한 삽입
       let insertedCount = 0
       let upsertErrors = 0
       
       if (processedRecords.length > 0) {
-        // 각 레코드를 안전한 UPSERT 함수로 개별 처리
-        for (const record of processedRecords) {
-          try {
-            const { data: resultId, error: upsertError } = await supabase
-              .rpc('safe_upsert_attendance_record', {
-                p_user_id: record.user_id,
-                p_record_date: record.record_date,
-                p_record_time: record.record_time,
-                p_record_timestamp: record.record_timestamp,
-                p_record_type: record.record_type,
-                p_reason: record.reason,
-                p_source: record.source,
-                p_is_manual: record.is_manual
-              })
+        // 1. 고유한 레코드만 필터링 (같은 배치 내 중복 완전 제거)
+        const uniqueRecords = processedRecords.filter((record, index, self) => {
+          const key = `${record.user_id}-${record.record_timestamp}-${record.record_type}`
+          return index === self.findIndex(r => 
+            `${r.user_id}-${r.record_timestamp}-${r.record_type}` === key
+          )
+        })
 
-            if (upsertError) {
-              console.error('❌ UPSERT 오류:', upsertError, 'Record:', record)
+        console.log(`🔍 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
+
+        // 2. 각 레코드를 개별적으로 처리 (더 안전한 방식)
+        for (const record of uniqueRecords) {
+          try {
+            // 먼저 기존 레코드 확인
+            const { data: existingRecord } = await supabase
+              .from('attendance_records')
+              .select('id')
+              .eq('user_id', record.user_id)
+              .eq('record_timestamp', record.record_timestamp)
+              .eq('record_type', record.record_type)
+              .single()
+
+            if (existingRecord) {
+              console.log(`⚠️ 기존 레코드 존재, 스킵: ${record.record_date} ${record.record_time} ${record.record_type}`)
+              continue
+            }
+
+            // 새 레코드 삽입
+            const { data: insertedRecord, error: insertError } = await supabase
+              .from('attendance_records')
+              .insert({
+                user_id: record.user_id,
+                record_date: record.record_date,
+                record_time: record.record_time,
+                record_timestamp: record.record_timestamp,
+                record_type: record.record_type,
+                reason: record.reason,
+                source: record.source,
+                is_manual: record.is_manual
+              })
+              .select('id')
+              .single()
+
+            if (insertError) {
+              console.error('❌ 삽입 오류:', insertError, 'Record:', record)
               upsertErrors++
-            } else if (resultId) {
+            } else if (insertedRecord) {
               insertedCount++
-              console.log(`✅ 기록 처리 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+              console.log(`✅ 기록 추가 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
             }
           } catch (error) {
             console.error('❌ 개별 레코드 처리 중 예외:', error, 'Record:', record)
