@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Calendar, Users, Plus, Download, CheckCircle, AlertTriangle } from 'lucide-react'
 import { addLeaveToEmployee, addHolidayForAllUsers, syncNaverHolidays } from '@/utils/calendarSync'
+import APITestPanel from '@/components/APITestPanel'
 
 interface SyncResult {
   success: boolean
@@ -306,10 +307,14 @@ export default function SimpleCalendarSync() {
         </div>
       )}
 
+      {/* API 연동 상태 테스트 */}
+      <APITestPanel />
+
       {/* 사용법 안내 */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h4 className="text-sm font-medium text-blue-800 mb-2">📋 사용법</h4>
         <ul className="text-sm text-blue-700 space-y-1">
+          <li>• <strong>API 테스트</strong>: 위 테스트 패널에서 모든 연동 상태를 먼저 확인하세요</li>
           <li>• <strong>개별 휴가 추가</strong>: 특정 직원의 휴가를 일별 근무시간 테이블에 직접 추가</li>
           <li>• <strong>공휴일 전체 적용</strong>: 모든 직원에게 공휴일을 8시간 유급휴가로 적용</li>
           <li>• <strong>네이버 공휴일 동기화</strong>: 네이버 API에서 이번 달 공휴일을 자동으로 가져와서 적용</li>
