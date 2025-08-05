@@ -233,16 +233,24 @@
 }
  GET /api/admin/work-policies 500 in 387ms
  ✓ Compiled in 56ms (190 modules)
-ncies are ignored for this path.
-<w>  at resolve commonjs file ../../../../.next/server/app/api/debug/check-specific-user/route (expected /Users/lewis/Desktop/HR System/motion-connect/.next/server/app/api/debug/check-specific-user/route.js)
-<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
-<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/require.js
-<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/load-components.js
-<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/server/load-components.js
-<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/utils.js
-<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/utils.js
-<w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
-<w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
+ ✓ Compiled in 356ms (507 modules)
+ ✓ Compiled in 204ms (507 modules)
+ ✓ Compiled /api/calendar/fix-incorrect-leave in 91ms (190 modules)
+🔧 잘못된 연차 데이터 정리 시작
+📋 정리할 잘못된 연차 기록: 2건
+✅ 한종운 2025-08-15 잘못된 연차 기록 삭제 완료
+✅ 한종운 2025-08-27 잘못된 연차 기록 삭제 완료
+📊 월별 통계 재계산 중...
+❌ 한종운 2025-08 월별 통계 재계산 실패: {
+  code: 'PGRST202',
+  details: 'Searched for the function public.recalculate_monthly_stats with parameters p_user_id, p_work_month or with a single unnamed json/jsonb parameter, but no matches were found in the schema cache.',
+  hint: 'Perhaps you meant to call the function public.calculate_annual_leave',
+  message: 'Could not find the function public.recalculate_monthly_stats(p_user_id, p_work_month) in the schema cache'
+}
+🎉 잘못된 연차 데이터 정리 완료!
+📊 처리 결과: 수정 2건, 오류 0건
+ POST /api/calendar/fix-incorrect-leave 200 in 988ms
+sers/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/handle-externals.js
 <w>  at file dependencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at resolve commonjs /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
@@ -584,3 +592,5 @@ ncies are ignored for this path.
  ✓ Compiled in 184ms (274 modules)
  ✓ Compiled in 79ms (274 modules)
  ✓ Compiled in 168ms (274 modules)
+ ✓ Compiled in 205ms (274 modules)
+ ✓ Compiled in 99ms (274 modules)

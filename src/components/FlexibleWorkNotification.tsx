@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Clock, Info, X, HelpCircle } from 'lucide-react'
+import { authenticatedFetch } from '@/lib/auth'
 import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
 
 interface FlexibleWorkPolicy {
@@ -37,11 +38,13 @@ export default function FlexibleWorkNotification() {
 
   const fetchWorkPolicyStatus = async () => {
     try {
-      const response = await fetch('/api/user/work-policy-status')
+      const response = await authenticatedFetch('/api/user/work-policy-status')
       const result = await response.json()
       
       if (result.success) {
         setPolicyStatus(result.data)
+      } else {
+        console.error('근무정책 상태 조회 실패:', result.error)
       }
     } catch (error) {
       console.error('근무정책 상태 조회 오류:', error)
@@ -106,7 +109,7 @@ export default function FlexibleWorkNotification() {
                   )}
                 </p>
                 <p className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded mt-2">
-                  💡 정산 주기 전체 평균이 주 40시간이 되도록 일별 근무시간을 유연하게 조정할 수 있습니다.
+                  💡 정산기간 평균 주 40시간 이하 유지하며, 특정 주/일은 기준 초과 가능 (주 52시간, 일 12시간 한도)
                 </p>
               </div>
             </div>

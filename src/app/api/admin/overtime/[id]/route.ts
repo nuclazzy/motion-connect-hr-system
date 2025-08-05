@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUserServer, isAdmin } from '@/lib/auth/server'
 
 // 초과근무 기록 승인/거절
 export async function PATCH(
@@ -12,8 +12,8 @@ export async function PATCH(
     const overtimeId = params.id
 
     // 관리자 권한 확인
-    const currentUser = await getCurrentUser()
-    if (!currentUser || currentUser.role !== 'admin') {
+    const currentUser = await getCurrentUserServer(request)
+    if (!currentUser || !isAdmin(currentUser)) {
       return NextResponse.json({
         success: false,
         error: '관리자 권한이 필요합니다.'
@@ -85,8 +85,8 @@ export async function DELETE(
     const overtimeId = params.id
 
     // 관리자 권한 확인
-    const currentUser = await getCurrentUser()
-    if (!currentUser || currentUser.role !== 'admin') {
+    const currentUser = await getCurrentUserServer(request)
+    if (!currentUser || !isAdmin(currentUser)) {
       return NextResponse.json({
         success: false,
         error: '관리자 권한이 필요합니다.'

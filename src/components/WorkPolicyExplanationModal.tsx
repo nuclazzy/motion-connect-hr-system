@@ -86,8 +86,8 @@ export default function WorkPolicyExplanationModal({
                   <div>
                     <h4 className="text-lg font-semibold text-blue-900 mb-3">💡 탄력근무제란?</h4>
                     <p className="text-blue-800 mb-4 leading-relaxed">
-                      일정 기간(보통 1개월~3개월) 동안 정산 주기 전체 평균이 주당 40시간이 되도록 하면서, 
-                      주별/일별 근무시간을 탄력적으로 조정할 수 있는 제도입니다.
+                      <strong>3개월 이내</strong>의 단위기간을 평균하여 <strong>주당 40시간 이하</strong>로 맞추면서, 
+                      특정 주/일은 기준을 초과하여 근무할 수 있는 제도입니다.
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -102,12 +102,12 @@ export default function WorkPolicyExplanationModal({
                       </div>
                       
                       <div className="bg-blue-100 rounded-lg p-4">
-                        <h5 className="font-semibold text-blue-900 mb-2">📋 운영 방식</h5>
+                        <h5 className="font-semibold text-blue-900 mb-2">📋 근로기준법 준수사항</h5>
                         <ul className="text-sm text-blue-800 space-y-1">
-                          <li>• 핵심시간(코어타임) 설정 가능</li>
-                          <li>• 최소/최대 일일 근무시간 제한</li>
-                          <li>• 정산 주기별 총 근무시간 관리</li>
-                          <li>• 초과근무는 정산 주기 종료 후 계산</li>
+                          <li>• <strong>일일 최대:</strong> 12시간 이하</li>
+                          <li>• <strong>주간 최대:</strong> 52시간 이하</li>
+                          <li>• <strong>정산기간:</strong> 3개월 이내</li>
+                          <li>• <strong>한도 초과시:</strong> 초과/야간수당 지급</li>
                         </ul>
                       </div>
                     </div>
@@ -118,18 +118,22 @@ export default function WorkPolicyExplanationModal({
                         계산 예시
                       </h5>
                       <div className="text-sm text-blue-800">
-                        <p className="mb-2"><strong>4주 탄력근무제 적용 시:</strong></p>
-                        <div className="bg-blue-50 p-3 rounded">
-                          <p>• 1주차: 30시간 근무</p>
-                          <p>• 2주차: 45시간 근무</p>
-                          <p>• 3주차: 40시간 근무</p>
-                          <p>• 4주차: 45시간 근무</p>
-                          <p className="font-semibold mt-2 text-blue-900">
-                            → 총 160시간 ÷ 4주 = 주평균 40시간 ✅ 정상
-                          </p>
-                          <p className="text-xs text-blue-700 mt-1">
-                            개별 주는 40시간과 달라도 OK, 전체 평균만 40시간이면 됨
-                          </p>
+                        <p className="mb-2"><strong>12주(3개월) 탄력근무제 적용 예시:</strong></p>
+                        <div className="bg-blue-50 p-3 rounded space-y-2">
+                          <div>
+                            <p><strong>✅ 허용되는 경우:</strong></p>
+                            <p>• 특정 주: 50시간 근무 (52시간 이하 OK)</p>
+                            <p>• 특정 일: 10시간 근무 (12시간 이하 OK)</p>
+                            <p>• 12주 평균: 39시간/주 ✅</p>
+                          </div>
+                          <div className="border-t border-blue-200 pt-2">
+                            <p><strong>❌ 위반되는 경우:</strong></p>
+                            <p>• 특정 주: 55시간 근무 (52시간 초과 ❌)</p>
+                            <p>• 특정 일: 14시간 근무 (12시간 초과 ❌)</p>
+                            <p className="text-xs text-blue-700 mt-1">
+                              → 이 경우 초과근무수당/야간수당 지급 필요
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>

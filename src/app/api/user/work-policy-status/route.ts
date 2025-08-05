@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { getCurrentUser } from '@/lib/auth'
+import { getCurrentUserServer } from '@/lib/auth/server'
 
 export const dynamic = 'force-dynamic'
 
 // 현재 사용자의 근무정책 상태 조회 API
 export async function GET(request: NextRequest) {
   try {
-    const user = await getCurrentUser()
+    const user = await getCurrentUserServer(request)
     if (!user) {
       return NextResponse.json({ 
         success: false, 

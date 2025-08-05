@@ -26,9 +26,10 @@ CREATE TABLE IF NOT EXISTS flexible_work_settings (
     core_start_time TIME, -- 핵심시간 시작
     core_end_time TIME, -- 핵심시간 종료
     min_daily_hours DECIMAL(4,1) DEFAULT 4.0, -- 최소 일일 근무시간
-    max_daily_hours DECIMAL(4,1) DEFAULT 12.0, -- 최대 일일 근무시간
-    weekly_standard_hours DECIMAL(4,1) DEFAULT 40.0, -- 주당 기준 근무시간
-    settlement_period_weeks INTEGER DEFAULT 4, -- 정산 주기 (주)
+    max_daily_hours DECIMAL(4,1) DEFAULT 12.0, -- 최대 일일 근무시간 (근로기준법)
+    max_weekly_hours DECIMAL(4,1) DEFAULT 52.0, -- 최대 주당 근무시간 (근로기준법)
+    weekly_standard_hours DECIMAL(4,1) DEFAULT 40.0, -- 주당 평균 기준시간
+    settlement_period_weeks INTEGER DEFAULT 12, -- 정산 주기 (주, 최대 3개월=12주)
     overtime_threshold DECIMAL(4,1) DEFAULT 8.0, -- 초과근무 기준시간
     is_active BOOLEAN DEFAULT true,
     notes TEXT,
