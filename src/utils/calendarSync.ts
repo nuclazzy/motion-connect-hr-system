@@ -100,10 +100,10 @@ export async function syncNaverHolidays(year: number, month: number) {
       results.push(result)
     }
 
-    return results
+    return { success: true, holidayResults: results }
   } catch (error) {
     console.error('네이버 공휴일 동기화 오류:', error)
-    return { success: false, error: error.message }
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
   }
 }
 
@@ -180,7 +180,7 @@ export async function autoSyncMonthlyData(year: number, month: number) {
     console.error('월별 동기화 오류:', error)
     return {
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : String(error)
     }
   }
 }

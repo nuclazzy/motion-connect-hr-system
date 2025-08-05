@@ -100,12 +100,19 @@ export default function SimpleCalendarSync() {
     const month = now.getMonth() + 1
 
     try {
-      const results = await syncNaverHolidays(year, month)
+      const result = await syncNaverHolidays(year, month)
       
-      setResults(prev => [...prev, {
-        success: true,
-        message: `${year}년 ${month}월 네이버 공휴일 동기화 완료 (${results.length}개 공휴일)`
-      }])
+      if (result.success && result.holidayResults && Array.isArray(result.holidayResults)) {
+        setResults(prev => [...prev, {
+          success: true,
+          message: `${year}년 ${month}월 네이버 공휴일 동기화 완료 (${result.holidayResults.length}개 공휴일)`
+        }])
+      } else {
+        setResults(prev => [...prev, {
+          success: false,
+          message: `네이버 공휴일 동기화 오류: ${result.error || '알 수 없는 오류'}`
+        }])
+      }
     } catch (error) {
       setResults(prev => [...prev, {
         success: false,
