@@ -231,7 +231,7 @@ export default function CapsUploadManager() {
         errorCount: errors.length
       })
 
-      // 중복 제거 후 안전한 삽입
+      // 안전한 UPSERT 방식으로 전환
       let insertedCount = 0
       let upsertErrors = 0
       
@@ -246,27 +246,13 @@ export default function CapsUploadManager() {
 
         console.log(`🔍 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
 
-        // 2. 각 레코드를 개별적으로 처리 (더 안전한 방식)
+        // 2. 개별 레코드 upsert (배치 내 중복 완전 제거됨)
         for (const record of uniqueRecords) {
           try {
-            // 먼저 기존 레코드 확인
-            const { data: existingRecord } = await supabase
+            // 개별 upsert 실행 (배치 충돌 방지)
+            const { data: upsertResult, error: upsertError } = await supabase
               .from('attendance_records')
-              .select('id')
-              .eq('user_id', record.user_id)
-              .eq('record_timestamp', record.record_timestamp)
-              .eq('record_type', record.record_type)
-              .single()
-
-            if (existingRecord) {
-              console.log(`⚠️ 기존 레코드 존재, 스킵: ${record.record_date} ${record.record_time} ${record.record_type}`)
-              continue
-            }
-
-            // 새 레코드 삽입
-            const { data: insertedRecord, error: insertError } = await supabase
-              .from('attendance_records')
-              .insert({
+              .upsert({
                 user_id: record.user_id,
                 record_date: record.record_date,
                 record_time: record.record_time,
@@ -274,20 +260,28 @@ export default function CapsUploadManager() {
                 record_type: record.record_type,
                 reason: record.reason,
                 source: record.source,
-                is_manual: record.is_manual
+                is_manual: record.is_manual,
+                had_dinner: false,
+                location_lat: null,
+                location_lng: null,
+                location_accuracy: null,
+                notes: null
+              }, {
+                onConflict: 'user_id,record_timestamp,record_type',
+                ignoreDuplicates: false // 중복 시 업데이트
               })
               .select('id')
               .single()
 
-            if (insertError) {
-              console.error('❌ 삽입 오류:', insertError, 'Record:', record)
+            if (upsertError) {
+              console.error('❌ 개별 UPSERT 오류:', upsertError, 'Record:', record)
               upsertErrors++
-            } else if (insertedRecord) {
+            } else if (upsertResult) {
               insertedCount++
-              console.log(`✅ 기록 추가 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+              console.log(`✅ 개별 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
             }
           } catch (error) {
-            console.error('❌ 개별 레코드 처리 중 예외:', error, 'Record:', record)
+            console.error('❌ 개별 UPSERT 처리 중 예외:', error, 'Record:', record)
             upsertErrors++
           }
         }
