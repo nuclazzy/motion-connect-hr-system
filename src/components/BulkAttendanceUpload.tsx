@@ -145,6 +145,9 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         success: true,
         message: `✅ CAPS 데이터 파싱 완료! ${parsed.length}개 레코드를 ${processed.length}개 출퇴근 기록으로 처리했습니다.`
       })
+
+      // 사용자에게 즉시 피드백 제공
+      alert(`🎉 파싱 완료!\n\n📊 ${parsed.length}개 CAPS 레코드\n📅 ${processed.length}개 출퇴근 기록으로 변환\n\n아래로 스크롤하여 "업로드" 버튼을 클릭하세요!`)
       
       if (parsed.length === 0) {
         setUploadResult({
@@ -474,12 +477,12 @@ placeholder="2025. 6. 19.	PM 4:30:33	2	7	이재혁	23		일반	퇴근	CAPS	O
           </div>
         </div>
 
-        {/* CAPS 원본 기록 미리보기 */}
-        {parsedData.length > 0 && (
-          <div className="border-2 border-green-500 rounded-lg p-4 bg-green-50">
+        {/* CAPS 원본 기록 미리보기 - 강제 표시로 디버깅 */}
+        {(parsedData.length > 0 || processedData.length > 0) && (
+          <div className="border-2 border-green-500 rounded-lg p-4 bg-green-50 mt-4">
             <h3 className="text-lg font-medium text-green-800 mb-3 flex items-center">
               <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-              ✅ CAPS 기록 파싱 결과 (총 {parsedData.length}개)
+              ✅ CAPS 기록 파싱 결과 (CAPS: {parsedData.length}개, 출퇴근: {processedData.length}개)
             </h3>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
@@ -594,14 +597,17 @@ placeholder="2025. 6. 19.	PM 4:30:33	2	7	이재혁	23		일반	퇴근	CAPS	O
               </div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-6 text-center">
               <button
                 onClick={uploadToSupabase}
                 disabled={uploading || processedData.length === 0}
-                className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="px-8 py-4 bg-green-600 text-white text-lg font-semibold rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-lg transform hover:scale-105 transition-all duration-200"
               >
-                {uploading ? '업로드 중...' : `${processedData.length}일 출퇴근 데이터 업로드`}
+                {uploading ? '📤 업로드 중...' : `🚀 ${processedData.length}일 출퇴근 데이터 업로드하기`}
               </button>
+              <p className="text-sm text-gray-600 mt-2">
+                💡 클릭하면 데이터베이스에 저장되고 근무시간이 자동 계산됩니다
+              </p>
             </div>
           </div>
         )}
