@@ -42,6 +42,8 @@ BEGIN
 END $$;
 
 -- 3. 공휴일 확인 함수 생성
+DROP FUNCTION IF EXISTS check_if_holiday(DATE);
+
 CREATE OR REPLACE FUNCTION check_if_holiday(check_date DATE)
 RETURNS TABLE (
   is_holiday BOOLEAN,
@@ -91,6 +93,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 4. 공휴일 근무시간 자동 생성 함수
+DROP FUNCTION IF EXISTS create_holiday_work_hours(UUID, DATE, VARCHAR(100));
+
 CREATE OR REPLACE FUNCTION create_holiday_work_hours(
   target_user_id UUID,
   target_date DATE,
@@ -153,6 +157,8 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 5. 모든 직원에 대해 공휴일 근무시간 일괄 생성 함수
+DROP FUNCTION IF EXISTS generate_holiday_work_hours_for_all(DATE, DATE);
+
 CREATE OR REPLACE FUNCTION generate_holiday_work_hours_for_all(
   start_date DATE,
   end_date DATE
@@ -164,7 +170,7 @@ RETURNS TABLE (
   updated_records INTEGER
 ) AS $$
 DECLARE
-  current_date DATE;
+  loop_date DATE;
   holiday_info RECORD;
   employee_record RECORD;
   date_count INTEGER := 0;
@@ -174,14 +180,14 @@ DECLARE
   existing_record RECORD;
 BEGIN
   -- 날짜 범위 순회
-  current_date := start_date;
+  loop_date := start_date;
   
-  WHILE current_date <= end_date LOOP
+  WHILE loop_date <= end_date LOOP
     date_count := date_count + 1;
     
     -- 해당 날짜가 공휴일인지 확인
     SELECT * INTO holiday_info
-    FROM check_if_holiday(current_date)
+    FROM check_if_holiday(loop_date)
     LIMIT 1;
     
     -- 공휴일이거나 주말인 경우
@@ -197,12 +203,12 @@ BEGIN
         SELECT work_status, auto_calculated INTO existing_record
         FROM daily_work_summary
         WHERE user_id = employee_record.id
-        AND work_date = current_date;
+        AND work_date = loop_date;
         
         -- 공휴일 근무시간 생성
         PERFORM create_holiday_work_hours(
           employee_record.id,
-          current_date,
+          loop_date,
           holiday_info.holiday_name
         );
         
@@ -217,7 +223,7 @@ BEGIN
       
     END IF;
     
-    current_date := current_date + INTERVAL '1 day';
+    loop_date := loop_date + INTERVAL '1 day';
   END LOOP;
   
   -- 결과 반환
@@ -230,6 +236,10 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- 6. 공휴일 데이터 자동 업데이트 트리거
+-- 기존 트리거 삭제 후 함수 삭제
+DROP TRIGGER IF EXISTS trigger_auto_update_holiday_work_hours ON holidays;
+DROP FUNCTION IF EXISTS auto_update_holiday_work_hours();
+
 CREATE OR REPLACE FUNCTION auto_update_holiday_work_hours()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -287,6 +297,9 @@ ON CONFLICT (holiday_date) DO UPDATE SET
   updated_at = NOW();
 
 -- 8. 월별 공휴일 현황 뷰 생성
+DROP VIEW IF EXISTS monthly_holiday_summary;
+DROP VIEW IF EXISTS holiday_work_status;
+
 CREATE OR REPLACE VIEW monthly_holiday_summary AS
 SELECT 
   DATE_TRUNC('month', h.holiday_date)::DATE as month,
