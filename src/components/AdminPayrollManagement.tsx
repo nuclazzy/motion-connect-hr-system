@@ -15,6 +15,7 @@ import {
 import { formatTimeWithNextDay } from '@/lib/time-utils'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
+import { getSystemSettings, type SystemSettings } from '@/lib/settings'
 
 interface Employee {
   id: string
@@ -45,8 +46,6 @@ interface WorkSummary {
   total_night_hours: number
 }
 
-const MONTHLY_STANDARD_HOURS = 209 // 월 소정근로시간
-
 export default function AdminPayrollManagement() {
   const { supabase } = useSupabase()
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -69,6 +68,7 @@ export default function AdminPayrollManagement() {
     car_allowance: '',
     bonus: ''
   })
+  const [settings, setSettings] = useState<SystemSettings | null>(null)
 
   // 직원 데이터 조회 (직접 Supabase 연동)
   const fetchEmployees = async () => {
@@ -197,18 +197,23 @@ export default function AdminPayrollManagement() {
     // 기본급 = 월급여 - 식대 - 자가운전
     const basicSalary = monthlySalary - mealAllowance - carAllowance
     
-    // 통상시급 = (기본급 + 식대 + 자가운전) / 209
-    const hourlyRate = Math.round((basicSalary + mealAllowance + carAllowance) / MONTHLY_STANDARD_HOURS)
+    // 통상시급 = (기본급 + 식대 + 자가운전) / 월 기준 근무시간
+    const monthlyHours = settings?.monthly_standard_hours || 209
+    const hourlyRate = Math.round((basicSalary + mealAllowance + carAllowance) / monthlyHours)
     
     // 근무시간 데이터
     const overtimeHours = workSummary?.total_overtime_hours || 0
     const nightHours = workSummary?.total_night_hours || 0
     
-    // 초과근무수당 = 초과근무시간 × 통상시급 × 1.5
-    const overtimePay = Math.round(overtimeHours * hourlyRate * 1.5)
+    // 수당 비율 (설정값 사용)
+    const overtimeRate = settings?.overtime_rate || 1.5
+    const nightRate = settings?.night_rate || 1.5
     
-    // 야간근무수당 = 야간근무시간 × 통상시급 × 1.5
-    const nightPay = Math.round(nightHours * hourlyRate * 1.5)
+    // 초과근무수당 = 초과근무시간 × 통상시급 × 초과근무 배율
+    const overtimePay = Math.round(overtimeHours * hourlyRate * overtimeRate)
+    
+    // 야간근무수당 = 야간근무시간 × 통상시급 × 야간근무 배율
+    const nightPay = Math.round(nightHours * hourlyRate * nightRate)
     
     // 지급액 합계 = 기본급 + 상여 + 식대 + 자가운전 + 초과수당 + 야간수당
     const totalPay = basicSalary + bonus + mealAllowance + carAllowance + overtimePay + nightPay
@@ -294,6 +299,8 @@ export default function AdminPayrollManagement() {
 
   useEffect(() => {
     fetchEmployees()
+    // 시스템 설정 로드
+    getSystemSettings().then(setSettings)
   }, [])
 
   useEffect(() => {
@@ -417,11 +424,11 @@ export default function AdminPayrollManagement() {
           <div>
             <p>• 월급여 = 연봉 ÷ 12</p>
             <p>• 기본급 = 월급여 - 식대 - 자가운전</p>
-            <p>• 통상시급 = (기본급 + 식대 + 자가운전) ÷ 209</p>
+            <p>• 통상시급 = (기본급 + 식대 + 자가운전) ÷ {settings?.monthly_standard_hours || 209}</p>
           </div>
           <div>
-            <p>• 초과근무수당 = 초과근무시간 × 통상시급 × 1.5</p>
-            <p>• 야간근무수당 = 야간근무시간 × 통상시급 × 1.5</p>
+            <p>• 초과근무수당 = 초과근무시간 × 통상시급 × {settings?.overtime_rate || 1.5}</p>
+            <p>• 야간근무수당 = 야간근무시간 × 통상시급 × {settings?.night_rate || 1.5}</p>
             <p>• 지급액 = 기본급 + 상여 + 식대 + 자가운전 + 수당</p>
           </div>
         </div>

@@ -21,6 +21,9 @@ import {
   exportSettlementToCSV,
   type QuarterlySettlement
 } from '@/lib/quarterly-settlement'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getCurrentUser } from '@/lib/auth'
+import { getSystemSettings } from '@/lib/settings'
 
 interface FlexibleWorkPeriod {
   id: string
@@ -46,6 +49,7 @@ interface SettlementSummary {
 }
 
 export default function QuarterlyFlexibleWorkManager() {
+  const { supabase } = useSupabase()
   const [periods, setPeriods] = useState<FlexibleWorkPeriod[]>([])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'periods' | 'settlement' | 'create'>('periods')
@@ -53,6 +57,7 @@ export default function QuarterlyFlexibleWorkManager() {
   const [settlementData, setSettlementData] = useState<SettlementSummary | null>(null)
   const [detailedSettlements, setDetailedSettlements] = useState<QuarterlySettlement[]>([])
   const [showDetailedView, setShowDetailedView] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   // 새 기간 생성 폼 데이터
   const [newPeriod, setNewPeriod] = useState({
@@ -66,99 +71,201 @@ export default function QuarterlyFlexibleWorkManager() {
     max_weekly_hours: 52.0
   })
 
-  // 현재 시스템에서 활성화된 탄력근로제 상태 조회
+  // 현재 시스템에서 활성화된 탄력근로제 상태 조회 (직접 Supabase 연동)
   const fetchCurrentFlexibleWorkStatus = async () => {
     try {
-      const response = await fetch('/api/admin/work-policies')
-      const data = await response.json()
-      
-      if (data.success && data.policies) {
-        // 기존 시스템의 탄력근로제 설정을 분기별로 변환
-        const flexibleWorkPolicy = data.policies.find((p: any) => p.policy_type === 'flexible_work')
-        
-        if (flexibleWorkPolicy && flexibleWorkPolicy.is_active) {
-          // 현재 활성화된 탄력근로제를 분기별 시스템으로 표시
-          const currentDate = new Date()
-          const currentQuarter = Math.ceil((currentDate.getMonth() + 1) / 3)
-          
-          setPeriods([{
-            id: 'current-active',
-            period_name: `${currentDate.getFullYear()}년 ${currentQuarter}분기 탄력근로제`,
-            start_date: '2025-06-01', // 실제 시작일
-            end_date: '2025-08-31', // 실제 종료일
-            quarter: 2, // 2분기 (6-7-8월)
-            year: 2025,
-            status: 'active',
-            settlement_completed: false,
-            employee_count: 0,
-            total_work_hours: 0,
-            avg_weekly_hours: 0
-          }])
-        }
+      // 권한 확인
+      const user = await getCurrentUser()
+      if (!user || user.role !== 'admin') {
+        console.error('관리자 권한이 필요합니다.')
+        return
       }
+      setCurrentUser(user)
+
+      // 현재 진행 중인 탄력근로제 기간 조회 (임시로 하드코딩된 데이터 사용)
+      const currentDate = new Date()
+      const currentYear = currentDate.getFullYear()
+      
+      // 2025년 2분기 (6-7-8월) 탄력근로제 기간 설정
+      const flexiblePeriod: FlexibleWorkPeriod = {
+        id: 'current-active-2025-q2',
+        period_name: '2025년 2분기 탄력근로제 (6-7-8월)',
+        start_date: '2025-06-01',
+        end_date: '2025-08-31',
+        quarter: 2,
+        year: 2025,
+        status: 'active',
+        settlement_completed: false,
+        employee_count: 0,
+        total_work_hours: 0,
+        avg_weekly_hours: 0
+      }
+      
+      setPeriods([flexiblePeriod])
+      
+      // 참여 직원 수 계산
+      const { data: employees, error: empError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('work_type', '정규직')
+      
+      if (!empError && employees) {
+        setPeriods(prev => prev.map(p => p.id === flexiblePeriod.id ? {
+          ...p,
+          employee_count: employees.length
+        } : p))
+      }
+      
     } catch (error) {
       console.error('탄력근로제 상태 조회 오류:', error)
     }
   }
 
-  // 6월 출퇴근 데이터를 기반으로 통계 계산 및 정산 수행
-  const calculateJuneStatistics = async () => {
+  // 3개월 출퇴근 데이터를 기반으로 통계 계산 및 정산 수행 (직접 Supabase 연동)
+  const calculateFlexibleWorkStatistics = async () => {
     try {
       setLoading(true)
       
-      // 6월 출퇴근 요약 데이터 조회
-      const response = await fetch('/api/attendance/summary?month=2025-06')
-      const data = await response.json()
-      
-      if (data.success && data.summaries) {
-        const summaries = data.summaries
-        
-        // 월별 근무 데이터로 변환 (6월만 있으므로 임시로 3개월 데이터 생성)
-        const monthlyData = convertAttendanceToMonthly(summaries)
-        
-        // 7월, 8월 데이터 임시 생성 (실제로는 API에서 가져와야 함)
-        const july = monthlyData.map(data => ({
-          ...data,
-          month: '7월',
-          work_days: Math.floor(data.work_days * 1.1), // 7월은 조금 더 많이
-          basic_hours: Math.floor(data.basic_hours * 1.05),
-          overtime_hours: Math.floor(data.overtime_hours * 0.9),
-          night_hours: Math.floor(data.night_hours * 1.2),
-          total_work_hours: Math.floor(data.total_work_hours * 1.05),
-          weekly_avg_hours: Math.round(data.weekly_avg_hours * 1.05 * 10) / 10
-        }))
-        
-        const august = monthlyData.map(data => ({
-          ...data,
-          month: '8월',
-          work_days: Math.floor(data.work_days * 0.95), // 8월은 휴가로 조금 적게
-          basic_hours: Math.floor(data.basic_hours * 0.9),
-          overtime_hours: Math.floor(data.overtime_hours * 1.1),
-          night_hours: Math.floor(data.night_hours * 0.8),
-          total_work_hours: Math.floor(data.total_work_hours * 0.95),
-          weekly_avg_hours: Math.round(data.weekly_avg_hours * 0.95 * 10) / 10
-        }))
-        
-        // 3개월 통합 데이터
-        const quarterlyData = [...monthlyData, ...july, ...august]
-        
-        // 정산 계산 수행
-        const settlements = calculateQuarterlySettlement(quarterlyData, 40.0, 15000)
-        const summary = calculateSettlementSummary(settlements)
-        
-        setDetailedSettlements(settlements)
-        setSettlementData(summary)
-        
-        // 현재 활성 기간 업데이트
-        setPeriods(prev => prev.map(p => p.id === 'current-active' ? {
-          ...p,
-          employee_count: summary.total_employees,
-          total_work_hours: settlements.reduce((sum, s) => sum + s.total_work_hours, 0),
-          avg_weekly_hours: summary.avg_weekly_hours
-        } : p))
+      // 권한 확인
+      if (!currentUser || currentUser.role !== 'admin') {
+        console.error('관리자 권한이 필요합니다.')
+        return
       }
+
+      // 시스템 설정 조회
+      const settings = await getSystemSettings()
+      
+      // 6-7-8월 데이터 조회 (직접 Supabase 쿼리)
+      const months = ['2025-06', '2025-07', '2025-08']
+      const allMonthlyData = []
+      
+      for (const month of months) {
+        const monthStart = `${month}-01`
+        const nextMonth = new Date(monthStart)
+        nextMonth.setMonth(nextMonth.getMonth() + 1)
+        const monthEnd = new Date(nextMonth.getTime() - 1).toISOString().split('T')[0]
+        
+        // 월별 통계 조회
+        const { data: monthlyStats, error: monthlyError } = await supabase
+          .from('monthly_work_stats')
+          .select(`
+            user_id,
+            total_work_days,
+            total_basic_hours,
+            total_overtime_hours,
+            total_night_hours,
+            users!inner(name, department, position, work_type)
+          `)
+          .eq('work_month', monthStart)
+          .eq('users.work_type', '정규직')
+        
+        if (monthlyError && monthlyError.code !== 'PGRST116') {
+          console.error(`${month} 월별 통계 조회 오류:`, monthlyError)
+          continue
+        }
+        
+        if (monthlyStats && monthlyStats.length > 0) {
+          // 월별 데이터를 탄력근무제 정산용 형태로 변환
+          const monthlyWorkData = monthlyStats.map((stat: any) => ({
+            user_id: stat.user_id,
+            user_name: stat.users?.name || '',
+            department: stat.users?.department || '',
+            position: stat.users?.position || '',
+            month: month === '2025-06' ? '6월' : month === '2025-07' ? '7월' : '8월',
+            work_days: stat.total_work_days || 0,
+            basic_hours: stat.total_basic_hours || 0,
+            overtime_hours: stat.total_overtime_hours || 0,
+            night_hours: stat.total_night_hours || 0,
+            total_work_hours: (stat.total_basic_hours || 0) + (stat.total_overtime_hours || 0),
+            weekly_avg_hours: Math.round(((stat.total_basic_hours || 0) + (stat.total_overtime_hours || 0)) / 4 * 10) / 10,
+            night_allowance_paid: (stat.total_night_hours || 0) * (settings?.night_rate || 1.5) * 15000 // 추정 야간수당
+          }))
+          
+          allMonthlyData.push(...monthlyWorkData)
+        } else {
+          console.log(`${month} 데이터 없음, 일별 데이터에서 계산 시도`)
+          
+          // 일별 데이터에서 월별 집계 계산
+          const { data: dailyStats, error: dailyError } = await supabase
+            .from('daily_work_summary')
+            .select(`
+              user_id,
+              basic_hours,
+              overtime_hours,
+              night_hours,
+              users!inner(name, department, position, work_type)
+            `)
+            .gte('work_date', monthStart)
+            .lte('work_date', monthEnd)
+            .eq('users.work_type', '정규직')
+          
+          if (!dailyError && dailyStats) {
+            // 사용자별로 집계
+            const userSummaries = new Map()
+            
+            dailyStats.forEach((daily: any) => {
+              const userId = daily.user_id
+              if (!userSummaries.has(userId)) {
+                userSummaries.set(userId, {
+                  user_id: userId,
+                  user_name: daily.users?.name || '',
+                  department: daily.users?.department || '',
+                  position: daily.users?.position || '',
+                  work_days: 0,
+                  basic_hours: 0,
+                  overtime_hours: 0,
+                  night_hours: 0
+                })
+              }
+              
+              const summary = userSummaries.get(userId)
+              summary.work_days += 1
+              summary.basic_hours += daily.basic_hours || 0
+              summary.overtime_hours += daily.overtime_hours || 0
+              summary.night_hours += daily.night_hours || 0
+            })
+            
+            // 월별 데이터로 변환
+            const monthlyWorkData = Array.from(userSummaries.values()).map((summary: any) => ({
+              ...summary,
+              month: month === '2025-06' ? '6월' : month === '2025-07' ? '7월' : '8월',
+              total_work_hours: summary.basic_hours + summary.overtime_hours,
+              weekly_avg_hours: Math.round((summary.basic_hours + summary.overtime_hours) / 4 * 10) / 10,
+              night_allowance_paid: summary.night_hours * (settings?.night_rate || 1.5) * 15000
+            }))
+            
+            allMonthlyData.push(...monthlyWorkData)
+          }
+        }
+      }
+      
+      if (allMonthlyData.length === 0) {
+        console.log('탄력근무제 기간 데이터가 없습니다.')
+        return
+      }
+      
+      // 3개월 탄력근무제 정산 계산
+      const avgHourlyRate = settings?.monthly_standard_hours ? 
+        Math.round(2500000 / settings.monthly_standard_hours) : 15000 // 임시 평균 시급
+      
+      const settlements = calculateQuarterlySettlement(allMonthlyData, 40.0, avgHourlyRate)
+      const summary = calculateSettlementSummary(settlements)
+      
+      setDetailedSettlements(settlements)
+      setSettlementData(summary)
+      
+      // 현재 활성 기간 업데이트
+      setPeriods(prev => prev.map(p => p.id === 'current-active-2025-q2' ? {
+        ...p,
+        employee_count: summary.total_employees,
+        total_work_hours: settlements.reduce((sum, s) => sum + s.total_work_hours, 0),
+        avg_weekly_hours: summary.avg_weekly_hours
+      } : p))
+      
+      console.log('✅ 탄력근무제 정산 계산 완료:', summary)
+      
     } catch (error) {
-      console.error('6월 통계 계산 오류:', error)
+      console.error('탄력근무제 통계 계산 오류:', error)
     } finally {
       setLoading(false)
     }
@@ -306,8 +413,13 @@ export default function QuarterlyFlexibleWorkManager() {
 
   useEffect(() => {
     fetchCurrentFlexibleWorkStatus()
-    calculateJuneStatistics()
   }, [])
+
+  useEffect(() => {
+    if (currentUser && periods.length > 0) {
+      calculateFlexibleWorkStatistics()
+    }
+  }, [currentUser, periods])
 
   // 분기 이름 생성
   const getQuarterName = (quarter: number) => {

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
+import BulkAttendanceUpload from '@/components/BulkAttendanceUpload'
 
 // Overtime management interfaces
 interface OvertimeRecord {
@@ -96,6 +97,7 @@ export default function AdminEmployeeManagement() {
   const [attendanceLoading, setAttendanceLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any>(null)
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState(false)
 
 
   useEffect(() => {
@@ -1316,6 +1318,15 @@ export default function AdminEmployeeManagement() {
                         >
                           출퇴근 기록 추가
                         </button>
+                        <button
+                          onClick={() => setShowBulkUploadModal(true)}
+                          className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 flex items-center space-x-2"
+                        >
+                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <span>일괄 업로드</span>
+                        </button>
                       </div>
                     </div>
 
@@ -2121,6 +2132,52 @@ export default function AdminEmployeeManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Upload Modal */}
+      {showBulkUploadModal && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-4xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">출퇴근 데이터 일괄 업로드</h3>
+              <button
+                onClick={() => setShowBulkUploadModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="max-h-96 overflow-y-auto">
+              <BulkAttendanceUpload 
+                onUploadComplete={() => {
+                  setShowBulkUploadModal(false)
+                  // 업로드 완료 후 데이터 새로고침
+                  if (selectedEmployee && activeTab === 'attendance') {
+                    fetchAttendanceData()
+                  }
+                }}
+              />
+            </div>
+            
+            <div className="mt-4 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowBulkUploadModal(false)
+                  // 업로드 완료 후 데이터 새로고침
+                  if (selectedEmployee && activeTab === 'attendance') {
+                    fetchAttendanceData()
+                  }
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,0 +1,1 @@
+/sc:implement --seq --c7 --playwright --serena --memory HR 시스템 사용자 권한 관리 개선

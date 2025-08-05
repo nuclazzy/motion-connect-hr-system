@@ -16,6 +16,7 @@ import WorkPolicyManagement from '@/components/WorkPolicyManagement'
 import QuarterlyFlexibleWorkManager from '@/components/QuarterlyFlexibleWorkManager'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
+import AdminSystemSettings from '@/components/AdminSystemSettings'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { User as UserIcon, Shield } from 'lucide-react'
 
@@ -196,6 +197,7 @@ export default function AdminDashboard() {
                   <AdminFormManagement />
                   <AdminLeaveManagement />
                   <AdminPayrollManagement />
+                  <AdminSystemSettings />
                   <WorkPolicyManagement />
                   <QuarterlyFlexibleWorkManager />
                   <AdminDocumentManagement />
