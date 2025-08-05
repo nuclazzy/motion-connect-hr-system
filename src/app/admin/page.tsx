@@ -14,6 +14,7 @@ import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import WorkPolicyManagement from '@/components/WorkPolicyManagement'
+import QuarterlyFlexibleWorkManager from '@/components/QuarterlyFlexibleWorkManager'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
 import { useSupabase } from '@/components/SupabaseProvider'
@@ -196,6 +197,7 @@ export default function AdminDashboard() {
                   <AdminFormManagement />
                   <AdminLeaveManagement />
                   <WorkPolicyManagement />
+                  <QuarterlyFlexibleWorkManager />
                   <AdminDocumentManagement />
                 </div>
               </div>

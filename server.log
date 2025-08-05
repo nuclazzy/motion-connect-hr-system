@@ -253,7 +253,8 @@
  ✓ Compiled in 309ms (507 modules)
  ✓ Compiled in 226ms (507 modules)
  ✓ Compiled in 486ms (507 modules)
-dencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
+ ✓ Compiled in 188ms (507 modules)
+m/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at file /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
 <w>  at resolve commonjs /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/build/webpack/loaders/next-swc-loader.js
  ○ Compiling /api/admin/employees ...
@@ -599,3 +600,4 @@ dencies /Users/lewis/Desktop/HR System/motion-connect/node_modules/next/dist/bui
  ✓ Compiled in 179ms (274 modules)
  ✓ Compiled in 141ms (274 modules)
  ✓ Compiled in 225ms (274 modules)
+ ✓ Compiled in 73ms (274 modules)
