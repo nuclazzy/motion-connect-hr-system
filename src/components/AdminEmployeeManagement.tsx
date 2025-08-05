@@ -461,12 +461,13 @@ export default function AdminEmployeeManagement() {
       }
 
       // daily_work_summary에서 해당 날짜 기록 조회 또는 생성
-      const { data: existingRecord, error: fetchError } = await supabase
+      const { data: existingRecordsArray, error: fetchError } = await supabase
         .from('daily_work_summary')
         .select('*')
         .eq('user_id', selectedEmployee.id)
         .eq('work_date', overtimeFormData.work_date)
-        .single()
+      
+      const existingRecord = existingRecordsArray && existingRecordsArray.length > 0 ? existingRecordsArray[0] : null
 
       let updateData = {
         overtime_hours: overtimeFormData.overtime_hours,
@@ -587,12 +588,13 @@ export default function AdminEmployeeManagement() {
       const endDateStr = endDate.toISOString().split('T')[0]
       
       // 월별 통계 조회
-      const { data: monthlyStats, error: statsError } = await supabase
+      const { data: monthlyStatsArray, error: statsError } = await supabase
         .from('monthly_work_stats')
         .select('*')
         .eq('user_id', selectedEmployee.id)
         .eq('work_month', `${year}-${String(month).padStart(2, '0')}-01`)
-        .single()
+      
+      const monthlyStats = monthlyStatsArray && monthlyStatsArray.length > 0 ? monthlyStatsArray[0] : null
       
       // 일별 상세 데이터 조회
       const { data: dailyRecords, error: dailyError } = await supabase
@@ -2020,12 +2022,13 @@ export default function AdminEmployeeManagement() {
 
                     // daily_work_summary도 함께 생성/업데이트 (PostgreSQL 트리거가 자동 처리)
                     // 하지만 수동으로도 확인하여 생성
-                    const { data: existingSummary } = await supabase
+                    const { data: existingSummaryArray } = await supabase
                       .from('daily_work_summary')
                       .select('*')
                       .eq('user_id', selectedEmployee.id)
                       .eq('work_date', editingRecord.work_date)
-                      .single()
+                    
+                    const existingSummary = existingSummaryArray && existingSummaryArray.length > 0 ? existingSummaryArray[0] : null
 
                     if (!existingSummary) {
                       await supabase
