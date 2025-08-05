@@ -88,16 +88,22 @@ export async function syncGoogleCalendarLeave(calendarEvents: any[]) {
 export async function syncNaverHolidays(year: number, month: number) {
   try {
     // 네이버 공휴일 API 호출
-    const response = await fetch(`/api/holidays/naver?year=${year}&month=${month}`)
-    const holidays = await response.json()
+    const response = await fetch(`/api/holidays/naver?year=${year}`)
+    const data = await response.json()
+
+    if (!data.success || !data.holidays) {
+      throw new Error('공휴일 데이터를 가져올 수 없습니다')
+    }
 
     const results = []
-    for (const holiday of holidays) {
-      const result = await addHolidayForAllUsers(
-        holiday.locdate.toString().replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-        holiday.dateName
-      )
-      results.push(result)
+    // data.holidays는 객체 형태: { "2025-01-01": "신정", "2025-03-01": "삼일절" }
+    for (const [dateStr, holidayName] of Object.entries(data.holidays)) {
+      // 해당 월의 공휴일만 필터링
+      const holidayDate = new Date(dateStr)
+      if (holidayDate.getMonth() + 1 === month) {
+        const result = await addHolidayForAllUsers(dateStr, String(holidayName))
+        results.push(result)
+      }
     }
 
     return { success: true, holidayResults: results }
