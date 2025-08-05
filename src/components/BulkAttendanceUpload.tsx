@@ -141,7 +141,10 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
       setProcessedData(processed)
       console.log('📋 processedData 상태 업데이트:', { newProcessedDataLength: processed.length })
       
-      setUploadResult(null)
+      setUploadResult({
+        success: true,
+        message: `✅ CAPS 데이터 파싱 완료! ${parsed.length}개 레코드를 ${processed.length}개 출퇴근 기록으로 처리했습니다.`
+      })
       
       if (parsed.length === 0) {
         setUploadResult({
@@ -473,10 +476,10 @@ placeholder="2025. 6. 19.	PM 4:30:33	2	7	이재혁	23		일반	퇴근	CAPS	O
 
         {/* CAPS 원본 기록 미리보기 */}
         {parsedData.length > 0 && (
-          <div className="border border-gray-200 rounded-lg p-4">
-            <h3 className="text-lg font-medium text-gray-800 mb-3 flex items-center">
+          <div className="border-2 border-green-500 rounded-lg p-4 bg-green-50">
+            <h3 className="text-lg font-medium text-green-800 mb-3 flex items-center">
               <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-              CAPS 기록 파싱 결과
+              ✅ CAPS 기록 파싱 결과 (총 {parsedData.length}개)
             </h3>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
@@ -605,11 +608,11 @@ placeholder="2025. 6. 19.	PM 4:30:33	2	7	이재혁	23		일반	퇴근	CAPS	O
 
         {/* 결과 메시지 */}
         {uploadResult && (
-          <div className={`p-4 rounded-lg border ${
+          <div className={`p-4 rounded-lg border-2 ${
             uploadResult.success 
-              ? 'bg-green-50 border-green-200 text-green-800' 
-              : 'bg-red-50 border-red-200 text-red-800'
-          }`}>
+              ? 'bg-green-100 border-green-400 text-green-900' 
+              : 'bg-red-100 border-red-400 text-red-900'
+          } mb-4`} style={{ position: 'sticky', top: 0, zIndex: 10 }}>
             <div className="flex items-center">
               {uploadResult.success ? (
                 <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
