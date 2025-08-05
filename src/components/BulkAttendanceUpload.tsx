@@ -398,19 +398,20 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
       let errorCount = 0
       const errors = []
 
-      // attendance_records 업로드 (CAPS 원본 기록)
+      // attendance_records 업로드 (ON CONFLICT를 사용한 효율적인 upsert)
       if (attendanceRecords.length > 0) {
-        const { error: attendanceError } = await supabase
+        const { data, error: attendanceError } = await supabase
           .from('attendance_records')
           .upsert(attendanceRecords, {
             onConflict: 'user_id,record_timestamp,record_type'
           })
+          .select()
         
         if (attendanceError) {
           errors.push(`CAPS 기록 업로드 오류: ${attendanceError.message}`)
           errorCount += attendanceRecords.length
         } else {
-          successCount += attendanceRecords.length
+          successCount += data?.length || attendanceRecords.length
         }
       }
 
