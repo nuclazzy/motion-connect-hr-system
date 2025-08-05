@@ -224,11 +224,9 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
       const date = new Date(dateStr + 'T00:00:00')
       date.setHours(hours, minutes, seconds, 0)
       
-      // 🚨 다음날 새벽 기록 감지 및 처리
-      // 새벽 6시 이전 기록은 이전 근무일의 연장으로 간주
-      if (!isPM && hours < 6 && hours >= 0) {
-        date.setDate(date.getDate() + 1)
-      }
+      // 🚨 야간 근무 처리를 위한 로직 제거
+      // 실제 날짜와 시간을 그대로 사용
+      // 출퇴근 매칭 로직에서 날짜를 넘어가는 경우를 처리
       
       return date
       
@@ -241,55 +239,88 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
   
   // CAPS 기록을 일별 출퇴근으로 그룹화 및 처리
   const processCapsRecords = (records: CapsRecord[]): ProcessedAttendance[] => {
-    // 직원별, 날짜별로 그룹화
-    const groupedByEmployee = new Map<string, Map<string, CapsRecord[]>>()
+    // 직원별로 모든 기록을 시간순으로 정렬
+    const groupedByEmployee = new Map<string, CapsRecord[]>()
     
     for (const record of records) {
       if (!groupedByEmployee.has(record.name)) {
-        groupedByEmployee.set(record.name, new Map())
+        groupedByEmployee.set(record.name, [])
       }
-      
-      const employeeRecords = groupedByEmployee.get(record.name)!
-      const recordDate = record.timestamp.toISOString().split('T')[0] // 실제 근무일 기준
-      
-      if (!employeeRecords.has(recordDate)) {
-        employeeRecords.set(recordDate, [])
-      }
-      
-      employeeRecords.get(recordDate)!.push(record)
+      groupedByEmployee.get(record.name)!.push(record)
     }
     
-    // 각 직원의 일별 기록을 출퇴근 시간으로 처리
+    // 각 직원의 기록을 처리
     const processed: ProcessedAttendance[] = []
     
-    for (const [employeeName, dateRecords] of groupedByEmployee) {
-      for (const [date, dayRecords] of dateRecords) {
-        // 시간순 정렬
-        dayRecords.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+    for (const [employeeName, employeeRecords] of groupedByEmployee) {
+      // 시간순 정렬
+      employeeRecords.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
+      
+      // 출근-퇴근 쌍을 찾기
+      let i = 0
+      while (i < employeeRecords.length) {
+        const record = employeeRecords[i]
         
-        // 출근/퇴근 시간 계산 (caps-record-processor 로직 적용)
-        const checkInRecords = dayRecords.filter(r => ['출근', '해제'].includes(r.mode))
-        const checkOutRecords = dayRecords.filter(r => ['퇴근', '세트'].includes(r.mode))
-        
-        // 마지막 출입 기록 처리
-        const lastEntryRecord = dayRecords.filter(r => r.mode === '출입').pop()
-        if (lastEntryRecord && checkOutRecords.length === dayRecords.filter(r => r.mode === '세트').length) {
-          // 마지막이 출입이고 그 전에 세트가 있다면, 그 세트를 퇴근으로 사용
-          const previousSet = dayRecords.filter(r => r.mode === '세트' && r.timestamp < lastEntryRecord.timestamp).pop()
-          if (previousSet) {
-            checkOutRecords.push(previousSet)
+        // 출근 기록 찾기
+        if (['출근', '해제'].includes(record.mode)) {
+          let checkInTime = record.timestamp
+          let checkInDate = record.date
+          let checkOutTime: Date | undefined = undefined
+          let checkOutRecord: CapsRecord | undefined = undefined
+          
+          // 다음 출근 기록 또는 퇴근 기록찾기
+          let j = i + 1
+          while (j < employeeRecords.length) {
+            const nextRecord = employeeRecords[j]
+            
+            // 퇴근 기록을 찾으면
+            if (['퇴근', '세트'].includes(nextRecord.mode)) {
+              checkOutTime = nextRecord.timestamp
+              checkOutRecord = nextRecord
+              break
+            }
+            
+            // 다른 출근 기록을 만나면 현재 출근에 대한 퇴근이 없는 것으로 간주
+            if (['출근', '해제'].includes(nextRecord.mode)) {
+              break
+            }
+            
+            j++
           }
+          
+          // 근무일자는 출근 시간 기준으로 결정
+          const workDate = checkInDate
+          
+          const attendance: ProcessedAttendance = {
+            name: employeeName,
+            date: workDate,
+            records: checkOutRecord ? [record, checkOutRecord] : [record],
+            checkIn: checkInTime,
+            checkOut: checkOutTime
+          }
+          
+          // 디버깅 로그
+          if (checkInTime && checkOutTime) {
+            const workMinutes = (checkOutTime.getTime() - checkInTime.getTime()) / 1000 / 60
+            console.log(`✅ ${employeeName} ${workDate}:`, {
+              checkIn: checkInTime.toLocaleString(),
+              checkOut: checkOutTime.toLocaleString(),
+              totalMinutes: workMinutes,
+              totalHours: (workMinutes / 60).toFixed(1)
+            })
+          }
+          
+          processed.push(attendance)
+          
+          // 처리된 기록은 건너뛰기
+          if (checkOutRecord) {
+            i = j + 1
+          } else {
+            i++
+          }
+        } else {
+          i++
         }
-        
-        const attendance: ProcessedAttendance = {
-          name: employeeName,
-          date: date,
-          records: dayRecords,
-          checkIn: checkInRecords.length > 0 ? checkInRecords[0].timestamp : undefined,
-          checkOut: checkOutRecords.length > 0 ? checkOutRecords[checkOutRecords.length - 1].timestamp : undefined
-        }
-        
-        processed.push(attendance)
       }
     }
     
@@ -370,12 +401,13 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         }
         
         if (attendance.checkOut) {
-          const checkOutDate = attendance.checkOut.toISOString().split('T')[0]
+          // 퇴근 날짜는 출근일 기준으로 저장 (야간 근무 대응)
+          const checkOutRecordDate = attendance.checkIn ? attendance.checkIn.toISOString().split('T')[0] : attendance.checkOut.toISOString().split('T')[0]
           const checkOutTime = attendance.checkOut.toTimeString().split(' ')[0]
           
           attendanceRecords.push({
             user_id: userId,
-            record_date: checkOutDate,
+            record_date: checkOutRecordDate, // 출근일 기준으로 저장
             record_time: checkOutTime,
             record_timestamp: attendance.checkOut.toISOString(),
             record_type: '퇴근',
