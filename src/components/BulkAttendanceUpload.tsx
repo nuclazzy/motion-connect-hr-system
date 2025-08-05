@@ -345,27 +345,48 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
           continue
         }
 
-        // 모든 CAPS 기록을 개별적으로 저장
-        for (const record of attendance.records) {
-          const recordDate = record.timestamp.toISOString().split('T')[0]
-          const recordTime = record.timestamp.toTimeString().split(' ')[0]
+        // 출근/퇴근 기록만 저장 (데이터베이스 CHECK 제약조건에 맞게)
+        if (attendance.checkIn) {
+          const checkInDate = attendance.checkIn.toISOString().split('T')[0]
+          const checkInTime = attendance.checkIn.toTimeString().split(' ')[0]
           
           attendanceRecords.push({
             user_id: userId,
-            record_date: recordDate,
-            record_time: recordTime,
-            record_timestamp: record.timestamp.toISOString(),
-            record_type: record.mode, // 출근/퇴근/해제/세트/출입 그대로 저장
-            reason: `CAPS ${record.auth} 기록`,
+            record_date: checkInDate,
+            record_time: checkInTime,
+            record_timestamp: attendance.checkIn.toISOString(),
+            record_type: '출근',
+            reason: `CAPS 일괄 업로드`,
             source: 'caps_bulk_upload',
             is_manual: true,
             approved_by: currentUser.id,
             approved_at: new Date().toISOString(),
-            // 추가 메타데이터
             location_lat: null,
             location_lng: null,
             location_accuracy: null,
-            notes: `단말기: ${record.terminalId}, 사용자ID: ${record.userId}, 사원번호: ${record.employeeNo}`
+            notes: `${attendance.records.length}개 CAPS 기록 중 첫 출근 기록`
+          })
+        }
+        
+        if (attendance.checkOut) {
+          const checkOutDate = attendance.checkOut.toISOString().split('T')[0]
+          const checkOutTime = attendance.checkOut.toTimeString().split(' ')[0]
+          
+          attendanceRecords.push({
+            user_id: userId,
+            record_date: checkOutDate,
+            record_time: checkOutTime,
+            record_timestamp: attendance.checkOut.toISOString(),
+            record_type: '퇴근',
+            reason: `CAPS 일괄 업로드`,
+            source: 'caps_bulk_upload',
+            is_manual: true,
+            approved_by: currentUser.id,
+            approved_at: new Date().toISOString(),
+            location_lat: null,
+            location_lng: null,
+            location_accuracy: null,
+            notes: `${attendance.records.length}개 CAPS 기록 중 마지막 퇴근 기록`
           })
         }
         
