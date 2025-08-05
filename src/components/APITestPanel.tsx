@@ -46,25 +46,28 @@ export default function APITestPanel() {
     }
   }
 
-  // Supabase 연결 테스트
+  // Supabase 연결 테스트 (인증 상태 확인)
   const testSupabaseConnection = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      const response = await fetch('/api/admin/employees-simple')
+      // 현재 로그인 상태 확인
+      const response = await fetch('/api/auth/me')
       const data = await response.json()
       
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('로그인이 필요합니다')
+        }
         throw new Error(`HTTP ${response.status}: ${data.message || '알 수 없는 오류'}`)
       }
 
-      const userCount = Array.isArray(data) ? data.length : 0
       const duration = Date.now() - startTime
 
       return {
         name: 'Supabase 연결',
         status: 'success',
-        message: `${userCount}명 직원 데이터 조회 성공`,
-        data: data,
+        message: `인증 성공 (${data.user?.name || '사용자'} - ${data.user?.role || 'employee'})`,
+        data: { authenticated: true, user: data.user?.name, role: data.user?.role },
         duration
       }
     } catch (error) {
@@ -112,8 +115,12 @@ export default function APITestPanel() {
   const testDatabaseFunctions = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      // 간단한 RPC 호출로 함수 존재 확인 (에러가 발생하면 함수가 없는 것)
-      const response = await fetch('/api/admin/employees-simple')
+      // 인증 상태 확인을 통해 DB 연결 테스트
+      const response = await fetch('/api/auth/me')
+      
+      if (response.status === 401) {
+        throw new Error('로그인이 필요합니다')
+      }
       
       if (!response.ok) {
         throw new Error('데이터베이스 연결 실패')
@@ -124,14 +131,14 @@ export default function APITestPanel() {
       return {
         name: '데이터베이스 함수',
         status: 'success',
-        message: 'SIMPLE_CALENDAR_SYNC.sql 함수들이 준비되어 있습니다',
+        message: 'DB 연결 성공 - SIMPLE_CALENDAR_SYNC.sql 실행 필요',
         duration
       }
     } catch (error) {
       return {
         name: '데이터베이스 함수',
         status: 'error',
-        message: 'SIMPLE_CALENDAR_SYNC.sql을 Supabase에서 실행해주세요',
+        message: error instanceof Error ? error.message : 'SIMPLE_CALENDAR_SYNC.sql을 Supabase에서 실행해주세요',
         duration: Date.now() - startTime
       }
     }
