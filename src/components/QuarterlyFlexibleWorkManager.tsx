@@ -415,11 +415,12 @@ export default function QuarterlyFlexibleWorkManager() {
     fetchCurrentFlexibleWorkStatus()
   }, [])
 
-  useEffect(() => {
-    if (currentUser && periods.length > 0) {
+  // 통계 계산은 수동으로만 실행하도록 변경 (무한 루프 방지)
+  const handleCalculateStatistics = () => {
+    if (currentUser && periods.length > 0 && !loading) {
       calculateFlexibleWorkStatistics()
     }
-  }, [currentUser, periods])
+  }
 
   // 분기 이름 생성
   const getQuarterName = (quarter: number) => {
@@ -494,7 +495,16 @@ export default function QuarterlyFlexibleWorkManager() {
         <div className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-900">탄력근로제 기간 목록</h3>
-            {loading && <div className="text-sm text-gray-500">통계 계산 중...</div>}
+            <div className="flex items-center space-x-2">
+              {loading && <div className="text-sm text-gray-500">계산 중...</div>}
+              <button
+                onClick={handleCalculateStatistics}
+                disabled={loading || !currentUser || periods.length === 0}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 disabled:opacity-50"
+              >
+                통계 계산
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-4">

@@ -13,7 +13,7 @@ import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import WorkPolicyManagement from '@/components/WorkPolicyManagement'
-import QuarterlyFlexibleWorkManager from '@/components/QuarterlyFlexibleWorkManager'
+import SimpleFlexibleWorkSettings from '@/components/SimpleFlexibleWorkSettings'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
 import AdminSystemSettings from '@/components/AdminSystemSettings'
@@ -199,7 +199,7 @@ export default function AdminDashboard() {
                   <AdminPayrollManagement />
                   <AdminSystemSettings />
                   <WorkPolicyManagement />
-                  <QuarterlyFlexibleWorkManager />
+                  <SimpleFlexibleWorkSettings />
                   <AdminDocumentManagement />
                 </div>
               </div>

@@ -143,13 +143,34 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
     }
   }
   
-  // 날짜+시간을 실제 타임스탬프로 변환
+  // 날짜+시간을 실제 타임스탬프로 변환 (개선된 버전)
   const parseCapsDateTime = (dateStr: string, timeStr: string): Date => {
     try {
-      // "PM 4:30:33" 또는 "AM 10:14:23" 파싱
-      const match = timeStr.match(/(AM|PM) (\d{1,2}):(\d{2}):(\d{2})/)
+      let normalizedTimeStr = timeStr.trim()
+      
+      // 한국어 시간 형식 처리
+      if (normalizedTimeStr.includes('오전')) {
+        normalizedTimeStr = normalizedTimeStr.replace('오전 ', 'AM ')
+      } else if (normalizedTimeStr.includes('오후')) {
+        normalizedTimeStr = normalizedTimeStr.replace('오후 ', 'PM ')
+      }
+      
+      // 시간 파싱 패턴들
+      let match = normalizedTimeStr.match(/(AM|PM)\s+(\d{1,2}):(\d{2}):(\d{2})/)
+      
       if (!match) {
-        throw new Error(`시간 형식 오류: ${timeStr}`)
+        // 24시간 형식도 시도 (HH:MM:SS)
+        const timeOnlyMatch = normalizedTimeStr.match(/^(\d{1,2}):(\d{2}):(\d{2})$/)
+        if (timeOnlyMatch) {
+          const hours = parseInt(timeOnlyMatch[1])
+          const minutes = parseInt(timeOnlyMatch[2])
+          const seconds = parseInt(timeOnlyMatch[3])
+          
+          const date = new Date(dateStr + 'T00:00:00')
+          date.setHours(hours, minutes, seconds, 0)
+          return date
+        }
+        throw new Error(`지원하지 않는 시간 형식: ${timeStr}`)
       }
       
       const isPM = match[1] === 'PM'
@@ -164,18 +185,18 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
       const date = new Date(dateStr + 'T00:00:00')
       date.setHours(hours, minutes, seconds, 0)
       
-      // 🚨 다음날 새벽 기록 감지 (AM 6:59:11 같은 경우)
+      // 🚨 다음날 새벽 기록 감지 및 처리
       // 새벽 6시 이전 기록은 이전 근무일의 연장으로 간주
       if (!isPM && hours < 6 && hours >= 0) {
-        // 다음날 새벽이므로 하루 뒤로 설정
         date.setDate(date.getDate() + 1)
       }
       
       return date
       
     } catch (error) {
-      console.error('시간 파싱 오류:', timeStr, error)
-      return new Date(dateStr + 'T00:00:00')
+      console.error(`시간 파싱 오류 [${timeStr}]:`, error)
+      // 기본값으로 현재 날짜 반환
+      return new Date(dateStr + 'T09:00:00')
     }
   }
   
