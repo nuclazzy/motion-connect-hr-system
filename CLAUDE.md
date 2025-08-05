@@ -322,9 +322,89 @@ All rights reserved.
 
 ---
 
-## 🎯 최신 업데이트 (v2.0.0)
+## 🚨 개발 지침 및 아키텍처 원칙
 
-### 2025년 8월 4일 배포
+### ⚠️ 중요: Supabase 직접 연동 사용 원칙
+
+**더 이상 API route 파일 (route.ts)을 생성하지 마세요.**
+
+본 시스템은 **직접 Supabase 클라이언트 연동** 방식으로 전환되었습니다. 모든 백엔드 기능은 다음 원칙을 따라 구현해야 합니다:
+
+#### 📋 구현 방식
+
+1. **Supabase Provider 사용**
+   ```typescript
+   import { useSupabase } from '@/components/SupabaseProvider'
+   
+   export default function MyComponent() {
+     const { supabase } = useSupabase()
+     // 직접 supabase 클라이언트 사용
+   }
+   ```
+
+2. **데이터베이스 직접 접근**
+   ```typescript
+   // ✅ 올바른 방식
+   const { data, error } = await supabase
+     .from('users')
+     .select('*')
+     .eq('id', userId)
+   
+   // ❌ 피해야 할 방식
+   const response = await fetch('/api/users')
+   ```
+
+3. **인증 처리**
+   ```typescript
+   import { getCurrentUser } from '@/lib/auth'
+   
+   const currentUser = await getCurrentUser()
+   if (!currentUser || currentUser.role !== 'admin') {
+     // 권한 체크
+   }
+   ```
+
+#### 🎯 장점
+
+- **성능 향상**: HTTP 오버헤드 제거
+- **타입 안정성**: TypeScript 완전 지원
+- **실시간 기능**: Supabase Realtime 활용 가능
+- **단순한 아키텍처**: 불필요한 중간 계층 제거
+- **에러 처리**: 데이터베이스 레벨에서 직접 처리
+
+#### 📁 기존 변환 완료 컴포넌트
+
+- ✅ `AdminPayrollManagement.tsx` - 급여 관리
+- ✅ `DashboardAttendanceWidget.tsx` - 출퇴근 위젯
+- ✅ `AttendanceRecorder.tsx` - 출퇴근 기록
+
+#### 🔄 변환 대상 컴포넌트
+
+나머지 컴포넌트들도 동일한 방식으로 변환 예정:
+- `AdminAttendanceManagement.tsx`
+- `FormApplicationModal.tsx`
+- `AdminEmployeeManagement.tsx`
+- 기타 20여개 컴포넌트
+
+### 📝 개발 시 주의사항
+
+- 새로운 기능 개발 시 반드시 **직접 Supabase 연동** 방식 사용
+- API route 파일 생성 금지
+- 기존 route.ts 파일은 점진적으로 제거 예정
+- 컴포넌트에서 `useSupabase()` 훅 활용
+
+---
+
+## 🎯 최신 업데이트 (v2.1.0)
+
+### 2025년 8월 5일 배포 - 아키텍처 개선
+- ✅ Supabase 직접 연동 방식으로 전환
+- ✅ API route 의존성 제거 (진행 중)
+- ✅ AdminPayrollManagement 직접 연동 완료
+- ✅ DashboardAttendanceWidget 직접 연동 완료
+- ✅ AttendanceRecorder 직접 연동 완료
+
+### 2025년 8월 4일 배포 (v2.0.0)
 - ✅ 출퇴근 기록 시스템 완전 구현
 - ✅ Google Apps Script 웹앱 기능 완전 이전
 - ✅ 자동 근무시간 계산 시스템

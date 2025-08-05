@@ -16,6 +16,7 @@ import {
   Upload
 } from 'lucide-react'
 import { getCurrentUser, checkPermission, type User as AuthUser } from '@/lib/auth'
+import { useSupabase } from '@/components/SupabaseProvider'
 import CapsUploadManager from './CapsUploadManager'
 
 interface Employee {
@@ -90,16 +91,47 @@ export default function AdminAttendanceManagement() {
   // 직원 목록 조회
   const fetchEmployees = async () => {
     try {
-      const response = await fetch('/api/admin/employees')
-      const data = await response.json()
+      console.log('👥 관리자 - 전체 직원 목록 조회 요청')
       
-      if (data.success) {
-        setEmployees(data.data || [])
-      } else {
-        console.error('직원 목록 조회 실패:', data.error)
+      const { supabase } = useSupabase()
+
+      // 전체 직원 정보 조회
+      const { data: employees, error } = await supabase
+        .from('users')
+        .select(`
+          id,
+          name,
+          email,
+          department,
+          position,
+          phone,
+          start_date,
+          role,
+          salary,
+          hourly_rate,
+          annual_leave_days,
+          used_leave_days,
+          remaining_leave_days,
+          created_at
+        `)
+        .order('department', { ascending: true })
+        .order('name', { ascending: true })
+
+      if (error) {
+        console.error('❌ 직원 목록 조회 오류:', error)
+        alert('직원 목록 조회에 실패했습니다.')
+        return
       }
+
+      console.log('✅ 직원 목록 조회 성공:', {
+        count: employees?.length || 0,
+        departments: [...new Set(employees?.map(emp => emp.department))].length
+      })
+
+      setEmployees(employees || [])
     } catch (error) {
-      console.error('직원 목록 조회 오류:', error)
+      console.error('❌ 직원 목록 조회 오류:', error)
+      alert('직원 목록 조회 중 오류가 발생했습니다.')
     }
   }
 
@@ -107,36 +139,71 @@ export default function AdminAttendanceManagement() {
   const fetchAttendanceRecords = async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        start_date: selectedDate,
-        end_date: selectedDate,
-        limit: '100'
+      console.log('📋 출퇴근 기록 조회 요청:', {
+        selectedDate,
+        filterType,
+        searchTerm
       })
 
-      if (filterType !== 'all' && filterType !== 'missing') {
-        params.append('record_type', filterType)
+      const { supabase } = useSupabase()
+
+      let query = supabase
+        .from('attendance_records')
+        .select(`
+          id,
+          user_id,
+          record_date,
+          record_time,
+          record_timestamp,
+          record_type,
+          reason,
+          location_lat,
+          location_lng,
+          source,
+          had_dinner,
+          is_manual,
+          created_at,
+          users(name, department, position)
+        `)
+        .order('record_timestamp', { ascending: false })
+        .limit(100)
+
+      // 날짜 필터 적용
+      query = query.gte('record_date', selectedDate)
+      query = query.lte('record_date', selectedDate)
+
+      // 기록 유형 필터 적용
+      if (filterType !== 'all' && filterType !== 'missing' && ['출근', '퇴근'].includes(filterType)) {
+        query = query.eq('record_type', filterType)
       }
 
-      const response = await fetch(`/api/attendance/record?${params}`)
-      const data = await response.json()
-      
-      if (data.success) {
-        let filteredRecords = data.data || []
-        
-        // 검색어 필터링
-        if (searchTerm) {
-          filteredRecords = filteredRecords.filter((record: AttendanceRecord) =>
-            record.users.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            record.users.department.toLowerCase().includes(searchTerm.toLowerCase())
-          )
-        }
-        
-        setRecords(filteredRecords)
-      } else {
-        console.error('출퇴근 기록 조회 실패:', data.error)
+      const { data, error } = await query
+
+      if (error) {
+        console.error('❌ 출퇴근 기록 조회 오류:', error)
+        alert('출퇴근 기록 조회에 실패했습니다.')
+        return
       }
+
+      let filteredRecords = data || []
+      
+      // 검색어 필터링
+      if (searchTerm) {
+        filteredRecords = filteredRecords.filter((record: any) =>
+          record.users?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          record.users?.department?.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      }
+
+      console.log('✅ 출퇴근 기록 조회 성공:', {
+        count: filteredRecords.length,
+        date_range: selectedDate
+      })
+
+      setRecords(filteredRecords as unknown as AttendanceRecord[])
     } catch (error) {
-      console.error('출퇴근 기록 조회 오류:', error)
+      console.error('❌ 출퇴근 기록 조회 오류:', error)
+      alert('출퇴근 기록 조회 중 오류가 발생했습니다.')
     } finally {
       setLoading(false)
     }
@@ -155,36 +222,110 @@ export default function AdminAttendanceManagement() {
       return
     }
 
+    if (!['출근', '퇴근'].includes(missingFormData.record_type)) {
+      alert('기록 유형이 올바르지 않습니다.')
+      return
+    }
+
     try {
-      const response = await fetch('/api/attendance/missing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...missingFormData,
-          admin_user_id: currentUser.id
-        }),
+      console.log('➕ 누락 기록 추가 요청:', {
+        user_id: missingFormData.user_id,
+        date_string: missingFormData.date_string,
+        time_string: missingFormData.time_string,
+        record_type: missingFormData.record_type,
+        admin_user_id: currentUser.id
       })
 
-      const data = await response.json()
+      const { supabase } = useSupabase()
 
-      if (data.success) {
-        alert(data.message)
-        setShowMissingForm(false)
-        setMissingFormData({
-          user_id: '',
-          date_string: '',
-          time_string: '',
-          record_type: '출근',
-          reason: ''
-        })
-        fetchAttendanceRecords()
-      } else {
-        alert(`추가 실패: ${data.error}`)
+      // 대상 사용자 확인
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department')
+        .eq('id', missingFormData.user_id)
+        .single()
+
+      if (userError || !user) {
+        alert('사용자를 찾을 수 없습니다.')
+        return
       }
+
+      // 날짜와 시간 파싱
+      const [year, month, day] = missingFormData.date_string.split('-').map(Number)
+      const [hours, minutes] = missingFormData.time_string.split(':').map(Number)
+      
+      if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+        alert('날짜 또는 시간 형식이 올바르지 않습니다.')
+        return
+      }
+
+      const timestamp = new Date(year, month - 1, day, hours, minutes)
+      
+      // 미래 시간 검증
+      if (timestamp > new Date()) {
+        alert('미래 시간으로는 기록할 수 없습니다.')
+        return
+      }
+
+      // 중복 기록 검사
+      const { data: existingRecord } = await supabase
+        .from('attendance_records')
+        .select('id, record_time')
+        .eq('user_id', missingFormData.user_id)
+        .eq('record_date', missingFormData.date_string)
+        .eq('record_type', missingFormData.record_type)
+        .single()
+
+      if (existingRecord) {
+        alert(`${missingFormData.record_type} 기록이 이미 존재합니다. (${existingRecord.record_time})`)
+        return
+      }
+
+      // 누락 기록 추가
+      const { data: newRecord, error: insertError } = await supabase
+        .from('attendance_records')
+        .insert({
+          user_id: missingFormData.user_id,
+          record_date: missingFormData.date_string,
+          record_time: missingFormData.time_string,
+          record_timestamp: timestamp.toISOString(),
+          record_type: missingFormData.record_type,
+          reason: missingFormData.reason?.trim() || '누락 기록 보충',
+          source: 'manual',
+          is_manual: true,
+          approved_by: currentUser.id,
+          approved_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('❌ 누락 기록 추가 오류:', insertError)
+        alert('누락 기록 추가에 실패했습니다.')
+        return
+      }
+
+      console.log('✅ 누락 기록 추가 성공:', {
+        user: user.name,
+        type: missingFormData.record_type,
+        date: missingFormData.date_string,
+        time: missingFormData.time_string
+      })
+
+      alert(`✅ ${user.name}님의 ${missingFormData.record_type} 기록이 추가되었습니다. (${missingFormData.date_string} ${missingFormData.time_string})`)
+      
+      setShowMissingForm(false)
+      setMissingFormData({
+        user_id: '',
+        date_string: '',
+        time_string: '',
+        record_type: '출근',
+        reason: ''
+      })
+      fetchAttendanceRecords()
+
     } catch (error) {
-      console.error('누락 기록 추가 오류:', error)
+      console.error('❌ 누락 기록 추가 오류:', error)
       alert('누락 기록 추가 중 오류가 발생했습니다.')
     }
   }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Clock, MapPin, Coffee, User, Calendar, AlertCircle } from 'lucide-react'
 import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
+import { useSupabase } from '@/components/SupabaseProvider'
 
 interface User {
   id: string
@@ -43,6 +44,7 @@ interface AttendanceStatus {
 }
 
 export default function AttendanceRecorder() {
+  const { supabase } = useSupabase()
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<AttendanceStatus | null>(null)
   const [reason, setReason] = useState('')
@@ -102,19 +104,115 @@ export default function AttendanceRecorder() {
     }
   }, [])
 
-  // 출퇴근 현황 조회
+  // 출퇴근 현황 조회 (직접 Supabase 연동)
   const fetchAttendanceStatus = async () => {
     if (!currentUser?.id) return
 
     try {
-      const response = await fetch(`/api/attendance/status?user_id=${currentUser.id}`)
-      const data = await response.json()
+      const today = new Date().toISOString().split('T')[0]
       
-      if (data.success) {
-        setStatus(data.data)
-      } else {
-        console.error('출퇴근 현황 조회 실패:', data.error)
+      // 사용자 정보 조회
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department, position')
+        .eq('id', currentUser.id)
+        .single()
+
+      if (userError || !user) {
+        console.error('사용자 정보 조회 오류:', userError)
+        return
       }
+
+      // 오늘의 출퇴근 기록 조회
+      const { data: todayRecords, error: recordsError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('record_date', today)
+        .order('record_timestamp', { ascending: true })
+
+      if (recordsError) {
+        console.error('출퇴근 기록 조회 오류:', recordsError)
+        return
+      }
+
+      // 오늘의 근무 요약 조회
+      const { data: workSummary, error: summaryError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .eq('work_date', today)
+        .single()
+
+      if (summaryError && summaryError.code !== 'PGRST116') {
+        console.error('근무 요약 조회 오류:', summaryError)
+      }
+
+      // 출퇴근 기록 분류
+      const checkInRecords = todayRecords?.filter(r => r.record_type === '출근') || []
+      const checkOutRecords = todayRecords?.filter(r => r.record_type === '퇴근') || []
+      
+      // 상태 계산
+      const hasCheckIn = checkInRecords.length > 0
+      const hasCheckOut = checkOutRecords.length > 0
+      const totalRecords = (todayRecords?.length || 0)
+      
+      let currentStatus = '출근전'
+      let statusMessage = '출근 기록을 해주세요'
+      let canCheckIn = true
+      let canCheckOut = false
+      
+      if (hasCheckIn && !hasCheckOut) {
+        currentStatus = '근무중'
+        statusMessage = '퇴근 기록을 해주세요'
+        canCheckIn = false
+        canCheckOut = true
+      } else if (hasCheckIn && hasCheckOut) {
+        currentStatus = '퇴근완료'
+        statusMessage = '오늘 업무가 완료되었습니다'
+        canCheckIn = false
+        canCheckOut = false
+      }
+
+      const statusData: AttendanceStatus = {
+        user: {
+          id: user.id,
+          name: user.name,
+          department: user.department,
+          position: user.position
+        },
+        date: today,
+        currentStatus,
+        statusMessage,
+        canCheckIn,
+        canCheckOut,
+        todayRecords: {
+          checkIn: checkInRecords.map(r => ({
+            id: r.id,
+            record_time: r.record_time,
+            record_type: r.record_type as '출근' | '퇴근',
+            reason: r.reason,
+            had_dinner: r.had_dinner
+          })),
+          checkOut: checkOutRecords.map(r => ({
+            id: r.id,
+            record_time: r.record_time,
+            record_type: r.record_type as '출근' | '퇴근',
+            reason: r.reason,
+            had_dinner: r.had_dinner
+          })),
+          total: totalRecords
+        },
+        workSummary: {
+          basic_hours: workSummary?.basic_hours || 0,
+          overtime_hours: workSummary?.overtime_hours || 0,
+          work_status: workSummary?.work_status || '정상근무',
+          check_in_time: workSummary?.check_in_time,
+          check_out_time: workSummary?.check_out_time
+        }
+      }
+
+      setStatus(statusData)
     } catch (error) {
       console.error('출퇴근 현황 조회 오류:', error)
     }
@@ -127,7 +225,7 @@ export default function AttendanceRecorder() {
     }
   }, [currentUser])
 
-  // 출퇴근 기록
+  // 출퇴근 기록 (직접 Supabase 연동)
   const recordAttendance = async (recordType: '출근' | '퇴근') => {
     if (!currentUser?.id) {
       alert('사용자 인증이 필요합니다.')
@@ -159,35 +257,80 @@ export default function AttendanceRecorder() {
     setLoading(true)
 
     try {
-      const requestBody: any = {
-        user_id: currentUser.id,
-        record_type: recordType,
-        reason: reason.trim() || null,
-        had_dinner: recordType === '퇴근' ? hadDinner : false,
-        location_lat: location?.lat,
-        location_lng: location?.lng,
-        location_accuracy: location?.accuracy
+      // 사용자 존재 여부 확인
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('id', currentUser.id)
+        .single()
+
+      if (userError || !user) {
+        alert('유효하지 않은 사용자입니다.')
+        return
       }
 
-      // 사용자 지정 시간 사용 시
-      if (!useCurrentTime) {
-        const today = new Date().toISOString().split('T')[0]
-        requestBody.manual_date = today
-        requestBody.manual_time = selectedTime
+      // 현재 시간 또는 사용자 지정 시간 설정
+      let recordTimestamp: Date
+      let recordDate: string
+      let recordTime: string
+
+      if (useCurrentTime) {
+        recordTimestamp = new Date()
+        recordDate = recordTimestamp.toISOString().split('T')[0]
+        recordTime = recordTimestamp.toTimeString().split(' ')[0]
+      } else {
+        recordDate = new Date().toISOString().split('T')[0]
+        recordTime = selectedTime + ':00'
+        recordTimestamp = new Date(`${recordDate}T${recordTime}`)
       }
 
-      const response = await fetch('/api/attendance/record', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
+      // 중복 기록 확인
+      const { data: existingRecords, error: duplicateError } = await supabase
+        .from('attendance_records')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('record_date', recordDate)
+        .eq('record_type', recordType)
 
-      const data = await response.json()
+      if (duplicateError) {
+        console.error('중복 기록 확인 오류:', duplicateError)
+        alert('기록 확인 중 오류가 발생했습니다.')
+        return
+      }
 
-      if (data.success) {
-        alert(data.message)
+      if (existingRecords && existingRecords.length > 0) {
+        alert(`오늘 이미 ${recordType} 기록이 존재합니다.`)
+        return
+      }
+
+      // 출퇴근 기록 생성
+      const { data: newRecord, error: insertError } = await supabase
+        .from('attendance_records')
+        .insert({
+          user_id: currentUser.id,
+          record_date: recordDate,
+          record_time: recordTime,
+          record_timestamp: recordTimestamp.toISOString(),
+          record_type: recordType,
+          reason: reason.trim() || null,
+          location_lat: location?.lat,
+          location_lng: location?.lng,
+          location_accuracy: location?.accuracy,
+          source: 'web',
+          had_dinner: recordType === '퇴근' ? hadDinner : false,
+          is_manual: !useCurrentTime
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('출퇴근 기록 생성 오류:', insertError)
+        alert(`기록 실패: ${insertError.message}`)
+        return
+      }
+
+      if (newRecord) {
+        alert(`${recordType} 기록이 완료되었습니다!`)
         setReason('')
         setHadDinner(false)
         setUseCurrentTime(true)
@@ -195,8 +338,6 @@ export default function AttendanceRecorder() {
         
         // 상태 새로고침
         await fetchAttendanceStatus()
-      } else {
-        alert(`기록 실패: ${data.error}`)
       }
     } catch (error) {
       console.error('출퇴근 기록 오류:', error)

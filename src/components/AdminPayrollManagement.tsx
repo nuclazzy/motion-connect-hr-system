@@ -13,6 +13,8 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { formatTimeWithNextDay } from '@/lib/time-utils'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getCurrentUser } from '@/lib/auth'
 
 interface Employee {
   id: string
@@ -46,6 +48,7 @@ interface WorkSummary {
 const MONTHLY_STANDARD_HOURS = 209 // 월 소정근로시간
 
 export default function AdminPayrollManagement() {
+  const { supabase } = useSupabase()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
@@ -67,17 +70,24 @@ export default function AdminPayrollManagement() {
     bonus: ''
   })
 
-  // 직원 데이터 조회
+  // 직원 데이터 조회 (직접 Supabase 연동)
   const fetchEmployees = async () => {
     try {
       setLoading(true)
       
-      const response = await fetch('/api/admin/employees')
-      const data = await response.json()
+      const { data: employees, error } = await supabase
+        .from('users')
+        .select('id, name, email, department, position, work_type, annual_salary, meal_allowance, car_allowance, bonus')
+        .eq('work_type', '정규직')
+        .order('name')
       
-      if (data.success && data.data) {
-        const activeEmployees = data.data.filter((emp: any) => emp.work_type === '정규직')
-        setEmployees(activeEmployees)
+      if (error) {
+        console.error('직원 데이터 조회 오류:', error)
+        return
+      }
+      
+      if (employees) {
+        setEmployees(employees)
       }
     } catch (error) {
       console.error('직원 데이터 조회 오류:', error)
@@ -86,22 +96,91 @@ export default function AdminPayrollManagement() {
     }
   }
 
-  // 근무시간 데이터 조회
+  // 근무시간 데이터 조회 (직접 Supabase 연동)
   const fetchWorkSummaries = async () => {
     try {
-      const response = await fetch(`/api/attendance/summary?month=${selectedMonth}`)
-      const data = await response.json()
-      
-      if (data.success && data.summaries) {
-        const summaries: WorkSummary[] = data.summaries.map((s: any) => ({
+      // 현재 사용자 권한 확인
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        console.error('관리자 권한이 필요합니다.')
+        return
+      }
+
+      const monthStart = `${selectedMonth}-01`
+      const nextMonth = new Date(selectedMonth + '-01')
+      nextMonth.setMonth(nextMonth.getMonth() + 1)
+      const monthEnd = new Date(nextMonth.getTime() - 1).toISOString().split('T')[0]
+
+      // 먼저 월별 통계에서 조회
+      const { data: monthlyStats, error: monthlyError } = await supabase
+        .from('monthly_work_stats')
+        .select(`
+          user_id,
+          total_overtime_hours,
+          total_night_hours,
+          users!inner(work_type)
+        `)
+        .eq('work_month', monthStart)
+        .eq('users.work_type', '정규직')
+
+      if (monthlyError && monthlyError.code !== 'PGRST116') {
+        console.error('월별 통계 조회 오류:', monthlyError)
+      }
+
+      // 월별 통계에 데이터가 없으면 일별 데이터에서 직접 계산
+      if (!monthlyStats || monthlyStats.length === 0) {
+        console.log('📊 monthly_work_stats에 데이터 없음, daily_work_summary에서 조회')
+        
+        const { data: dailyStats, error: dailyError } = await supabase
+          .from('daily_work_summary')
+          .select(`
+            user_id,
+            overtime_hours,
+            night_hours,
+            users!inner(work_type)
+          `)
+          .gte('work_date', monthStart)
+          .lte('work_date', monthEnd)
+          .eq('users.work_type', '정규직')
+
+        if (dailyError) {
+          console.error('일별 통계 조회 오류:', dailyError)
+          setWorkSummaries([])
+          return
+        }
+
+        // 사용자별로 그룹화하여 월별 합계 계산
+        const userSummaries = new Map()
+        
+        dailyStats?.forEach(daily => {
+          const userId = daily.user_id
+          if (!userSummaries.has(userId)) {
+            userSummaries.set(userId, {
+              user_id: userId,
+              total_overtime_hours: 0,
+              total_night_hours: 0
+            })
+          }
+
+          const summary = userSummaries.get(userId)
+          summary.total_overtime_hours += daily.overtime_hours || 0
+          summary.total_night_hours += daily.night_hours || 0
+        })
+
+        setWorkSummaries(Array.from(userSummaries.values()))
+        console.log('✅ 일별 데이터에서 근무시간 계산 성공:', userSummaries.size, '명')
+      } else {
+        const summaries: WorkSummary[] = monthlyStats.map((s: any) => ({
           user_id: s.user_id,
           total_overtime_hours: s.total_overtime_hours || 0,
           total_night_hours: s.total_night_hours || 0
         }))
         setWorkSummaries(summaries)
+        console.log('✅ 월별 통계에서 근무시간 데이터 조회 성공:', summaries.length, '명')
       }
     } catch (error) {
       console.error('근무시간 데이터 조회 오류:', error)
+      setWorkSummaries([])
     }
   }
 
@@ -147,24 +226,37 @@ export default function AdminPayrollManagement() {
     }
   }
 
-  // 직원 급여 정보 저장
+  // 직원 급여 정보 저장 (직접 Supabase 연동)
   const saveEmployeePayroll = async (employeeId: string) => {
     setSaving(employeeId)
     try {
-      const response = await fetch(`/api/admin/employees/${employeeId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // 관리자 권한 확인
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
+      }
+
+      const { data: updatedEmployee, error } = await supabase
+        .from('users')
+        .update({
           annual_salary: parseInt(editForm.annual_salary) || 0,
           meal_allowance: parseInt(editForm.meal_allowance) || 0,
           car_allowance: parseInt(editForm.car_allowance) || 0,
-          bonus: parseInt(editForm.bonus) || 0
+          bonus: parseInt(editForm.bonus) || 0,
+          updated_at: new Date().toISOString()
         })
-      })
+        .eq('id', employeeId)
+        .select()
+        .single()
       
-      const data = await response.json()
+      if (error) {
+        console.error('급여 정보 저장 오류:', error)
+        alert(`저장 실패: ${error.message}`)
+        return
+      }
       
-      if (data.success) {
+      if (updatedEmployee) {
         // 업데이트된 직원 정보로 갱신
         setEmployees(prev => prev.map(emp => {
           if (emp.id === employeeId) {
@@ -180,8 +272,6 @@ export default function AdminPayrollManagement() {
         }))
         setEditingEmployee(null)
         alert('급여 정보가 저장되었습니다.')
-      } else {
-        alert(`저장 실패: ${data.error}`)
       }
     } catch (error) {
       console.error('급여 정보 저장 오류:', error)

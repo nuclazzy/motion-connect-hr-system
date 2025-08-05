@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getCurrentUser } from '@/lib/auth'
 
 // Overtime management interfaces
 interface OvertimeRecord {
@@ -58,6 +59,7 @@ interface Employee {
 }
 
 export default function AdminEmployeeManagement() {
+  const { supabase } = useSupabase()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [formData, setFormData] = useState<Partial<Employee>>({})
@@ -375,26 +377,63 @@ export default function AdminEmployeeManagement() {
     if (!selectedEmployee) return
     
     try {
-      const url = `/api/admin/overtime?month=${selectedMonth}&user_id=${selectedEmployee.id}`
-      console.log('🔍 초과근무 기록 요청:', url)
+      console.log('🔍 초과근무 기록 조회 (직접 Supabase):', selectedMonth, selectedEmployee.id)
       
-      const response = await fetch(url)
-      const result = await response.json()
-
-      console.log('📝 초과근무 API 응답:', result)
-
-      if (result.success) {
-        setOvertimeRecords(result.data || [])
-        if (result.message) {
-          console.log('ℹ️', result.message)
-        }
-      } else {
-        console.error('❌ 초과궼무 기록 조회 오류:', result.error)
-        setOvertimeRecords([]) // 오류 시 빈 배열로 설정
+      // 선택된 월의 시작일과 종료일 계산
+      const [year, month] = selectedMonth.split('-').map(Number)
+      const startDate = new Date(year, month - 1, 1)
+      const endDate = new Date(year, month, 0)
+      
+      const startDateStr = startDate.toISOString().split('T')[0]
+      const endDateStr = endDate.toISOString().split('T')[0]
+      
+      // daily_work_summary에서 초과근무 데이터 조회
+      const { data: workSummary, error } = await supabase
+        .from('daily_work_summary')
+        .select(`
+          *,
+          users!inner(name, department, position)
+        `)
+        .eq('user_id', selectedEmployee.id)
+        .gte('work_date', startDateStr)
+        .lte('work_date', endDateStr)
+        .gt('overtime_hours', 0)
+        .order('work_date', { ascending: false })
+      
+      if (error) {
+        console.error('❌ 초과근무 기록 조회 오류:', error)
+        setOvertimeRecords([])
+        return
       }
+      
+      // 데이터 변환 (기존 OvertimeRecord 인터페이스에 맞게)
+      const overtimeData = workSummary?.map((record: any) => ({
+        id: record.id,
+        user_id: record.user_id,
+        work_date: record.work_date,
+        overtime_hours: record.overtime_hours || 0,
+        night_hours: record.night_hours || 0,
+        overtime_pay: (record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5, // 1.5배 가산
+        night_pay: (record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5, // 0.5배 가산
+        total_pay: ((record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5) + ((record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5),
+        notes: record.notes || '',
+        status: 'approved' as const, // daily_work_summary에 있는 것은 이미 승인된 것으로 간주
+        approved_by: undefined,
+        approved_at: record.calculated_at,
+        created_at: record.created_at,
+        users: {
+          name: record.users.name,
+          department: record.users.department,
+          position: record.users.position
+        }
+      })) || []
+      
+      console.log('✅ 초과근무 기록 조회 완료:', overtimeData.length, '건')
+      setOvertimeRecords(overtimeData)
+      
     } catch (err) {
-      console.error('❌ 초과근무 기록 fetch 오류:', err)
-      setOvertimeRecords([]) // 오류 시 빈 배열로 설정
+      console.error('❌ 초과근무 기록 조회 오류:', err)
+      setOvertimeRecords([])
     }
   }
 
@@ -413,35 +452,68 @@ export default function AdminEmployeeManagement() {
 
     setOvertimeSubmitting(true)
     try {
-      const response = await fetch('/api/admin/overtime', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          user_id: selectedEmployee.id,
-          ...overtimeFormData
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        alert('초과근무 기록이 생성되었습니다.')
-        setOvertimeFormData({
-          work_date: '',
-          overtime_hours: 0,
-          night_hours: 0,
-          notes: ''
-        })
-        setShowOvertimeForm(false)
-        await fetchOvertimeRecords()
-      } else {
-        alert(result.error || '초과근무 기록 생성에 실패했습니다.')
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
       }
+
+      // daily_work_summary에서 해당 날짜 기록 조회 또는 생성
+      const { data: existingRecord, error: fetchError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .eq('work_date', overtimeFormData.work_date)
+        .single()
+
+      let updateData = {
+        overtime_hours: overtimeFormData.overtime_hours,
+        night_hours: overtimeFormData.night_hours,
+        notes: overtimeFormData.notes,
+        calculated_at: new Date().toISOString()
+      }
+
+      if (existingRecord) {
+        // 기존 기록 업데이트
+        const { error: updateError } = await supabase
+          .from('daily_work_summary')
+          .update(updateData)
+          .eq('id', existingRecord.id)
+
+        if (updateError) {
+          console.error('❌ 초과근무 기록 업데이트 오류:', updateError)
+          throw new Error('초과근무 기록 업데이트에 실패했습니다.')
+        }
+      } else {
+        // 새 기록 생성
+        const { error: insertError } = await supabase
+          .from('daily_work_summary')
+          .insert({
+            user_id: selectedEmployee.id,
+            work_date: overtimeFormData.work_date,
+            basic_hours: 0,
+            ...updateData,
+            auto_calculated: false
+          })
+
+        if (insertError) {
+          console.error('❌ 초과근무 기록 생성 오류:', insertError)
+          throw new Error('초과근무 기록 생성에 실패했습니다.')
+        }
+      }
+
+      alert('초과근무 기록이 성공적으로 저장되었습니다.')
+      setOvertimeFormData({
+        work_date: '',
+        overtime_hours: 0,
+        night_hours: 0,
+        notes: ''
+      })
+      setShowOvertimeForm(false)
+      await fetchOvertimeRecords()
     } catch (err) {
       console.error('초과근무 기록 생성 오류:', err)
-      alert('초과근무 기록 생성 중 오류가 발생했습니다.')
+      alert(err instanceof Error ? err.message : '초과근무 기록 생성 중 오류가 발생했습니다.')
     } finally {
       setOvertimeSubmitting(false)
     }
@@ -452,28 +524,39 @@ export default function AdminEmployeeManagement() {
     if (status === 'rejected' && !adminNotes) return
 
     try {
-      const response = await fetch(`/api/admin/overtime/${recordId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          status,
-          admin_notes: adminNotes
-        })
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        alert(result.message)
-        await fetchOvertimeRecords()
-      } else {
-        alert(result.error || '처리에 실패했습니다.')
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
       }
+
+      // daily_work_summary에서 해당 기록 업데이트
+      let updateData: any = {
+        notes: adminNotes || '',
+        calculated_at: new Date().toISOString()
+      }
+
+      if (status === 'rejected') {
+        // 거절 시 초과근무 시간을 0으로 설정
+        updateData.overtime_hours = 0
+        updateData.night_hours = 0
+      }
+
+      const { error } = await supabase
+        .from('daily_work_summary')
+        .update(updateData)
+        .eq('id', recordId)
+
+      if (error) {
+        console.error('❌ 초과근무 승인/거절 오류:', error)
+        throw new Error('처리에 실패했습니다.')
+      }
+
+      alert(status === 'approved' ? '초과근무가 승인되었습니다.' : '초과근무가 거절되었습니다.')
+      await fetchOvertimeRecords()
     } catch (err) {
       console.error('초과근무 승인/거절 오류:', err)
-      alert('처리 중 오류가 발생했습니다.')
+      alert(err instanceof Error ? err.message : '처리 중 오류가 발생했습니다.')
     }
   }
 
@@ -491,17 +574,70 @@ export default function AdminEmployeeManagement() {
     
     setAttendanceLoading(true)
     try {
-      const response = await fetch(`/api/attendance/summary?user_id=${selectedEmployee.id}&month=${attendanceMonth}&include_details=true`)
-      const result = await response.json()
+      console.log('🔍 근무시간 데이터 조회 (직접 Supabase):', attendanceMonth, selectedEmployee.id)
       
-      if (result.success) {
-        setAttendanceData(result.data)
-      } else {
-        console.error('근무시간 조회 오류:', result.error)
+      // 선택된 월의 시작일과 종료일 계산
+      const [year, month] = attendanceMonth.split('-').map(Number)
+      const startDate = new Date(year, month - 1, 1)
+      const endDate = new Date(year, month, 0)
+      
+      const startDateStr = startDate.toISOString().split('T')[0]
+      const endDateStr = endDate.toISOString().split('T')[0]
+      
+      // 월별 통계 조회
+      const { data: monthlyStats, error: statsError } = await supabase
+        .from('monthly_work_stats')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .eq('work_month', `${year}-${String(month).padStart(2, '0')}-01`)
+        .single()
+      
+      // 일별 상세 데이터 조회
+      const { data: dailyRecords, error: dailyError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .gte('work_date', startDateStr)
+        .lte('work_date', endDateStr)
+        .order('work_date', { ascending: true })
+      
+      // 출퇴근 기록 조회
+      const { data: attendanceRecords, error: recordsError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .gte('record_date', startDateStr)
+        .lte('record_date', endDateStr)
+        .order('record_date', { ascending: true })
+      
+      if (statsError || dailyError || recordsError) {
+        const error = statsError || dailyError || recordsError
+        console.error('❌ 근무시간 데이터 조회 오류:', error)
         setError('근무시간 데이터를 불러올 수 없습니다.')
+        return
       }
+      
+      // 데이터 변환
+      const attendanceData = {
+        summary: monthlyStats || {
+          total_work_days: dailyRecords?.length || 0,
+          total_basic_hours: dailyRecords?.reduce((sum, record) => sum + (record.basic_hours || 0), 0) || 0,
+          total_overtime_hours: dailyRecords?.reduce((sum, record) => sum + (record.overtime_hours || 0), 0) || 0,
+          average_daily_hours: dailyRecords?.length ? (dailyRecords.reduce((sum, record) => sum + (record.basic_hours || 0) + (record.overtime_hours || 0), 0) / dailyRecords.length) : 0,
+          dinner_count: dailyRecords?.filter(record => record.had_dinner).length || 0,
+          late_count: 0, // TODO: 지각 수 계산 로직 추가
+          early_leave_count: 0, // TODO: 조퇴 수 계산 로직 추가
+          absent_count: 0 // TODO: 결근 수 계산 로직 추가
+        },
+        daily_records: dailyRecords || [],
+        attendance_records: attendanceRecords || []
+      }
+      
+      console.log('✅ 근무시간 데이터 조회 완료:', attendanceData)
+      setAttendanceData(attendanceData)
+      
     } catch (err) {
-      console.error('근무시간 조회 API 오류:', err)
+      console.error('❌ 근무시간 조회 오류:', err)
       setError('근무시간 조회 중 오류가 발생했습니다.')
     } finally {
       setAttendanceLoading(false)
@@ -1791,93 +1927,122 @@ export default function AdminEmployeeManagement() {
               const notes = formData.get('notes') as string
               
               try {
+                const currentUser = await getCurrentUser()
+                if (!currentUser || currentUser.role !== 'admin') {
+                  alert('관리자 권한이 필요합니다.')
+                  return
+                }
+
                 // 출퇴근 기록이 있는 경우 수정
                 if (editingRecord.check_in_time || editingRecord.check_out_time) {
-                  // 근무시간 요약 업데이트
-                  const response = await fetch('/api/attendance/summary', {
-                    method: 'PATCH',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      user_id: selectedEmployee.id,
-                      work_date: editingRecord.work_date,
-                      admin_user_id: selectedEmployee.id, // TODO: Get actual admin user ID
-                      check_in_time: checkInTime ? `${editingRecord.work_date}T${checkInTime}:00` : null,
-                      check_out_time: checkOutTime ? `${editingRecord.work_date}T${checkOutTime}:00` : null,
-                      notes
-                    })
-                  })
-                  
-                  const result = await response.json()
-                  if (result.success) {
-                    alert('근무시간이 수정되었습니다.')
-                    setShowEditModal(false)
-                    setEditingRecord(null)
-                    await fetchAttendanceData()
-                  } else {
-                    alert(result.error || '근무시간 수정에 실패했습니다.')
+                  // daily_work_summary 업데이트
+                  const updateData: any = {
+                    notes,
+                    had_dinner: hadDinner,
+                    auto_calculated: false,
+                    calculated_at: new Date().toISOString()
                   }
+
+                  if (checkInTime) {
+                    updateData.check_in_time = `${editingRecord.work_date}T${checkInTime}:00+00:00`
+                  }
+                  if (checkOutTime) {
+                    updateData.check_out_time = `${editingRecord.work_date}T${checkOutTime}:00+00:00`
+                  }
+
+                  const { error: updateError } = await supabase
+                    .from('daily_work_summary')
+                    .update(updateData)
+                    .eq('user_id', selectedEmployee.id)
+                    .eq('work_date', editingRecord.work_date)
+
+                  if (updateError) {
+                    console.error('❌ 근무시간 수정 오류:', updateError)
+                    throw new Error('근무시간 수정에 실패했습니다.')
+                  }
+
+                  alert('근무시간이 수정되었습니다.')
                 } else {
-                  // 새로운 기록 추가
-                  const response = await fetch('/api/attendance/missing', {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
+                  // 새로운 출퇴근 기록 추가
+                  const recordsToInsert = []
+
+                  if (checkInTime) {
+                    recordsToInsert.push({
                       user_id: selectedEmployee.id,
-                      date_string: editingRecord.work_date,
-                      time_string: checkInTime,
+                      record_date: editingRecord.work_date,
+                      record_time: checkInTime,
+                      record_timestamp: `${editingRecord.work_date}T${checkInTime}:00+00:00`,
                       record_type: '출근',
                       reason: notes || '관리자 추가',
-                      admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
-                    })
-                  })
-                  
-                  const result = await response.json()
-                  if (result.success && checkOutTime) {
-                    // 퇴근 기록도 추가
-                    await fetch('/api/attendance/missing', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json'
-                      },
-                      body: JSON.stringify({
-                        user_id: selectedEmployee.id,
-                        date_string: editingRecord.work_date,
-                        time_string: checkOutTime,
-                        record_type: '퇴근',
-                        reason: notes || '관리자 추가',
-                        admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
-                      })
+                      is_manual: true,
+                      approved_by: currentUser.id,
+                      approved_at: new Date().toISOString(),
+                      notes: notes || '관리자 추가'
                     })
                   }
-                  
+
+                  if (checkOutTime) {
+                    recordsToInsert.push({
+                      user_id: selectedEmployee.id,
+                      record_date: editingRecord.work_date,
+                      record_time: checkOutTime,
+                      record_timestamp: `${editingRecord.work_date}T${checkOutTime}:00+00:00`,
+                      record_type: '퇴근',
+                      reason: notes || '관리자 추가',
+                      had_dinner: hadDinner,
+                      is_manual: true,
+                      approved_by: currentUser.id,
+                      approved_at: new Date().toISOString(),
+                      notes: notes || '관리자 추가'
+                    })
+                  }
+
+                  if (recordsToInsert.length > 0) {
+                    const { error: insertError } = await supabase
+                      .from('attendance_records')
+                      .insert(recordsToInsert)
+
+                    if (insertError) {
+                      console.error('❌ 출퇴근 기록 추가 오류:', insertError)
+                      throw new Error('출퇴근 기록 추가에 실패했습니다.')
+                    }
+
+                    // daily_work_summary도 함께 생성/업데이트 (PostgreSQL 트리거가 자동 처리)
+                    // 하지만 수동으로도 확인하여 생성
+                    const { data: existingSummary } = await supabase
+                      .from('daily_work_summary')
+                      .select('*')
+                      .eq('user_id', selectedEmployee.id)
+                      .eq('work_date', editingRecord.work_date)
+                      .single()
+
+                    if (!existingSummary) {
+                      await supabase
+                        .from('daily_work_summary')
+                        .insert({
+                          user_id: selectedEmployee.id,
+                          work_date: editingRecord.work_date,
+                          check_in_time: checkInTime ? `${editingRecord.work_date}T${checkInTime}:00+00:00` : null,
+                          check_out_time: checkOutTime ? `${editingRecord.work_date}T${checkOutTime}:00+00:00` : null,
+                          basic_hours: 0, // 트리거가 자동 계산
+                          had_dinner: hadDinner,
+                          notes: notes,
+                          auto_calculated: false,
+                          calculated_at: new Date().toISOString()
+                        })
+                    }
+                  }
+
                   alert('출퇴근 기록이 추가되었습니다.')
-                  setShowEditModal(false)
-                  setEditingRecord(null)
-                  await fetchAttendanceData()
                 }
                 
-                // 저녁식사 여부 업데이트
-                if (hadDinner !== editingRecord.had_dinner) {
-                  await fetch('/api/attendance/missing', {
-                    method: 'PATCH',
-                    headers: {
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      user_id: selectedEmployee.id,
-                      date_string: editingRecord.work_date,
-                      had_dinner: hadDinner,
-                      admin_user_id: selectedEmployee.id // TODO: Get actual admin user ID
-                    })
-                  })
-                }
+                setShowEditModal(false)
+                setEditingRecord(null)
+                await fetchAttendanceData()
+                
               } catch (err) {
                 console.error('근무시간 수정 오류:', err)
-                alert('근무시간 수정 중 오류가 발생했습니다.')
+                alert(err instanceof Error ? err.message : '근무시간 수정 중 오류가 발생했습니다.')
               }
             }} className="space-y-4">
               <div>

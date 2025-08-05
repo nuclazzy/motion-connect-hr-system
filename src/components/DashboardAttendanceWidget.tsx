@@ -5,6 +5,7 @@ import { Clock, MapPin, Coffee, AlertCircle, CheckCircle, XCircle, ChevronDown, 
 import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
 import { formatTimeWithNextDay, convertNextDayTimeFormat } from '@/lib/time-utils'
+import { useSupabase } from '@/components/SupabaseProvider'
 
 interface AttendanceStatus {
   user: {
@@ -78,6 +79,7 @@ interface DashboardAttendanceWidgetProps {
 }
 
 export default function DashboardAttendanceWidget({ user }: DashboardAttendanceWidgetProps) {
+  const { supabase } = useSupabase()
   const [status, setStatus] = useState<AttendanceStatus | null>(null)
   const [monthlySummary, setMonthlySummary] = useState<MonthlyWorkSummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -130,17 +132,102 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
   // 출퇴근 현황 조회
   const fetchAttendanceStatus = async () => {
-    if (!user?.id) return
+    if (!user?.id || !supabase) return
 
     try {
-      const response = await fetch(`/api/attendance/status?user_id=${user.id}`)
-      const data = await response.json()
+      const date = new Date().toISOString().split('T')[0]
       
-      if (data.success) {
-        setStatus(data.data)
-      } else {
-        console.error('출퇴근 현황 조회 실패:', data.error)
+      // 사용자 정보 조회
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department, position')
+        .eq('id', user.id)
+        .single()
+
+      if (userError || !userData) {
+        console.error('사용자 조회 오류:', userError)
+        return
       }
+
+      // 해당 날짜의 출퇴근 기록 조회
+      const { data: todayRecords, error: recordsError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('record_date', date)
+        .order('record_timestamp', { ascending: true })
+
+      if (recordsError) {
+        console.error('출퇴근 기록 조회 오류:', recordsError)
+        return
+      }
+
+      // 출근/퇴근 기록 분리
+      const checkInRecords = todayRecords?.filter(r => r.record_type === '출근') || []
+      const checkOutRecords = todayRecords?.filter(r => r.record_type === '퇴근') || []
+
+      const latestCheckIn = checkInRecords.length > 0 ? checkInRecords[checkInRecords.length - 1] : null
+      const latestCheckOut = checkOutRecords.length > 0 ? checkOutRecords[checkOutRecords.length - 1] : null
+
+      // 현재 상태 판단
+      let currentStatus = '미출근'
+      let statusMessage = '아직 출근하지 않았습니다.'
+      let canCheckIn = true
+      let canCheckOut = false
+
+      if (latestCheckIn && !latestCheckOut) {
+        currentStatus = '근무중'
+        statusMessage = `${latestCheckIn.record_time}에 출근했습니다.`
+        canCheckIn = false
+        canCheckOut = true
+      } else if (latestCheckIn && latestCheckOut) {
+        if (new Date(latestCheckIn.record_timestamp) > new Date(latestCheckOut.record_timestamp)) {
+          currentStatus = '근무중'
+          statusMessage = `${latestCheckIn.record_time}에 재출근했습니다.`
+          canCheckIn = false
+          canCheckOut = true
+        } else {
+          currentStatus = '퇴근완료'
+          statusMessage = `${latestCheckOut.record_time}에 퇴근했습니다.`
+          canCheckIn = true
+          canCheckOut = false
+        }
+      }
+
+      // 일별 근무시간 요약 조회
+      const { data: workSummary } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('work_date', date)
+        .single()
+
+      setStatus({
+        user: {
+          id: userData.id,
+          name: userData.name,
+          department: userData.department,
+          position: userData.position
+        },
+        date,
+        currentStatus,
+        statusMessage,
+        canCheckIn,
+        canCheckOut,
+        todayRecords: {
+          checkIn: checkInRecords,
+          checkOut: checkOutRecords,
+          total: todayRecords?.length || 0
+        },
+        workSummary: workSummary || {
+          basic_hours: 0,
+          overtime_hours: 0,
+          work_status: currentStatus,
+          check_in_time: latestCheckIn?.record_timestamp || null,
+          check_out_time: latestCheckOut?.record_timestamp || null
+        }
+      })
+
     } catch (error) {
       console.error('출퇴근 현황 조회 오류:', error)
     }
@@ -148,17 +235,149 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
   // 월별 근무시간 요약 조회
   const fetchMonthlySummary = async () => {
-    if (!user?.id) return
+    if (!user?.id || !supabase) return
 
     try {
-      const response = await fetch(`/api/attendance/summary?user_id=${user.id}&month=${currentMonth}&include_details=true`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setMonthlySummary(data.data)
-      } else {
-        console.error('월별 요약 조회 실패:', data.error)
+      const targetMonth = currentMonth
+      const monthStart = `${targetMonth}-01`
+      const nextMonth = new Date(targetMonth + '-01')
+      nextMonth.setMonth(nextMonth.getMonth() + 1)
+      const monthEnd = new Date(nextMonth.getTime() - 1).toISOString().split('T')[0]
+
+      // 사용자 정보 조회
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department, position')
+        .eq('id', user.id)
+        .single()
+
+      if (userError || !userData) {
+        console.error('사용자 조회 오류:', userError)
+        return
       }
+
+      // 월별 통계 조회
+      const { data: monthlyStats, error: monthlyError } = await supabase
+        .from('monthly_work_stats')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('work_month', monthStart)
+        .single()
+
+      // 일별 근무 데이터 조회
+      const { data: dailyData, error: dailyError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('work_date', monthStart)
+        .lte('work_date', monthEnd)
+        .order('work_date', { ascending: true })
+
+      if (dailyError) {
+        console.error('일별 데이터 조회 오류:', dailyError)
+        return
+      }
+
+      // 데이터 집계 (월별 통계가 없는 경우 일별 데이터로 계산)
+      const workDays = dailyData?.filter(d => d.check_in_time && d.check_out_time).length || 0
+      const totalBasicHours = dailyData?.reduce((sum, d) => sum + (d.basic_hours || 0), 0) || 0
+      const totalOvertimeHours = dailyData?.reduce((sum, d) => sum + (d.overtime_hours || 0), 0) || 0
+      const totalNightHours = dailyData?.reduce((sum, d) => sum + (d.night_hours || 0), 0) || 0
+      const totalWorkHours = totalBasicHours + totalOvertimeHours
+      const averageDailyHours = workDays > 0 ? totalWorkHours / workDays : 0
+      const dinnerCount = dailyData?.filter(d => d.had_dinner).length || 0
+
+      // 출근/지각/조퇴/결근 통계
+      let onTimeCount = 0
+      let lateCount = 0
+      let earlyLeaveCount = 0
+      let absentCount = 0
+
+      const workingDays = new Date(nextMonth.getTime() - 1).getDate()
+      
+      for (let day = 1; day <= workingDays; day++) {
+        const dateStr = `${targetMonth}-${day.toString().padStart(2, '0')}`
+        const dayData = dailyData?.find(d => d.work_date === dateStr)
+        
+        if (!dayData || (!dayData.check_in_time && !dayData.check_out_time)) {
+          // 주말/공휴일인지 확인 (여기서는 단순화)
+          const dayOfWeek = new Date(dateStr).getDay()
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 평일만 결근으로 계산
+            absentCount++
+          }
+        } else {
+          if (dayData.check_in_time) {
+            const checkInHour = new Date(dayData.check_in_time).getHours()
+            if (checkInHour > 9) {
+              lateCount++
+            } else {
+              onTimeCount++
+            }
+          }
+          
+          if (dayData.check_out_time) {
+            const checkOutHour = new Date(dayData.check_out_time).getHours()
+            if (checkOutHour < 17) { // 17시 이전 퇴근을 조퇴로 간주
+              earlyLeaveCount++
+            }
+          }
+        }
+      }
+
+      // 각 일별 기록에 누락된 기록 정보 추가
+      const enhancedDailyData = dailyData?.map(day => {
+        const missing_records: string[] = []
+        
+        // 출근 기록이 없는 경우
+        if (!day.check_in_time && day.work_status !== '휴가' && day.work_status !== '결근') {
+          missing_records.push('출근기록누락')
+        }
+        
+        // 퇴근 기록이 없는 경우 (출근은 했지만 퇴근이 없는 경우)
+        if (day.check_in_time && !day.check_out_time) {
+          missing_records.push('퇴근기록누락')
+        }
+
+        return {
+          ...day,
+          missing_records: missing_records.length > 0 ? missing_records : undefined
+        }
+      }) || []
+
+      const summaryData: MonthlyWorkSummary = {
+        user: {
+          id: userData.id,
+          name: userData.name,
+          department: userData.department,
+          position: userData.position
+        },
+        period: {
+          month: targetMonth,
+          startDate: monthStart,
+          endDate: monthEnd,
+          totalDays: workingDays
+        },
+        workStats: {
+          totalWorkDays: workDays,
+          totalBasicHours: Math.round(totalBasicHours * 10) / 10,
+          totalOvertimeHours: Math.round(totalOvertimeHours * 10) / 10,
+          totalNightHours: Math.round(totalNightHours * 10) / 10,
+          totalWorkHours: Math.round(totalWorkHours * 10) / 10,
+          averageDailyHours: Math.round(averageDailyHours * 10) / 10,
+          dinnerCount
+        },
+        attendanceStats: {
+          onTimeCount,
+          lateCount,
+          earlyLeaveCount,
+          absentCount,
+          attendanceRate: workingDays > 0 ? Math.round((workDays / workingDays) * 100) : 0
+        },
+        dailyRecords: enhancedDailyData
+      }
+
+      setMonthlySummary(summaryData)
+
     } catch (error) {
       console.error('월별 요약 조회 오류:', error)
     }
@@ -190,7 +409,7 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
   // 출퇴근 기록 실행
   const executeAttendance = async () => {
-    if (!selectedAction || !user?.id) return
+    if (!selectedAction || !user?.id || !supabase) return
 
     if (selectedAction === '출근' && !reason.trim()) {
       alert('출근 시에는 업무 사유를 반드시 입력해주세요.')
@@ -217,48 +436,99 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
     setLoading(true)
 
     try {
-      const requestBody: any = {
-        user_id: user.id,
-        record_type: selectedAction,
-        reason: reason.trim() || null,
-        had_dinner: selectedAction === '퇴근' ? hadDinner : false,
-        location_lat: location?.lat,
-        location_lng: location?.lng,
-        location_accuracy: location?.accuracy
+      // 사용자 존재 여부 확인
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department')
+        .eq('id', user.id)
+        .single()
+
+      if (userError || !userData) {
+        alert('등록되지 않은 사용자입니다.')
+        setLoading(false)
+        return
       }
 
-      // 사용자 지정 시간 사용 시
-      if (!useCurrentTime) {
+      // 시간 설정 (수동 입력 또는 현재 시간)
+      let record_timestamp: Date
+      let record_date: string
+      let record_time: string
+      let is_manual = false
+
+      if (!useCurrentTime && selectedTime) {
+        // 수동 입력 시간 사용
         const today = new Date().toISOString().split('T')[0]
-        requestBody.manual_date = today
-        requestBody.manual_time = selectedTime
-      }
-
-      const response = await fetch('/api/attendance/record', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
-      })
-
-      const data = await response.json()
-
-      if (data.success) {
-        alert(`${selectedAction} 기록이 완료되었습니다!`)
-        setShowReasonModal(false)
-        setSelectedAction(null)
-        setReason('')
-        setHadDinner(false)
-        setUseCurrentTime(true)
-        setSelectedTime('')
-        
-        // 상태 새로고침
-        await fetchAttendanceStatus()
-        await fetchMonthlySummary()
+        const [year, month, day] = today.split('-').map(Number)
+        const [hours, minutes] = selectedTime.split(':').map(Number)
+        record_timestamp = new Date(year, month - 1, day, hours, minutes)
+        is_manual = true
       } else {
-        alert(`기록 실패: ${data.error}`)
+        // 현재 시간 사용
+        record_timestamp = new Date()
       }
+
+      record_date = record_timestamp.toISOString().split('T')[0]
+      record_time = record_timestamp.toTimeString().split(' ')[0].substring(0, 5)
+
+      // 중복 기록 검사 (같은 날짜, 같은 유형, 5분 이내)
+      const fiveMinutesAgo = new Date(record_timestamp.getTime() - 5 * 60 * 1000)
+      const fiveMinutesLater = new Date(record_timestamp.getTime() + 5 * 60 * 1000)
+
+      const { data: duplicateCheck } = await supabase
+        .from('attendance_records')
+        .select('id, record_timestamp')
+        .eq('user_id', user.id)
+        .eq('record_date', record_date)
+        .eq('record_type', selectedAction)
+        .gte('record_timestamp', fiveMinutesAgo.toISOString())
+        .lte('record_timestamp', fiveMinutesLater.toISOString())
+        .limit(1)
+
+      if (duplicateCheck && duplicateCheck.length > 0) {
+        alert(`${selectedAction} 기록이 이미 존재합니다. (${record_time})`)
+        setLoading(false)
+        return
+      }
+
+      // 출퇴근 기록 저장
+      const { data: attendanceRecord, error: insertError } = await supabase
+        .from('attendance_records')
+        .insert({
+          user_id: user.id,
+          record_date,
+          record_time,
+          record_timestamp: record_timestamp.toISOString(),
+          record_type: selectedAction,
+          reason: reason?.trim() || null,
+          location_lat: location?.lat || null,
+          location_lng: location?.lng || null,
+          location_accuracy: location?.accuracy || null,
+          source: 'web',
+          had_dinner: selectedAction === '퇴근' ? hadDinner : false,
+          is_manual
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('출퇴근 기록 저장 오류:', insertError)
+        alert('출퇴근 기록 저장에 실패했습니다.')
+        setLoading(false)
+        return
+      }
+
+      alert(`${selectedAction} 기록이 완료되었습니다!`)
+      setShowReasonModal(false)
+      setSelectedAction(null)
+      setReason('')
+      setHadDinner(false)
+      setUseCurrentTime(true)
+      setSelectedTime('')
+      
+      // 상태 새로고침
+      await fetchAttendanceStatus()
+      await fetchMonthlySummary()
+
     } catch (error) {
       console.error('출퇴근 기록 오류:', error)
       alert('출퇴근 기록 중 오류가 발생했습니다.')
@@ -325,7 +595,7 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
   // 누락 기록 추가
   const submitMissingRecord = async () => {
-    if (!user?.id || !editingRecord) return
+    if (!user?.id || !editingRecord || !supabase) return
 
     if (!missingRecordForm.selectedDate || !missingRecordForm.selectedTime || !missingRecordForm.reason.trim()) {
       alert('모든 필드를 입력해주세요.')
@@ -335,38 +605,91 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
     setSubmittingMissingRecord(true)
 
     try {
-      const response = await fetch('/api/attendance/missing', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          date_string: missingRecordForm.selectedDate,
-          time_string: missingRecordForm.selectedTime,
-          record_type: missingRecordForm.recordType,
-          reason: missingRecordForm.reason.trim()
-        }),
-      })
+      // 대상 사용자 확인
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('id, name, department')
+        .eq('id', user.id)
+        .single()
 
-      const data = await response.json()
-
-      if (data.success) {
-        alert(data.message)
-        setEditingRecord(null)
-        setMissingRecordForm({
-          recordType: '출근',
-          selectedDate: '',
-          selectedTime: '',
-          reason: ''
-        })
-        
-        // 상태 새로고침
-        await fetchAttendanceStatus()
-        await fetchMonthlySummary()
-      } else {
-        alert(`기록 추가 실패: ${data.error}`)
+      if (userError || !userData) {
+        alert('사용자를 찾을 수 없습니다.')
+        setSubmittingMissingRecord(false)
+        return
       }
+
+      // 날짜와 시간 파싱
+      const [year, month, day] = missingRecordForm.selectedDate.split('-').map(Number)
+      const [hours, minutes] = missingRecordForm.selectedTime.split(':').map(Number)
+      
+      if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+        alert('날짜 또는 시간 형식이 올바르지 않습니다.')
+        setSubmittingMissingRecord(false)
+        return
+      }
+
+      const timestamp = new Date(year, month - 1, day, hours, minutes)
+      
+      // 미래 시간 검증
+      if (timestamp > new Date()) {
+        alert('미래 시간으로는 기록할 수 없습니다.')
+        setSubmittingMissingRecord(false)
+        return
+      }
+
+      // 중복 기록 검사
+      const { data: existingRecord } = await supabase
+        .from('attendance_records')
+        .select('id, record_time')
+        .eq('user_id', user.id)
+        .eq('record_date', missingRecordForm.selectedDate)
+        .eq('record_type', missingRecordForm.recordType)
+        .single()
+
+      if (existingRecord) {
+        alert(`${missingRecordForm.recordType} 기록이 이미 존재합니다. (${existingRecord.record_time})`)
+        setSubmittingMissingRecord(false)
+        return
+      }
+
+      // 누락 기록 추가
+      const { data: newRecord, error: insertError } = await supabase
+        .from('attendance_records')
+        .insert({
+          user_id: user.id,
+          record_date: missingRecordForm.selectedDate,
+          record_time: missingRecordForm.selectedTime,
+          record_timestamp: timestamp.toISOString(),
+          record_type: missingRecordForm.recordType,
+          reason: missingRecordForm.reason.trim() || '누락 기록 보충',
+          source: 'manual',
+          is_manual: true,
+          approved_by: user.id,
+          approved_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (insertError) {
+        console.error('누락 기록 추가 오류:', insertError)
+        alert('누락 기록 추가에 실패했습니다.')
+        setSubmittingMissingRecord(false)
+        return
+      }
+
+      alert(`${userData.name}님의 ${missingRecordForm.recordType} 기록이 추가되었습니다. (${missingRecordForm.selectedDate} ${missingRecordForm.selectedTime})`)
+      setEditingRecord(null)
+      setMissingRecordForm({
+        recordType: '출근',
+        selectedDate: '',
+        selectedTime: '',
+        reason: ''
+      })
+      
+      // 상태 새로고침
+      await fetchAttendanceStatus()
+      await fetchMonthlySummary()
+
     } catch (error) {
       console.error('누락 기록 추가 오류:', error)
       alert('누락 기록 추가 중 오류가 발생했습니다.')
@@ -377,30 +700,57 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
   // 저녁식사 기록 업데이트
   const updateDinnerRecord = async (workDate: string, hadDinner: boolean) => {
-    if (!user?.id) return
+    if (!user?.id || !supabase) return
 
     try {
-      const response = await fetch('/api/attendance/missing', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_id: user.id,
-          date_string: workDate,
-          had_dinner: hadDinner
-        }),
-      })
+      // 해당 날짜의 퇴근 기록 찾기 (가장 최근 것)
+      const { data: checkoutRecord, error: checkoutError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('record_date', workDate)
+        .eq('record_type', '퇴근')
+        .order('record_timestamp', { ascending: false })
+        .limit(1)
+        .single()
 
-      const data = await response.json()
-
-      if (data.success) {
-        alert(data.message)
-        // 상태 새로고침
-        await fetchMonthlySummary()
-      } else {
-        alert(`저녁식사 기록 실패: ${data.error}`)
+      if (checkoutError || !checkoutRecord) {
+        alert('해당 날짜의 퇴근 기록을 찾을 수 없습니다.')
+        return
       }
+
+      // 저녁식사 기록 업데이트
+      const { data: updatedRecord, error: updateError } = await supabase
+        .from('attendance_records')
+        .update({
+          had_dinner: hadDinner,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', checkoutRecord.id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('저녁식사 기록 업데이트 오류:', updateError)
+        alert('저녁식사 기록 업데이트에 실패했습니다.')
+        return
+      }
+
+      // daily_work_summary도 업데이트
+      await supabase
+        .from('daily_work_summary')
+        .update({
+          had_dinner: hadDinner,
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id)
+        .eq('work_date', workDate)
+
+      alert(`저녁식사 기록이 ${hadDinner ? '추가' : '제거'}되었습니다.`)
+      
+      // 상태 새로고침
+      await fetchMonthlySummary()
+
     } catch (error) {
       console.error('저녁식사 기록 오류:', error)
       alert('저녁식사 기록 중 오류가 발생했습니다.')
