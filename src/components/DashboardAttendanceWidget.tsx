@@ -257,12 +257,13 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
       }
 
       // 월별 통계 조회
-      const { data: monthlyStats, error: monthlyError } = await supabase
+      const { data: monthlyStatsArray, error: monthlyError } = await supabase
         .from('monthly_work_stats')
         .select('*')
         .eq('user_id', user.id)
         .eq('work_month', monthStart)
-        .single()
+      
+      const monthlyStats = monthlyStatsArray && monthlyStatsArray.length > 0 ? monthlyStatsArray[0] : null
 
       // 일별 근무 데이터 조회
       const { data: dailyData, error: dailyError } = await supabase

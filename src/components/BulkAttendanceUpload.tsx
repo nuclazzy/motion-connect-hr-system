@@ -62,9 +62,10 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         if (!line.trim()) continue
         
         // 탭으로 구분된 CAPS 데이터 파싱
-        const columns = line.split('\t').filter(col => col !== '')
+        const columns = line.split('\t')
         
-        if (columns.length < 11) {
+        // WEB 형식 (8컬럼) vs CAPS 형식 (10컬럼) 구분
+        if (columns.length < 8) {
           console.warn('CAPS 데이터 컬럼 부족:', line, 'columns:', columns.length)
           continue
         }
@@ -81,19 +82,40 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         const timeStr = columns[1].trim() // PM 4:30:33
         const timestamp = parseCapsDateTime(formattedDate, timeStr)
         
-        const record: CapsRecord = {
-          date: formattedDate,
-          time: timeStr,
-          terminalId: columns[2].trim(),
-          userId: columns[3].trim(),
-          name: columns[4].trim(),
-          employeeNo: columns[5].trim(),
-          position: columns[6].trim(),
-          category: columns[7].trim(),
-          mode: columns[8].trim(), // 출근/퇴근/해제/세트/출입
-          auth: columns[9].trim(), // CAPS/WEB
-          result: columns[10].trim(), // O
-          timestamp: timestamp
+        let record: CapsRecord
+        
+        if (columns.length >= 10) {
+          // CAPS 형식 (10컬럼)
+          record = {
+            date: formattedDate,
+            time: timeStr,
+            terminalId: columns[2].trim(),
+            userId: columns[3].trim(),
+            name: columns[4].trim(),
+            employeeNo: columns[5].trim(),
+            position: columns[6].trim(),
+            category: columns[7].trim(),
+            mode: columns[8].trim(), // 출근/퇴근/해제/세트/출입
+            auth: columns[9].trim(), // CAPS/WEB
+            result: columns.length > 10 ? columns[10].trim() : 'O',
+            timestamp: timestamp
+          }
+        } else {
+          // WEB 형식 (8컬럼) - 단말기ID와 사용자ID가 없음
+          record = {
+            date: formattedDate,
+            time: timeStr,
+            terminalId: columns[2].trim() || '웹앱',
+            userId: '',
+            name: columns[3].trim(),
+            employeeNo: columns[4].trim(),
+            position: columns[5] ? columns[5].trim() : '',
+            category: columns[6] ? columns[6].trim() : '',
+            mode: columns[7] ? columns[7].trim() : (columns[6] ? columns[6].trim() : ''), // 출근/퇴근
+            auth: 'WEB',
+            result: 'O',
+            timestamp: timestamp
+          }
         }
         
         // 유효성 검사
