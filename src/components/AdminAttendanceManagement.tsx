@@ -18,6 +18,7 @@ import {
 import { getCurrentUser, checkPermission, type User as AuthUser } from '@/lib/auth'
 import { useSupabase } from '@/components/SupabaseProvider'
 import CapsUploadManager from './CapsUploadManager'
+import CapsTestDataGenerator from './CapsTestDataGenerator'
 
 interface Employee {
   id: string
@@ -61,7 +62,7 @@ export default function AdminAttendanceManagement() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
   const [filterType, setFilterType] = useState<'all' | '출근' | '퇴근' | '해제' | '세트' | '출입' | 'missing'>('all')
   const [showMissingForm, setShowMissingForm] = useState(false)
-  const [activeTab, setActiveTab] = useState<'attendance' | 'upload'>('attendance')
+  const [activeTab, setActiveTab] = useState<'attendance' | 'upload' | 'test'>('attendance')
   const [missingFormData, setMissingFormData] = useState<MissingRecordRequest>({
     user_id: '',
     date_string: '',
@@ -472,6 +473,17 @@ export default function AdminAttendanceManagement() {
           <Upload className="h-4 w-4 mr-2" />
           CAPS 데이터 업로드
         </button>
+        <button
+          onClick={() => setActiveTab('test')}
+          className={`px-4 py-2 font-medium flex items-center ${
+            activeTab === 'test'
+              ? 'border-b-2 border-blue-500 text-blue-600'
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Calendar className="h-4 w-4 mr-2" />
+          테스트 데이터
+        </button>
       </div>
 
       {/* 출퇴근 현황 탭 */}
@@ -808,6 +820,35 @@ export default function AdminAttendanceManagement() {
       {/* CAPS 업로드 탭 */}
       {activeTab === 'upload' && (
         <CapsUploadManager />
+      )}
+
+      {/* 테스트 데이터 생성 탭 */}
+      {activeTab === 'test' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <CapsTestDataGenerator />
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">테스트 가이드</h3>
+            <div className="space-y-3 text-sm text-gray-600">
+              <div>
+                <h4 className="font-medium text-gray-700">1. 테스트 데이터 생성</h4>
+                <p>직원 수와 날짜 범위를 선택하여 CAPS 형식의 테스트 데이터를 생성합니다.</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-700">2. 데이터 업로드</h4>
+                <p>생성된 파일을 다운로드한 후, CAPS 데이터 업로드 탭에서 업로드합니다.</p>
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-700">3. 결과 확인</h4>
+                <p>출퇴근 현황 탭에서 업로드된 데이터를 확인할 수 있습니다.</p>
+              </div>
+              <div className="mt-4 p-3 bg-yellow-50 rounded-md">
+                <p className="text-yellow-800">
+                  <strong>주의:</strong> 테스트 데이터에 포함된 직원명이 실제 데이터베이스에 존재해야 업로드가 성공합니다.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
