@@ -161,8 +161,10 @@ export async function POST(request: NextRequest) {
             const workStatus = getWorkStatus(leaveType)
 
             // 휴가 기간 내 모든 날짜에 대해 처리
+            // Google Calendar의 end 날짜는 exclusive이므로, 실제 마지막 날은 end - 1일
             const currentDate = new Date(startDate)
             const endDateObj = new Date(endDate)
+            endDateObj.setDate(endDateObj.getDate() - 1) // end 날짜에서 1일 빼기
             
             while (currentDate <= endDateObj) {
               const workDate = currentDate.toISOString().split('T')[0]

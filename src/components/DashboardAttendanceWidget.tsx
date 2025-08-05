@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Clock, MapPin, Coffee, AlertCircle, CheckCircle, XCircle, ChevronDown, ChevronUp, Calendar, Edit } from 'lucide-react'
+import { Clock, MapPin, Coffee, AlertCircle, CheckCircle, XCircle, ChevronDown, ChevronUp, Calendar, Edit, HelpCircle } from 'lucide-react'
 import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
+import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
 
 interface AttendanceStatus {
   user: {
@@ -88,6 +89,8 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().substring(0, 7))
   const [editingRecord, setEditingRecord] = useState<any>(null)
+  const [showPolicyModal, setShowPolicyModal] = useState(false)
+  const [selectedPolicyType, setSelectedPolicyType] = useState<'flexible' | 'overtime' | 'leave' | null>(null)
 
   // 현재 시간 업데이트
   useEffect(() => {
@@ -275,6 +278,11 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
     setCurrentMonth(date.toISOString().substring(0, 7))
   }
 
+  const openPolicyModal = (policyType: 'flexible' | 'overtime' | 'leave') => {
+    setSelectedPolicyType(policyType)
+    setShowPolicyModal(true)
+  }
+
   return (
     <>
       <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -341,6 +349,13 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
             </h3>
             <div className="flex items-center space-x-2">
               <button
+                onClick={() => openPolicyModal('overtime')}
+                className="p-1 rounded-md hover:bg-blue-100 text-blue-600"
+                title="근무정책 안내"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+              <button
                 onClick={() => changeMonth('prev')}
                 className="p-1 rounded-md hover:bg-gray-100"
               >
@@ -359,9 +374,18 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
             <div className="space-y-4">
               {/* 월별 기준 정보 */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center mb-2">
-                  <Calendar className="h-4 w-4 text-gray-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700">해당 월 기준 정보</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center">
+                    <Calendar className="h-4 w-4 text-gray-500 mr-2" />
+                    <span className="text-sm font-medium text-gray-700">해당 월 기준 정보</span>
+                  </div>
+                  <button
+                    onClick={() => openPolicyModal('flexible')}
+                    className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <HelpCircle className="h-3 w-3 mr-1" />
+                    탄력근무제
+                  </button>
                 </div>
                 <p className="text-xs text-gray-600">
                   {monthlySummary.period.month} 기준 근로시간: {monthlySummary.workStats.totalBasicHours}시간 
@@ -738,6 +762,16 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
           </div>
         </div>
       )}
+
+      {/* 근무정책 설명 모달 */}
+      <WorkPolicyExplanationModal
+        isOpen={showPolicyModal}
+        onClose={() => {
+          setShowPolicyModal(false)
+          setSelectedPolicyType(null)
+        }}
+        policyType={selectedPolicyType}
+      />
     </>
   )
 }
