@@ -437,7 +437,7 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         const { data, error: attendanceError } = await supabase
           .from('attendance_records')
           .upsert(attendanceRecords, {
-            onConflict: 'user_id,record_timestamp,record_type'
+            onConflict: 'user_id,record_timestamp,record_type,source'
           })
           .select()
         

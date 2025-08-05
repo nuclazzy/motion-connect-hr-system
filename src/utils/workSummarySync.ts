@@ -288,6 +288,13 @@ export async function syncMonthlyWorkSummary(
     const holidayResponse = await fetch(`/api/holidays/naver?year=${year}`)
     const holidayData = await holidayResponse.json()
     
+    console.log('🎉 공휴일 API 응답:', { 
+      success: holidayData.success, 
+      source: holidayData.source,
+      holidayCount: holidayData.holidays ? Object.keys(holidayData.holidays).length : 0,
+      holidays: holidayData.holidays
+    })
+    
     if (holidayData.success && holidayData.holidays) {
       // 공휴일 동기화
       results.holidays = await syncHolidaysToWorkSummary(
@@ -296,12 +303,20 @@ export async function syncMonthlyWorkSummary(
         month
       )
       console.log(`✅ 공휴일 동기화 완료: ${results.holidays.success}건`)
+    } else {
+      console.warn('⚠️ 공휴일 데이터가 없습니다:', holidayData)
     }
 
     // 2. Google Calendar 연차 데이터 가져오기
     console.log('📅 Google Calendar 연차 데이터 가져오기...')
+    // month는 1부터 시작하므로 month-1이 실제 JavaScript 월
     const timeMin = new Date(year, month - 1, 1).toISOString()
-    const timeMax = new Date(year, month, 0, 23, 59, 59).toISOString()
+    // 해당 월의 마지막 날: month가 다음 달의 0일
+    const lastDay = new Date(year, month, 0).getDate()
+    const timeMax = new Date(year, month - 1, lastDay, 23, 59, 59).toISOString()
+    
+    console.log(`🔍 Google Calendar 조회 범위: ${year}년 ${month}월`)
+    console.log(`🔍 조회 기간: ${timeMin} ~ ${timeMax}`)
     
     const calendarResponse = await fetch('/api/calendar/events', {
       method: 'POST',
