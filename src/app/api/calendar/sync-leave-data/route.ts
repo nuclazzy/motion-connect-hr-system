@@ -155,8 +155,8 @@ export async function POST(request: NextRequest) {
             leaveType
           })
 
-          // 4. daily_work_summary에 유급휴가 시간 자동 인정 (8월부터만)
-          if (new Date(startDate) >= new Date('2025-08-01')) {
+          // 4. daily_work_summary에 유급휴가 시간 자동 인정 (7월부터)
+          if (new Date(startDate) >= new Date('2025-07-01')) {
             const workHours = calculateWorkHours(leaveType)
             const workStatus = getWorkStatus(leaveType)
 
