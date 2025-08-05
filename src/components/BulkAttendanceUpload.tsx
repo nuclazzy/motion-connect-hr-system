@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Upload, 
   FileText, 
@@ -51,6 +51,11 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
     message: string
     details?: any
   } | null>(null)
+
+  // 디버그: 상태 변경 감지
+  useEffect(() => {
+    console.log('🎨 UI 상태 변경:', { parsedDataLength: parsedData.length, processedDataLength: processedData.length })
+  }, [parsedData, processedData])
 
   // CAPS 원본 데이터 파싱
   const parseTextData = () => {
@@ -128,11 +133,13 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
       
       console.log('✅ 파싱 완료:', { parsedCount: parsed.length })
       setParsedData(parsed)
+      console.log('📊 parsedData 상태 업데이트:', { newParsedDataLength: parsed.length })
       
       // CAPS 기록을 일별 출퇴근으로 처리
       const processed = processCapsRecords(parsed)
       console.log('🔄 처리된 출퇴근 기록:', { processedCount: processed.length })
       setProcessedData(processed)
+      console.log('📋 processedData 상태 업데이트:', { newProcessedDataLength: processed.length })
       
       setUploadResult(null)
       
