@@ -109,11 +109,16 @@ WHERE id IN (
   SELECT id FROM duplicate_cleanup WHERE rn > 1
 );
 
--- 2.3 Supabase 특화 새로운 제약조건 생성
+-- 2.3 source 컬럼을 NOT NULL로 변경 (기본값 설정)
+UPDATE attendance_records SET source = 'web' WHERE source IS NULL;
+ALTER TABLE attendance_records ALTER COLUMN source SET DEFAULT 'web';
+ALTER TABLE attendance_records ALTER COLUMN source SET NOT NULL;
+
+-- 2.4 Supabase 특화 새로운 제약조건 생성
 -- 마이크로세컨드 단위까지 고려한 정교한 제약조건
 ALTER TABLE attendance_records 
 ADD CONSTRAINT unique_attendance_record_precise 
-UNIQUE (user_id, record_timestamp, record_type, COALESCE(source, 'web'));
+UNIQUE (user_id, record_timestamp, record_type, source);
 
 -- 2.4 CAPS 전용 안전한 RPC 함수 생성
 CREATE OR REPLACE FUNCTION safe_upsert_caps_attendance(
@@ -142,7 +147,7 @@ BEGIN
   WHERE user_id = p_user_id
   AND record_timestamp = p_record_timestamp
   AND record_type = p_record_type
-  AND COALESCE(source, 'web') = source_value
+  AND source = source_value
   LIMIT 1;
 
   IF existing_id IS NOT NULL THEN
