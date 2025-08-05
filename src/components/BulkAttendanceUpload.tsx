@@ -54,8 +54,10 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
 
   // CAPS 원본 데이터 파싱
   const parseTextData = () => {
+    console.log('🔍 CAPS 데이터 파싱 시작', { textDataLength: textData.length })
     try {
       const lines = textData.trim().split('\n')
+      console.log('📝 파싱할 라인 수:', lines.length)
       const parsed: CapsRecord[] = []
       
       for (const line of lines) {
@@ -124,10 +126,12 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
         }
       }
       
+      console.log('✅ 파싱 완료:', { parsedCount: parsed.length })
       setParsedData(parsed)
       
       // CAPS 기록을 일별 출퇴근으로 처리
       const processed = processCapsRecords(parsed)
+      console.log('🔄 처리된 출퇴근 기록:', { processedCount: processed.length })
       setProcessedData(processed)
       
       setUploadResult(null)
@@ -447,7 +451,10 @@ placeholder="2025. 6. 19.	PM 4:30:33	2	7	이재혁	23		일반	퇴근	CAPS	O
           />
           <div className="flex space-x-2 mt-2">
             <button
-              onClick={parseTextData}
+              onClick={() => {
+                console.log('🖱️ CAPS 데이터 파싱 버튼 클릭됨', { textDataLength: textData.length, isEmpty: !textData.trim() })
+                parseTextData()
+              }}
               disabled={!textData.trim()}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
