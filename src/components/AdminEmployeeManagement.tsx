@@ -1348,25 +1348,25 @@ export default function AdminEmployeeManagement() {
                           <div className="bg-white rounded-lg p-4 border">
                             <div className="text-sm text-gray-500">총 근무일수</div>
                             <div className="text-2xl font-bold text-gray-900">
-                              {attendanceData.workStats?.totalWorkDays || 0}일
+                              {attendanceData.summary?.total_work_days || 0}일
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-4 border">
                             <div className="text-sm text-gray-500">총 근무시간</div>
                             <div className="text-2xl font-bold text-gray-900">
-                              {attendanceData.workStats?.totalWorkHours || 0}시간
+                              {(attendanceData.summary?.total_basic_hours || 0) + (attendanceData.summary?.total_overtime_hours || 0)}시간
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-4 border">
                             <div className="text-sm text-gray-500">초과근무시간</div>
                             <div className="text-2xl font-bold text-blue-600">
-                              {attendanceData.workStats?.totalOvertimeHours || 0}시간
+                              {attendanceData.summary?.total_overtime_hours || 0}시간
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-4 border">
                             <div className="text-sm text-gray-500">평균 일일 근무시간</div>
                             <div className="text-2xl font-bold text-gray-900">
-                              {attendanceData.workStats?.averageDailyHours || 0}시간
+                              {Math.round(attendanceData.summary?.average_daily_hours * 10) / 10 || 0}시간
                             </div>
                           </div>
                         </div>
@@ -1390,8 +1390,8 @@ export default function AdminEmployeeManagement() {
                                 </tr>
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
-                                {attendanceData.dailyRecords && attendanceData.dailyRecords.length > 0 ? (
-                                  attendanceData.dailyRecords.map((record: any) => (
+                                {attendanceData.daily_records && attendanceData.daily_records.length > 0 ? (
+                                  attendanceData.daily_records.map((record: any) => (
                                     <tr key={record.work_date} className="hover:bg-gray-50">
                                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                                         {new Date(record.work_date).toLocaleDateString('ko-KR', {
