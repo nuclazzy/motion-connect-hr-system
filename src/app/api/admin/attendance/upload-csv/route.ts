@@ -122,6 +122,9 @@ export async function POST(request: NextRequest) {
     const errors: string[] = []
     let duplicateCount = 0
     let invalidUserCount = 0
+    
+    // 같은 배치 내 중복 방지를 위한 Set
+    const batchRecordSet = new Set<string>()
 
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim()
@@ -163,19 +166,27 @@ export async function POST(request: NextRequest) {
         const recordTime = record.발생시각
         const recordTimestamp = new Date(`${recordDate}T${recordTime}+09:00`) // KST
 
-        // 중복 체크
+        // 같은 배치 내 중복 체크 (핵심 수정사항)
+        const batchKey = `${userId}-${recordTimestamp.toISOString()}-${record.구분}`
+        if (batchRecordSet.has(batchKey)) {
+          duplicateCount++
+          console.log(`⚠️ 배치 내 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${record.구분}`)
+          continue
+        }
+        batchRecordSet.add(batchKey)
+
+        // 데이터베이스 중복 체크
         const { data: existingRecord } = await supabase
           .from('attendance_records')
           .select('id')
           .eq('user_id', userId)
-          .eq('record_date', recordDate)
-          .eq('record_time', recordTime)
+          .eq('record_timestamp', recordTimestamp.toISOString())
           .eq('record_type', record.구분)
-          .eq('source', 'CAPS')
           .single()
 
         if (existingRecord) {
           duplicateCount++
+          console.log(`⚠️ DB 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${record.구분}`)
           continue
         }
 
@@ -204,33 +215,38 @@ export async function POST(request: NextRequest) {
       errorCount: errors.length
     })
 
-    // 데이터베이스에 일괄 삽입
+    // 안전한 UPSERT 함수를 사용하여 데이터베이스에 삽입
     let insertedCount = 0
+    let upsertErrors = 0
+    
     if (processedRecords.length > 0) {
-      const { data: insertedRecords, error: insertError } = await supabase
-        .from('attendance_records')
-        .insert(processedRecords.map(record => ({
-          user_id: record.user_id,
-          record_date: record.record_date,
-          record_time: record.record_time,
-          record_timestamp: record.record_timestamp,
-          record_type: record.record_type,
-          reason: record.reason,
-          source: record.source,
-          is_manual: record.is_manual
-        })))
-        .select('id')
+      // 각 레코드를 안전한 UPSERT 함수로 개별 처리
+      for (const record of processedRecords) {
+        try {
+          const { data: resultId, error: upsertError } = await supabase
+            .rpc('safe_upsert_attendance_record', {
+              p_user_id: record.user_id,
+              p_record_date: record.record_date,
+              p_record_time: record.record_time,
+              p_record_timestamp: record.record_timestamp,
+              p_record_type: record.record_type,
+              p_reason: record.reason,
+              p_source: record.source,
+              p_is_manual: record.is_manual
+            })
 
-      if (insertError) {
-        console.error('❌ 데이터 삽입 오류:', insertError)
-        return NextResponse.json({
-          success: false,
-          error: '데이터베이스 저장에 실패했습니다.',
-          details: insertError.message
-        }, { status: 500 })
+          if (upsertError) {
+            console.error('❌ UPSERT 오류:', upsertError, 'Record:', record)
+            upsertErrors++
+          } else if (resultId) {
+            insertedCount++
+            console.log(`✅ 기록 처리 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+          }
+        } catch (error) {
+          console.error('❌ 개별 레코드 처리 중 예외:', error, 'Record:', record)
+          upsertErrors++
+        }
       }
-
-      insertedCount = insertedRecords?.length || 0
     }
 
     console.log('✅ CAPS CSV 업로드 완료:', {
@@ -238,7 +254,8 @@ export async function POST(request: NextRequest) {
       fileName: file.name,
       insertedCount,
       duplicateCount,
-      invalidUserCount
+      invalidUserCount,
+      upsertErrors
     })
 
     return NextResponse.json({
@@ -250,9 +267,11 @@ export async function POST(request: NextRequest) {
         inserted: insertedCount,
         duplicates: duplicateCount,
         invalidUsers: invalidUserCount,
-        errors: errors.slice(0, 10) // 최대 10개 에러만 반환
+        errors: errors.concat(
+          upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 UPSERT 오류가 발생했습니다.`] : []
+        ).slice(0, 10) // 최대 10개 에러만 반환
       },
-      message: `✅ CAPS 데이터 업로드 완료: ${insertedCount}건 추가, ${duplicateCount}건 중복 스킵`
+      message: `✅ CAPS 데이터 업로드 완료: ${insertedCount}건 처리, ${duplicateCount}건 중복 스킵${upsertErrors > 0 ? `, ${upsertErrors}건 오류` : ''}`
     })
 
   } catch (error) {

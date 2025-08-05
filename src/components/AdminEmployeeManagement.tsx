@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import BulkAttendanceUpload from '@/components/BulkAttendanceUpload'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
 // Overtime management interfaces
 interface OvertimeRecord {
@@ -1303,16 +1304,34 @@ export default function AdminEmployeeManagement() {
                       <h4 className="font-medium text-gray-900">근무시간 조회 및 관리</h4>
                       <div className="flex items-center space-x-4">
                         <div className="flex items-center space-x-2">
-                          <label htmlFor="attendance-month" className="text-sm font-medium text-gray-700">
+                          <label className="text-sm font-medium text-gray-700">
                             조회 월:
                           </label>
-                          <input
-                            type="month"
-                            id="attendance-month"
-                            value={attendanceMonth}
-                            onChange={(e) => setAttendanceMonth(e.target.value)}
-                            className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          />
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => {
+                                const [year, month] = attendanceMonth.split('-').map(Number)
+                                const prevDate = new Date(year, month - 2, 1)
+                                setAttendanceMonth(`${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`)
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              <ChevronLeft className="w-5 h-5 text-gray-600" />
+                            </button>
+                            <div className="px-3 py-1 min-w-[120px] text-center font-medium text-gray-900">
+                              {attendanceMonth}
+                            </div>
+                            <button
+                              onClick={() => {
+                                const [year, month] = attendanceMonth.split('-').map(Number)
+                                const nextDate = new Date(year, month, 1)
+                                setAttendanceMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`)
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded transition-colors"
+                            >
+                              <ChevronRight className="w-5 h-5 text-gray-600" />
+                            </button>
+                          </div>
                         </div>
                         <button
                           onClick={handleAddAttendanceRecord}

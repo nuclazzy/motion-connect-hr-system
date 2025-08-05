@@ -93,8 +93,8 @@ export async function getLeaveCalendarConfig() {
 }
 
 // Google Calendar 연차 데이터 동기화
-export async function syncLeaveDataFromCalendar(calendarId: string, startDate?: string, endDate?: string) {
-  console.log('🔄 Google Calendar 연차 데이터 동기화 시작')
+export async function syncLeaveDataFromCalendar(calendarId: string = 'c_rb1oser82snsqf9vdkr7jgr9r8@group.calendar.google.com', startDate?: string, endDate?: string) {
+  console.log('🔄 Google Calendar 연차 데이터 동기화 시작 - 캘린더 ID:', calendarId)
   
   const supabase = await createServiceRoleClient()
 
@@ -227,6 +227,185 @@ export async function syncLeaveDataFromCalendar(calendarId: string, startDate?: 
     leaveEvents: leaveEvents.slice(0, 10), // 처음 10개만 반환
     totalLeaveEvents: leaveEvents.length
   }
+}
+
+// 모든 연차 캘린더 자동 동기화
+export async function autoSyncAllCalendars() {
+  console.log('🔄 모든 연차 캘린더 자동 동기화 시작')
+  
+  const supabase = await createServiceRoleClient()
+  
+  try {
+    // 1. 동기화가 필요한 캘린더 조회
+    const { data: calendarsToSync, error: configError } = await supabase
+      .from('calendar_configs')
+      .select('*')
+      .eq('config_type', 'function')
+      .eq('is_active', true)
+      .eq('auto_sync_enabled', true)
+      .or('target_name.ilike.%연차%,target_name.ilike.%leave%,calendar_alias.ilike.%연차%')
+
+    if (configError) {
+      console.error('❌ 캘린더 설정 조회 실패:', configError)
+      throw new Error('캘린더 설정 조회 실패')
+    }
+
+    if (!calendarsToSync || calendarsToSync.length === 0) {
+      console.log('📭 동기화할 캘린더가 없습니다.')
+      return {
+        success: true,
+        message: '동기화할 캘린더가 없습니다.',
+        results: { syncedCalendars: 0, totalEvents: 0, errors: 0 }
+      }
+    }
+
+    console.log(`📅 ${calendarsToSync.length}개 캘린더 동기화 예정`)
+
+    const syncResults = {
+      syncedCalendars: 0,
+      totalEvents: 0,
+      errors: 0,
+      details: [] as any[]
+    }
+
+    // 2. 각 캘린더에 대해 동기화 실행
+    for (const calendar of calendarsToSync) {
+      try {
+        console.log(`🔄 캘린더 동기화 시작: ${calendar.target_name} (${calendar.calendar_id})`)
+
+        // 동기화 시작 로그 생성
+        const { data: syncLog, error: logError } = await supabase
+          .from('calendar_sync_logs')
+          .insert({
+            calendar_id: calendar.calendar_id,
+            calendar_type: 'leave',
+            sync_start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30일 전부터
+            sync_end_date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90일 후까지
+            status: 'running'
+          })
+          .select()
+          .single()
+
+        if (logError) {
+          console.error('❌ 동기화 로그 생성 실패:', logError)
+          continue
+        }
+
+        // 실제 동기화 실행
+        const syncResult = await syncLeaveDataFromCalendar(
+          calendar.calendar_id,
+          new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30일 전
+          new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString()   // 90일 후
+        )
+
+        if (syncResult.success) {
+          syncResults.syncedCalendars++
+          syncResults.totalEvents += syncResult.totalLeaveEvents
+
+          // 동기화 완료 로그 업데이트
+          await supabase
+            .from('calendar_sync_logs')
+            .update({
+              total_events: syncResult.results.processed,
+              matched_events: syncResult.results.matched,
+              created_events: syncResult.results.matched,
+              error_count: syncResult.results.errors,
+              status: 'completed',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', syncLog.id)
+
+          // calendar_configs의 last_sync_at 업데이트
+          await supabase
+            .from('calendar_configs')
+            .update({
+              last_sync_at: new Date().toISOString()
+            })
+            .eq('id', calendar.id)
+
+          syncResults.details.push({
+            calendarName: calendar.target_name,
+            success: true,
+            events: syncResult.totalLeaveEvents,
+            matched: syncResult.results.matched
+          })
+
+          console.log(`✅ ${calendar.target_name} 동기화 완료: ${syncResult.totalLeaveEvents}개 이벤트 처리`)
+
+        } else {
+          syncResults.errors++
+
+          // 동기화 실패 로그 업데이트
+          await supabase
+            .from('calendar_sync_logs')
+            .update({
+              status: 'failed',
+              error_message: '동기화 실행 중 오류 발생',
+              completed_at: new Date().toISOString()
+            })
+            .eq('id', syncLog.id)
+
+          syncResults.details.push({
+            calendarName: calendar.target_name,
+            success: false,
+            error: '동기화 실행 실패'
+          })
+
+          console.error(`❌ ${calendar.target_name} 동기화 실패`)
+        }
+
+      } catch (error) {
+        syncResults.errors++
+        console.error(`❌ 캘린더 ${calendar.target_name} 동기화 중 오류:`, error)
+        
+        syncResults.details.push({
+          calendarName: calendar.target_name,
+          success: false,
+          error: error instanceof Error ? error.message : '알 수 없는 오류'
+        })
+      }
+    }
+
+    console.log('🎉 모든 캘린더 자동 동기화 완료!')
+    console.log(`📊 동기화 결과: ${syncResults.syncedCalendars}개 성공, ${syncResults.errors}개 실패, 총 ${syncResults.totalEvents}개 이벤트`)
+
+    return {
+      success: true,
+      message: `${syncResults.syncedCalendars}개 캘린더 동기화 완료`,
+      results: syncResults
+    }
+
+  } catch (error) {
+    console.error('❌ 자동 동기화 중 오류:', error)
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.',
+      results: { syncedCalendars: 0, totalEvents: 0, errors: 1 }
+    }
+  }
+}
+
+// 특정 캘린더의 동기화 상태 확인
+export async function getCalendarSyncStatus(calendarId?: string) {
+  const supabase = await createServiceRoleClient()
+  
+  let query = supabase
+    .from('calendar_sync_status')
+    .select('*')
+    .order('last_sync_at', { ascending: false })
+
+  if (calendarId) {
+    query = query.eq('calendar_id', calendarId)
+  }
+
+  const { data: syncStatus, error } = await query
+
+  if (error) {
+    console.error('❌ 동기화 상태 조회 실패:', error)
+    throw new Error('동기화 상태 조회 실패')
+  }
+
+  return syncStatus || []
 }
 
 // Google Calendar에 휴가 이벤트 생성
