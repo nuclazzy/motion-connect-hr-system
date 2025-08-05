@@ -2,15 +2,44 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-// 공공데이터포털 공휴일 API 키 (무료)
+// 공공데이터포털 공휴일 API 키
 const HOLIDAY_API_KEY = process.env.HOLIDAY_API_KEY
+
+// XML 파싱 함수
+function parseXMLHolidayData(xmlText: string): { [key: string]: string } {
+  const holidays: { [key: string]: string } = {}
+  
+  // XML에서 item 태그들을 찾기
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g
+  const items = xmlText.match(itemRegex) || []
+  
+  items.forEach(itemXml => {
+    // 각 필드 추출
+    const dateMatch = itemXml.match(/<locdate>(\d+)<\/locdate>/)
+    const nameMatch = itemXml.match(/<dateName>([^<]+)<\/dateName>/)
+    const isHolidayMatch = itemXml.match(/<isHoliday>([^<]+)<\/isHoliday>/)
+    
+    if (dateMatch && nameMatch && isHolidayMatch) {
+      const dateStr = dateMatch[1]
+      const dateName = nameMatch[1]
+      const isHoliday = isHolidayMatch[1]
+      
+      // 공휴일인 경우만 추가 (isHoliday가 'Y'인 경우)
+      if (isHoliday === 'Y') {
+        const formattedDate = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+        holidays[formattedDate] = dateName
+      }
+    }
+  })
+  
+  return holidays
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const year = searchParams.get('year') || new Date().getFullYear().toString()
 
-    // 한국천문연구원 특일정보 API 또는 공공데이터포털 API 사용
     let holidays: { [key: string]: string } = {}
 
     if (HOLIDAY_API_KEY) {
@@ -49,35 +78,59 @@ export async function GET(request: NextRequest) {
 async function fetchHolidaysFromKoreanAPI(year: number): Promise<{ [key: string]: string }> {
   const holidays: { [key: string]: string } = {}
   
-  // 공공데이터포털 특일정보 API
-  const apiUrl = `http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
+  // 공공데이터포털 특일정보 API (XML 전용)
+  const apiUrl = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getRestDeInfo`
+  
+  // 디코딩된 키 사용
+  const serviceKey = HOLIDAY_API_KEY!.replace(/%2B/g, '+').replace(/%3D/g, '=').replace(/%2F/g, '/')
+  
   const params = new URLSearchParams({
-    serviceKey: HOLIDAY_API_KEY!,
+    serviceKey: serviceKey,
     solYear: year.toString(),
-    numOfRows: '100',
-    _type: 'json'
+    numOfRows: '100'
   })
 
-  const response = await fetch(`${apiUrl}?${params}`)
-  
-  if (!response.ok) {
-    throw new Error('공휴일 API 호출 실패')
-  }
+  console.log('🎉 공휴일 API 호출:', `${apiUrl}?solYear=${year}&numOfRows=100`)
 
-  const data = await response.json()
-  
-  if (data.response?.body?.items?.item) {
-    const items = Array.isArray(data.response.body.items.item) 
-      ? data.response.body.items.item 
-      : [data.response.body.items.item]
+  try {
+    const response = await fetch(`${apiUrl}?${params}`)
+    const text = await response.text()
     
-    items.forEach((item: { locdate?: number; dateName?: string }) => {
-      if (item.locdate && item.dateName) {
-        const dateStr = item.locdate.toString()
-        const formattedDate = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-        holidays[formattedDate] = item.dateName
+    console.log('API 응답 상태:', response.status)
+    
+    // XML 응답인지 확인
+    if (text.startsWith('<?xml') || text.includes('<response>')) {
+      // XML 파싱
+      const parsedHolidays = parseXMLHolidayData(text)
+      Object.assign(holidays, parsedHolidays)
+      
+      console.log(`✅ ${year}년 공휴일 ${Object.keys(holidays).length}개 조회 성공`)
+    } else {
+      // JSON 시도 (혹시 _type=json이 작동하는 경우)
+      try {
+        const data = JSON.parse(text)
+        
+        if (data.response?.body?.items?.item) {
+          const items = Array.isArray(data.response.body.items.item) 
+            ? data.response.body.items.item 
+            : [data.response.body.items.item]
+          
+          items.forEach((item: { locdate?: number; dateName?: string; isHoliday?: string }) => {
+            if (item.locdate && item.dateName && item.isHoliday === 'Y') {
+              const dateStr = item.locdate.toString()
+              const formattedDate = `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+              holidays[formattedDate] = item.dateName
+            }
+          })
+        }
+      } catch (e) {
+        console.error('JSON 파싱 실패, 응답:', text.substring(0, 200))
+        throw new Error('API 응답 파싱 실패')
       }
-    })
+    }
+  } catch (error) {
+    console.error('공공데이터 API 호출 오류:', error)
+    throw error
   }
   
   // API에서 데이터를 가져오지 못한 경우 기본 데이터로 보완
@@ -120,6 +173,7 @@ function getDefaultHolidays(year: number): { [key: string]: string } {
     holidays[`${year}-01-30`] = '설날 연휴'
     holidays[`${year}-03-03`] = '대체휴일'
     holidays[`${year}-05-13`] = '부처님 오신 날'
+    holidays[`${year}-06-03`] = '전국동시지방선거'
     holidays[`${year}-10-06`] = '추석 연휴'
     holidays[`${year}-10-07`] = '추석'
     holidays[`${year}-10-08`] = '추석 연휴'
