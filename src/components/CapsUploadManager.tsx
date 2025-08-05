@@ -19,6 +19,7 @@ export default function CapsUploadManager() {
   const [dragOver, setDragOver] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [uploadMode, setUploadMode] = useState<'caps' | 'attendance'>('caps')
 
   const handleFileUpload = async (file: File) => {
     if (!adminUserId) {
@@ -36,19 +37,52 @@ export default function CapsUploadManager() {
     setResult(null)
 
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('admin_user_id', adminUserId)
+      let response: Response
 
-      const response = await fetch('/api/admin/attendance/upload-csv', {
-        method: 'POST',
-        body: formData
-      })
+      if (uploadMode === 'attendance') {
+        // 출퇴근 데이터 일괄 업로드
+        const csvText = await file.text()
+        
+        response = await fetch('/api/admin/attendance/bulk-upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminUserId}`
+          },
+          body: JSON.stringify({
+            csvData: csvText,
+            overwrite: true
+          })
+        })
+      } else {
+        // CAPS 데이터 업로드 (기존)
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('admin_user_id', adminUserId)
+
+        response = await fetch('/api/admin/attendance/upload-csv', {
+          method: 'POST',
+          body: formData
+        })
+      }
 
       const data = await response.json()
 
       if (data.success) {
-        setResult(data.data)
+        if (uploadMode === 'attendance') {
+          // 출퇴근 데이터 결과 변환
+          setResult({
+            fileName: file.name,
+            fileSize: file.size,
+            totalProcessed: data.results.processed,
+            inserted: data.results.success,
+            duplicates: data.results.skipped,
+            invalidUsers: data.results.errors,
+            errors: data.results.errorMessages || []
+          })
+        } else {
+          setResult(data.data)
+        }
       } else {
         setError(data.error || '업로드에 실패했습니다.')
       }
@@ -108,11 +142,37 @@ export default function CapsUploadManager() {
       {/* 헤더 */}
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          CAPS CSV 데이터 업로드
+          CSV 데이터 업로드
         </h2>
         <p className="text-gray-600">
-          CAPS 지문인식 시스템에서 추출한 출퇴근 데이터를 업로드하세요
+          출퇴근 데이터를 일괄 업로드하세요
         </p>
+      </div>
+
+      {/* 업로드 모드 선택 */}
+      <div className="flex justify-center space-x-4">
+        <label className="flex items-center">
+          <input
+            type="radio"
+            name="uploadMode"
+            value="caps"
+            checked={uploadMode === 'caps'}
+            onChange={(e) => setUploadMode(e.target.value as 'caps' | 'attendance')}
+            className="mr-2"
+          />
+          <span className="text-sm font-medium text-gray-700">CAPS 지문인식 데이터</span>
+        </label>
+        <label className="flex items-center">
+          <input
+            type="radio"
+            name="uploadMode"
+            value="attendance"
+            checked={uploadMode === 'attendance'}
+            onChange={(e) => setUploadMode(e.target.value as 'caps' | 'attendance')}
+            className="mr-2"
+          />
+          <span className="text-sm font-medium text-gray-700">출퇴근 상세 데이터 (6월 등)</span>
+        </label>
       </div>
 
       {/* 업로드 영역 */}
@@ -141,10 +201,16 @@ export default function CapsUploadManager() {
           <div className="flex flex-col items-center">
             <Upload className="h-12 w-12 text-gray-400 mb-4" />
             <p className="text-lg font-medium text-gray-900 mb-2">
-              CAPS CSV 파일을 드래그하거나 클릭하여 업로드
+              {uploadMode === 'caps' 
+                ? 'CAPS CSV 파일을 드래그하거나 클릭하여 업로드'
+                : '출퇴근 상세 데이터 CSV 파일을 드래그하거나 클릭하여 업로드'
+              }
             </p>
             <p className="text-sm text-gray-500 mb-4">
-              지원 형식: .csv 파일만 가능
+              {uploadMode === 'caps'
+                ? '지원 형식: CAPS 지문인식 시스템에서 추출한 .csv 파일'
+                : '지원 형식: 직원명,날짜,근무상태,출퇴근시간,근무시간 등이 포함된 .csv 파일'
+              }
             </p>
             <label className="cursor-pointer">
               <input
