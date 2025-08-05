@@ -249,9 +249,9 @@ export default function CapsUploadManager() {
         // 2. 안전한 CAPS 전용 함수 사용 (UPSERT 충돌 완전 방지)
         for (const record of uniqueRecords) {
           try {
-            // PostgreSQL 안전한 UPSERT 함수 호출
+            // 새로운 안전한 CAPS UPSERT 함수 호출
             const { data: upsertResult, error: upsertError } = await supabase
-              .rpc('safe_upsert_caps_record', {
+              .rpc('safe_upsert_caps_attendance', {
                 p_user_id: record.user_id,
                 p_record_date: record.record_date,
                 p_record_time: record.record_time,
