@@ -319,7 +319,7 @@ export default function WorkPolicyManagement() {
                 </div>
                 <div className="mt-3 p-3 bg-orange-100 rounded">
                   <p className="text-sm text-orange-800">
-                    <strong>휴게시간 자동 차감:</strong> 4시간 근무(30분), 8시간 근무(1시간), 6시간 이상 근무 시 저녁식사 시간(1시간) 자동 차감
+                    <strong>휴게시간 차감 규칙:</strong> 4시간 근무(30분), 8시간 근무(1시간) 자동 차감 + 퇴근 시 저녁식사 여부 선택 시 추가 1시간 차감
                   </p>
                 </div>
               </div>

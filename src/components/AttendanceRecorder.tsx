@@ -300,7 +300,7 @@ export default function AttendanceRecorder() {
             <span className="text-sm">저녁식사를 했습니다</span>
           </label>
           <p className="text-xs text-gray-500 mt-1">
-            8시간 이상 근무 시 저녁식사 여부를 체크해주세요
+            저녁식사를 한 경우 체크해주세요 (1시간 차감)
           </p>
         </div>
       )}
@@ -361,8 +361,10 @@ export default function AttendanceRecorder() {
         <div className="flex items-start">
           <AlertCircle className="h-4 w-4 text-blue-500 mr-2 mt-0.5 flex-shrink-0" />
           <div className="text-xs text-blue-800">
+            <p className="mb-1">• <strong>평소에는 CAPS(지문인식기)로 출퇴근 처리해주세요</strong></p>
+            <p className="mb-1">• CAPS로 출퇴근 처리가 불가능한 경우에만 이 버튼을 사용해주세요</p>
             <p className="mb-1">• 출근 시에는 반드시 업무 사유를 입력해주세요</p>
-            <p className="mb-1">• 8시간 이상 근무 시 저녁식사 여부를 체크해주세요</p>
+            <p className="mb-1">• 퇴근 시 저녁식사를 한 경우 체크해주세요 (1시간 차감)</p>
             <p>• 기록은 실시간으로 저장되며 수정이 어려우니 신중히 입력해주세요</p>
           </div>
         </div>

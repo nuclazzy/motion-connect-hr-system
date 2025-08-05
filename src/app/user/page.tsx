@@ -13,6 +13,7 @@ import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import UserLeaveStatus from '@/components/UserLeaveStatus'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
+import FlexibleWorkNotification from '@/components/FlexibleWorkNotification'
 
 interface ReviewLink {
   id: string
@@ -199,6 +200,9 @@ export default function UserDashboard() {
               </div>
             </div>
           )}
+
+          {/* 탄력근무제 알림 */}
+          <FlexibleWorkNotification />
 
           {/* README.md에 따른 위젯 순서 재배치 */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

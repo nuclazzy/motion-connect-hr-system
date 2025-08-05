@@ -182,7 +182,7 @@ export default function WorkPolicyExplanationModal({
                     </div>
 
                     <div className="bg-white border border-orange-200 rounded-lg p-4">
-                      <h5 className="font-semibold text-orange-900 mb-3">⏱️ 휴게시간 자동 차감</h5>
+                      <h5 className="font-semibold text-orange-900 mb-3">⏱️ 휴게시간 차감 규칙</h5>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-orange-800">
                         <div className="bg-orange-50 p-3 rounded">
                           <p className="font-semibold">4시간 근무</p>
@@ -193,7 +193,7 @@ export default function WorkPolicyExplanationModal({
                           <p>휴게시간 1시간 차감</p>
                         </div>
                         <div className="bg-orange-50 p-3 rounded">
-                          <p className="font-semibold">6시간 이상 근무</p>
+                          <p className="font-semibold">저녁식사 선택 시</p>
                           <p>저녁식사 1시간 차감</p>
                         </div>
                       </div>
