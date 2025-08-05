@@ -228,11 +228,62 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     const newFormData = { ...formData }
     let hasChanges = false
 
-    // 휴가/휴직 일수 자동 계산
+    // 휴가 신청서에서 시작일만 설정된 경우 자동으로 종료일을 다음날로 설정 (1일 휴가 기본)
+    if (selectedTemplate.name === '휴가 신청서' && formData.시작일 && !formData.종료일) {
+      // 일반 휴가의 경우 기본적으로 1일로 설정
+      if (!formData.휴가형태 || ['연차', '반차', '병가', '보건휴가', '기타'].includes(formData.휴가형태)) {
+        const startDate = new Date(formData.시작일)
+        const endDateString = startDate.toISOString().split('T')[0] 
+        newFormData.종료일 = endDateString
+        
+        // 휴가형태에 따른 기본 일수 설정
+        if (formData.휴가형태 === '반차') {
+          newFormData.휴가일수 = '0.5'
+        } else if (formData.휴가형태 === '시간차') {
+          newFormData.휴가일수 = '0' // 시간차는 시간 계산 후 결정
+        } else {
+          newFormData.휴가일수 = '1'
+        }
+        hasChanges = true
+      }
+    }
+
+    // 시간차 휴가일 경우 시작시간과 종료시간으로 시간 계산
+    if (selectedTemplate.name === '휴가 신청서' && formData.휴가형태 === '시간차' && formData.시작시간 && formData.종료시간) {
+      const startTime = formData.시작시간
+      const endTime = formData.종료시간
+      
+      if (startTime && endTime) {
+        const start = new Date(`1970-01-01T${startTime}:00`)
+        const end = new Date(`1970-01-01T${endTime}:00`)
+        
+        if (end > start) {
+          const diffMinutes = (end.getTime() - start.getTime()) / 60000
+          const hours = Math.round(diffMinutes / 60 * 10) / 10 // 0.1시간 단위로 반올림
+          
+          // 시간을 일수로 변환 (8시간 = 1일 기준)
+          const days = Math.round((hours / 8) * 10) / 10
+          
+          if (formData.휴가일수 !== days.toString()) {
+            newFormData.휴가일수 = days.toString()
+            hasChanges = true
+          }
+        }
+      }
+    }
+
+    // 휴가/휴직 일수 자동 계산 (시작일과 종료일이 모두 있는 경우)
     if ((selectedTemplate.name === '휴가 신청서' || selectedTemplate.name === '휴직계') && formData.시작일 && formData.종료일) {
       const days = calculateDays(formData.시작일, formData.종료일)
       if (formData.휴가일수 !== days.toString() && formData.휴직일수 !== days.toString()) {
-        if (selectedTemplate.name === '휴가 신청서') newFormData.휴가일수 = days.toString()
+        if (selectedTemplate.name === '휴가 신청서') {
+          // 반차인 경우 0.5일로 고정
+          if (formData.휴가형태 === '반차') {
+            newFormData.휴가일수 = '0.5'
+          } else {
+            newFormData.휴가일수 = days.toString()
+          }
+        }
         if (selectedTemplate.name === '휴직계') newFormData.휴직일수 = days.toString()
         hasChanges = true
       }
@@ -325,19 +376,27 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   const renderField = (field: FormField) => {
     if (!shouldShowField(field)) return null
 
+    // 자동 계산 필드인지 확인
+    const isAutoCalculatedField = ['휴가일수', '휴직일수', '육아휴직일수', '재직일', '육아기단축근무시간'].includes(field.name)
+    const isDateField = field.type === 'date' && (field.name === '시작일' || field.name === '종료일')
+    const isDisabled = (field.name === '휴가형태' && !!defaultValues?.휴가형태) || isAutoCalculatedField
+
     const commonProps = {
       id: field.name,
       name: field.name,
-      disabled: field.name === '휴가형태' && !!defaultValues?.휴가형태,
+      disabled: isDisabled,
       value: formData[field.name] || '',
       onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const newValue = e.target.value
         setFormData(prev => ({
           ...prev,
-          [field.name]: e.target.value
+          [field.name]: newValue
         }))
       },
       required: field.required,
-      className: `mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${field.name === '휴가형태' && !!defaultValues?.휴가형태 ? 'bg-gray-100 cursor-not-allowed' : ''}`
+      className: `mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+        isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''
+      }`
     }
 
     return (
@@ -345,6 +404,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
         <label htmlFor={field.name} className="block text-sm font-medium text-gray-700">
           {field.label}
           {field.required && <span className="text-red-500 ml-1">*</span>}
+          {isAutoCalculatedField && <span className="text-blue-500 ml-1 text-xs">(자동 계산)</span>}
         </label>
         
         {field.type === 'textarea' ? (
@@ -379,6 +439,27 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
             type={field.type}
             placeholder={field.type === 'date' || field.type === 'time' ? '' : `${field.label}을(를) 입력해주세요`}
           />
+        )}
+        
+        {/* 자동 계산 필드에 대한 설명 */}
+        {isAutoCalculatedField && (
+          <p className="mt-1 text-xs text-blue-600">
+            {field.name === '휴가일수' && selectedTemplate?.name === '휴가 신청서' && 
+              (formData.휴가형태 === '시간차' ? '시작시간과 종료시간을 선택하면 자동으로 계산됩니다' : 
+               formData.휴가형태 === '반차' ? '반차는 0.5일로 자동 설정됩니다' :
+               '시작일과 종료일을 선택하면 자동으로 계산됩니다')
+            }
+            {field.name === '휴직일수' && '시작일과 종료일을 선택하면 자동으로 계산됩니다'}
+            {field.name === '재직일' && '신청일을 선택하면 입사일 기준으로 자동 계산됩니다'}
+            {field.name === '육아기단축근무시간' && '시작시간과 종료시간을 선택하면 자동으로 계산됩니다'}
+          </p>
+        )}
+        
+        {/* 날짜 필드에 대한 도움말 */}
+        {field.name === '시작일' && selectedTemplate?.name === '휴가 신청서' && (
+          <p className="mt-1 text-xs text-gray-500">
+            시작일을 선택하면 종료일이 자동으로 설정됩니다
+          </p>
         )}
       </div>
     )

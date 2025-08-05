@@ -85,12 +85,21 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
   const [selectedAction, setSelectedAction] = useState<'출근' | '퇴근' | null>(null)
   const [reason, setReason] = useState('')
   const [hadDinner, setHadDinner] = useState(false)
+  const [selectedTime, setSelectedTime] = useState('')
+  const [useCurrentTime, setUseCurrentTime] = useState(true)
   const [location, setLocation] = useState<{lat: number, lng: number, accuracy: number} | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date().toISOString().substring(0, 7))
   const [editingRecord, setEditingRecord] = useState<any>(null)
   const [showPolicyModal, setShowPolicyModal] = useState(false)
   const [selectedPolicyType, setSelectedPolicyType] = useState<'flexible' | 'overtime' | 'leave' | null>(null)
+  const [missingRecordForm, setMissingRecordForm] = useState({
+    recordType: '출근' as '출근' | '퇴근',
+    selectedDate: '',
+    selectedTime: '',
+    reason: ''
+  })
+  const [submittingMissingRecord, setSubmittingMissingRecord] = useState(false)
 
   // 현재 시간 업데이트
   useEffect(() => {
@@ -173,6 +182,8 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
     setSelectedAction(action)
     setReason('')
     setHadDinner(false)
+    setUseCurrentTime(true)
+    setSelectedTime(formatTime(currentTime).substring(0, 5)) // HH:MM 형식
     setShowReasonModal(true)
   }
 
@@ -185,23 +196,49 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
       return
     }
 
+    if (!useCurrentTime && !selectedTime) {
+      alert('시간을 선택해주세요.')
+      return
+    }
+
+    // 미래 시간 검증
+    if (!useCurrentTime) {
+      const [hours, minutes] = selectedTime.split(':').map(Number)
+      const selectedDateTime = new Date()
+      selectedDateTime.setHours(hours, minutes, 0, 0)
+      
+      if (selectedDateTime > new Date()) {
+        alert('미래 시간으로는 기록할 수 없습니다.')
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
+      const requestBody: any = {
+        user_id: user.id,
+        record_type: selectedAction,
+        reason: reason.trim() || null,
+        had_dinner: selectedAction === '퇴근' ? hadDinner : false,
+        location_lat: location?.lat,
+        location_lng: location?.lng,
+        location_accuracy: location?.accuracy
+      }
+
+      // 사용자 지정 시간 사용 시
+      if (!useCurrentTime) {
+        const today = new Date().toISOString().split('T')[0]
+        requestBody.manual_date = today
+        requestBody.manual_time = selectedTime
+      }
+
       const response = await fetch('/api/attendance/record', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          user_id: user.id,
-          record_type: selectedAction,
-          reason: reason.trim() || null,
-          had_dinner: selectedAction === '퇴근' ? hadDinner : false,
-          location_lat: location?.lat,
-          location_lng: location?.lng,
-          location_accuracy: location?.accuracy
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -212,6 +249,8 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
         setSelectedAction(null)
         setReason('')
         setHadDinner(false)
+        setUseCurrentTime(true)
+        setSelectedTime('')
         
         // 상태 새로고침
         await fetchAttendanceStatus()
@@ -281,6 +320,90 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
   const openPolicyModal = (policyType: 'flexible' | 'overtime' | 'leave') => {
     setSelectedPolicyType(policyType)
     setShowPolicyModal(true)
+  }
+
+  // 누락 기록 추가
+  const submitMissingRecord = async () => {
+    if (!user?.id || !editingRecord) return
+
+    if (!missingRecordForm.selectedDate || !missingRecordForm.selectedTime || !missingRecordForm.reason.trim()) {
+      alert('모든 필드를 입력해주세요.')
+      return
+    }
+
+    setSubmittingMissingRecord(true)
+
+    try {
+      const response = await fetch('/api/attendance/missing', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          date_string: missingRecordForm.selectedDate,
+          time_string: missingRecordForm.selectedTime,
+          record_type: missingRecordForm.recordType,
+          reason: missingRecordForm.reason.trim()
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(data.message)
+        setEditingRecord(null)
+        setMissingRecordForm({
+          recordType: '출근',
+          selectedDate: '',
+          selectedTime: '',
+          reason: ''
+        })
+        
+        // 상태 새로고침
+        await fetchAttendanceStatus()
+        await fetchMonthlySummary()
+      } else {
+        alert(`기록 추가 실패: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('누락 기록 추가 오류:', error)
+      alert('누락 기록 추가 중 오류가 발생했습니다.')
+    } finally {
+      setSubmittingMissingRecord(false)
+    }
+  }
+
+  // 저녁식사 기록 업데이트
+  const updateDinnerRecord = async (workDate: string, hadDinner: boolean) => {
+    if (!user?.id) return
+
+    try {
+      const response = await fetch('/api/attendance/missing', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: user.id,
+          date_string: workDate,
+          had_dinner: hadDinner
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        alert(data.message)
+        // 상태 새로고침
+        await fetchMonthlySummary()
+      } else {
+        alert(`저녁식사 기록 실패: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('저녁식사 기록 오류:', error)
+      alert('저녁식사 기록 중 오류가 발생했습니다.')
+    }
   }
 
   return (
@@ -485,6 +608,51 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                   </div>
                 )}
 
+                {/* 시간 선택 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    기록 시간
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        checked={useCurrentTime}
+                        onChange={(e) => setUseCurrentTime(e.target.checked)}
+                        className="mr-2"
+                        disabled={loading}
+                      />
+                      <Clock className="h-4 w-4 mr-1" />
+                      <span className="text-sm">현재 시간 사용 ({formatTime(currentTime)})</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        checked={!useCurrentTime}
+                        onChange={(e) => setUseCurrentTime(!e.target.checked)}
+                        className="mr-2"
+                        disabled={loading}
+                      />
+                      <span className="text-sm">직접 시간 선택</span>
+                    </label>
+                    {!useCurrentTime && (
+                      <div className="ml-6">
+                        <input
+                          type="time"
+                          value={selectedTime}
+                          onChange={(e) => setSelectedTime(e.target.value)}
+                          max={formatTime(currentTime).substring(0, 5)}
+                          className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          disabled={loading}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          현재 시간 이전만 선택 가능합니다
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* 업무 사유 입력 */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -672,7 +840,16 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                           <div className="flex space-x-1">
                             {record.missing_records && record.missing_records.length > 0 && (
                               <button
-                                onClick={() => setEditingRecord(record)}
+                                onClick={() => {
+                                  setEditingRecord(record)
+                                  const hasCheckInMissing = record.missing_records?.includes('출근기록누락') || false
+                                  setMissingRecordForm({
+                                    recordType: hasCheckInMissing ? '출근' : '퇴근',
+                                    selectedDate: record.work_date,
+                                    selectedTime: hasCheckInMissing ? '09:00' : '18:00',
+                                    reason: '누락 기록 보충'
+                                  })
+                                }}
                                 className="text-indigo-600 hover:text-indigo-900 text-xs bg-indigo-50 px-2 py-1 rounded"
                               >
                                 <Edit className="h-3 w-3 inline mr-1" />
@@ -681,10 +858,7 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                             )}
                             {!record.had_dinner && record.basic_hours >= 8 && (
                               <button
-                                onClick={() => {
-                                  // 저녁식사 체크 기능
-                                  alert('저녁식사 체크 기능 구현 예정')
-                                }}
+                                onClick={() => updateDinnerRecord(record.work_date, true)}
                                 className="text-orange-600 hover:text-orange-900 text-xs bg-orange-50 px-2 py-1 rounded"
                               >
                                 <Coffee className="h-3 w-3 inline mr-1" />
@@ -756,17 +930,87 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                   </div>
                 </div>
 
-                <div className="text-center text-sm text-gray-600">
-                  누락된 기록은 관리자에게 문의하거나 별도 신청을 통해 수정할 수 있습니다.
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      기록 유형
+                    </label>
+                    <select
+                      value={missingRecordForm.recordType}
+                      onChange={(e) => setMissingRecordForm({...missingRecordForm, recordType: e.target.value as '출근' | '퇴근'})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {editingRecord?.missing_records?.includes('출근기록누락') && (
+                        <option value="출근">출근</option>
+                      )}
+                      {editingRecord?.missing_records?.includes('퇴근기록누락') && (
+                        <option value="퇴근">퇴근</option>
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      날짜
+                    </label>
+                    <input
+                      type="date"
+                      value={missingRecordForm.selectedDate}
+                      onChange={(e) => setMissingRecordForm({...missingRecordForm, selectedDate: e.target.value})}
+                      max={new Date().toISOString().split('T')[0]}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      시간
+                    </label>
+                    <input
+                      type="time"
+                      value={missingRecordForm.selectedTime}
+                      onChange={(e) => setMissingRecordForm({...missingRecordForm, selectedTime: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      사유
+                    </label>
+                    <textarea
+                      value={missingRecordForm.reason}
+                      onChange={(e) => setMissingRecordForm({...missingRecordForm, reason: e.target.value})}
+                      placeholder="누락 기록 추가 사유를 입력해주세요..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      rows={3}
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="flex justify-end space-x-3 pt-6">
                 <button
-                  onClick={() => setEditingRecord(null)}
-                  className="bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition-colors"
+                  onClick={() => {
+                    setEditingRecord(null)
+                    setMissingRecordForm({
+                      recordType: '출근',
+                      selectedDate: '',
+                      selectedTime: '',
+                      reason: ''
+                    })
+                  }}
+                  disabled={submittingMissingRecord}
+                  className="bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600 transition-colors disabled:opacity-50"
                 >
-                  확인
+                  취소
+                </button>
+                <button
+                  onClick={submitMissingRecord}
+                  disabled={submittingMissingRecord || !missingRecordForm.selectedDate || !missingRecordForm.selectedTime || !missingRecordForm.reason.trim()}
+                  className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {submittingMissingRecord ? '처리중...' : '기록 추가'}
                 </button>
               </div>
             </div>

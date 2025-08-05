@@ -47,6 +47,8 @@ export default function AttendanceRecorder() {
   const [status, setStatus] = useState<AttendanceStatus | null>(null)
   const [reason, setReason] = useState('')
   const [hadDinner, setHadDinner] = useState(false)
+  const [selectedTime, setSelectedTime] = useState('')
+  const [useCurrentTime, setUseCurrentTime] = useState(true)
   const [location, setLocation] = useState<{lat: number, lng: number, accuracy: number} | null>(null)
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
@@ -74,6 +76,13 @@ export default function AttendanceRecorder() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  // 초기 시간 설정
+  useEffect(() => {
+    if (useCurrentTime) {
+      setSelectedTime(formatTime(currentTime).substring(0, 5))
+    }
+  }, [currentTime, useCurrentTime])
 
   // 위치 정보 가져오기
   useEffect(() => {
@@ -130,23 +139,49 @@ export default function AttendanceRecorder() {
       return
     }
 
+    if (!useCurrentTime && !selectedTime) {
+      alert('시간을 선택해주세요.')
+      return
+    }
+
+    // 미래 시간 검증
+    if (!useCurrentTime) {
+      const [hours, minutes] = selectedTime.split(':').map(Number)
+      const selectedDateTime = new Date()
+      selectedDateTime.setHours(hours, minutes, 0, 0)
+      
+      if (selectedDateTime > new Date()) {
+        alert('미래 시간으로는 기록할 수 없습니다.')
+        return
+      }
+    }
+
     setLoading(true)
 
     try {
+      const requestBody: any = {
+        user_id: currentUser.id,
+        record_type: recordType,
+        reason: reason.trim() || null,
+        had_dinner: recordType === '퇴근' ? hadDinner : false,
+        location_lat: location?.lat,
+        location_lng: location?.lng,
+        location_accuracy: location?.accuracy
+      }
+
+      // 사용자 지정 시간 사용 시
+      if (!useCurrentTime) {
+        const today = new Date().toISOString().split('T')[0]
+        requestBody.manual_date = today
+        requestBody.manual_time = selectedTime
+      }
+
       const response = await fetch('/api/attendance/record', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          user_id: currentUser.id,
-          record_type: recordType,
-          reason: reason.trim() || null,
-          had_dinner: recordType === '퇴근' ? hadDinner : false,
-          location_lat: location?.lat,
-          location_lng: location?.lng,
-          location_accuracy: location?.accuracy
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -155,6 +190,8 @@ export default function AttendanceRecorder() {
         alert(data.message)
         setReason('')
         setHadDinner(false)
+        setUseCurrentTime(true)
+        setSelectedTime('')
         
         // 상태 새로고침
         await fetchAttendanceStatus()
@@ -269,6 +306,61 @@ export default function AttendanceRecorder() {
           <span>위치: {location.lat.toFixed(4)}, {location.lng.toFixed(4)} (±{Math.round(location.accuracy)}m)</span>
         </div>
       )}
+
+      {/* 시간 선택 */}
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          기록 시간
+        </label>
+        <div className="space-y-2">
+          <label className="flex items-center">
+            <input
+              type="radio"
+              checked={useCurrentTime}
+              onChange={(e) => {
+                setUseCurrentTime(e.target.checked)
+                if (e.target.checked) {
+                  setSelectedTime(formatTime(currentTime).substring(0, 5))
+                }
+              }}
+              className="mr-2"
+              disabled={loading}
+            />
+            <Clock className="h-4 w-4 mr-1" />
+            <span className="text-sm">현재 시간 사용 ({formatTime(currentTime)})</span>
+          </label>
+          <label className="flex items-center">
+            <input
+              type="radio"
+              checked={!useCurrentTime}
+              onChange={(e) => {
+                setUseCurrentTime(!e.target.checked)
+                if (e.target.checked) {
+                  setSelectedTime(formatTime(currentTime).substring(0, 5))
+                }
+              }}
+              className="mr-2"
+              disabled={loading}
+            />
+            <span className="text-sm">직접 시간 선택</span>
+          </label>
+          {!useCurrentTime && (
+            <div className="ml-6">
+              <input
+                type="time"
+                value={selectedTime}
+                onChange={(e) => setSelectedTime(e.target.value)}
+                max={formatTime(currentTime).substring(0, 5)}
+                className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                disabled={loading}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                현재 시간 이전만 선택 가능합니다
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* 출근 사유 입력 */}
       <div className="mb-4">
