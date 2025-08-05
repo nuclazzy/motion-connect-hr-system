@@ -46,17 +46,15 @@ export default function APITestPanel() {
     }
   }
 
-  // Supabase 연결 테스트 (쿠키 기반 인증)
+  // Supabase 연결 테스트 (localStorage 기반 인증)
   const testSupabaseConnection = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      // 쿠키에서 userId 가져오기
-      const cookies = document.cookie.split(';')
-      const userIdCookie = cookies.find(c => c.trim().startsWith('userId='))
-      const userId = userIdCookie ? userIdCookie.split('=')[1] : null
+      // localStorage에서 userId 가져오기
+      const userId = localStorage.getItem('auth_token')
 
       if (!userId) {
-        throw new Error('로그인이 필요합니다 (쿠키 없음)')
+        throw new Error('로그인이 필요합니다 (토큰 없음)')
       }
 
       // Authorization 헤더와 함께 요청
@@ -128,13 +126,11 @@ export default function APITestPanel() {
   const testDatabaseFunctions = async (): Promise<TestResult> => {
     const startTime = Date.now()
     try {
-      // 쿠키에서 userId 가져오기
-      const cookies = document.cookie.split(';')
-      const userIdCookie = cookies.find(c => c.trim().startsWith('userId='))
-      const userId = userIdCookie ? userIdCookie.split('=')[1] : null
+      // localStorage에서 userId 가져오기
+      const userId = localStorage.getItem('auth_token')
 
       if (!userId) {
-        throw new Error('로그인이 필요합니다 (쿠키 없음)')
+        throw new Error('로그인이 필요합니다 (토큰 없음)')
       }
 
       // Authorization 헤더와 함께 요청
