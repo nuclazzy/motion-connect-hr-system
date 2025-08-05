@@ -361,6 +361,7 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
             is_manual: true,
             approved_by: currentUser.id,
             approved_at: new Date().toISOString(),
+            had_dinner: false,
             location_lat: null,
             location_lng: null,
             location_accuracy: null,
@@ -383,6 +384,7 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
             is_manual: true,
             approved_by: currentUser.id,
             approved_at: new Date().toISOString(),
+            had_dinner: false,
             location_lat: null,
             location_lng: null,
             location_accuracy: null,
@@ -408,6 +410,8 @@ export default function BulkAttendanceUpload({ onUploadComplete }: BulkAttendanc
           .select()
         
         if (attendanceError) {
+          console.error('Supabase 오류 상세:', attendanceError)
+          console.error('업로드 시도한 데이터:', attendanceRecords[0]) // 첫 번째 레코드만 로그
           errors.push(`CAPS 기록 업로드 오류: ${attendanceError.message}`)
           errorCount += attendanceRecords.length
         } else {
