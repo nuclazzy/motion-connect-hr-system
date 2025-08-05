@@ -175,12 +175,10 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     const end = new Date(endDate)
     if (end < start) return 0
     
-    // 같은 날짜면 1일
-    if (startDate === endDate) {
-      return 1
-    }
-    
-    return Math.ceil(Math.abs(end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
+    // 날짜 차이 계산 (inclusive) - 시작일과 종료일 모두 포함
+    const timeDiff = end.getTime() - start.getTime()
+    const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+    return daysDiff + 1 // 시작일도 포함하므로 +1
   }
 
   // 경조사 휴가 일수 계산
@@ -228,10 +226,10 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     const newFormData = { ...formData }
     let hasChanges = false
 
-    // 휴가 신청서에서 시작일만 설정된 경우 자동으로 종료일을 다음날로 설정 (1일 휴가 기본)
+    // 휴가 신청서에서 시작일만 설정된 경우 자동으로 종료일 설정 (1일 휴가 기본)
     if (selectedTemplate.name === '휴가 신청서' && formData.시작일 && !formData.종료일) {
-      // 일반 휴가의 경우 기본적으로 1일로 설정
-      if (!formData.휴가형태 || ['연차', '반차', '병가', '보건휴가', '기타'].includes(formData.휴가형태)) {
+      // 모든 휴가 형태에 대해 기본적으로 1일로 설정 (대체휴가, 보상휴가 포함)
+      if (!formData.휴가형태 || ['연차', '반차', '병가', '보건휴가', '대체휴가', '보상휴가', '기타'].includes(formData.휴가형태)) {
         const startDate = new Date(formData.시작일)
         const endDateString = startDate.toISOString().split('T')[0] 
         newFormData.종료일 = endDateString
@@ -396,7 +394,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       required: field.required,
       className: `mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
         isDisabled ? 'bg-gray-100 cursor-not-allowed' : ''
-      }`
+      } ${field.type === 'date' ? 'cursor-pointer' : ''}`
     }
 
     return (
@@ -437,7 +435,17 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
           <input
             {...commonProps}
             type={field.type}
-            placeholder={field.type === 'date' || field.type === 'time' ? '' : `${field.label}을(를) 입력해주세요`}
+            placeholder={field.type === 'date' || field.type === 'time' ? '' : 
+                       field.name === '휴가일수' ? '' : `${field.label}을(를) 입력해주세요`}
+            style={field.type === 'date' ? {
+              position: 'relative',
+              WebkitAppearance: 'none',
+              MozAppearance: 'textfield'
+            } : {}}
+            onClick={field.type === 'date' ? (e) => {
+              // 날짜 입력 필드 전체 영역 클릭 시 calendar picker 열기
+              e.currentTarget.showPicker?.()
+            } : undefined}
           />
         )}
         
@@ -871,7 +879,27 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
               )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {selectedTemplate.fields.map(renderField)}
+                {selectedTemplate.fields
+                  .sort((a, b) => {
+                    // 필드 순서 정의 (휴가일수를 사유 앞으로)
+                    const fieldOrder = [
+                      '신청일', '휴가형태', '시작일', '종료일', '시작시간', '종료시간', 
+                      '휴가일수', '휴직일수', '육아휴직일수', // 일수 관련 필드들을 사유 앞으로
+                      '사유', // 사유를 뒤로
+                      '업무인수자', '연락처', '기타'
+                    ]
+                    
+                    const aIndex = fieldOrder.indexOf(a.name)
+                    const bIndex = fieldOrder.indexOf(b.name)
+                    
+                    // 정의된 순서에 없는 필드는 맨 뒤로
+                    if (aIndex === -1 && bIndex === -1) return 0
+                    if (aIndex === -1) return 1
+                    if (bIndex === -1) return -1
+                    
+                    return aIndex - bIndex
+                  })
+                  .map(renderField)}
 
                 <div className="flex justify-end space-x-3 pt-6 border-t">
                   {!defaultFormType && (
