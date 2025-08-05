@@ -98,7 +98,7 @@ export default function FlexibleWorkNotification() {
                   📅 <strong>기간:</strong> {formatDate(settings.start_date)} ~ {formatDate(settings.end_date)}
                 </p>
                 <p>
-                  ⏰ <strong>주당 기준시간:</strong> {settings.weekly_standard_hours}시간
+                  ⏰ <strong>정산 주기:</strong> {Math.round((new Date(settings.end_date).getTime() - new Date(settings.start_date).getTime()) / (1000 * 60 * 60 * 24 * 7))}주간
                   {settings.core_time_required && (
                     <span className="ml-2">
                       | <strong>핵심시간:</strong> {settings.core_start_time}~{settings.core_end_time}
@@ -106,7 +106,7 @@ export default function FlexibleWorkNotification() {
                   )}
                 </p>
                 <p className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded mt-2">
-                  💡 탄력근무제 기간 중에는 일별 근무시간을 유연하게 조정할 수 있습니다.
+                  💡 정산 주기 전체 평균이 주 40시간이 되도록 일별 근무시간을 유연하게 조정할 수 있습니다.
                 </p>
               </div>
             </div>

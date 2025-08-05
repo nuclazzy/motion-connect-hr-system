@@ -86,8 +86,8 @@ export default function WorkPolicyExplanationModal({
                   <div>
                     <h4 className="text-lg font-semibold text-blue-900 mb-3">💡 탄력근무제란?</h4>
                     <p className="text-blue-800 mb-4 leading-relaxed">
-                      일정 기간(보통 1개월~3개월) 동안 주당 평균 근무시간을 40시간으로 맞추면서, 
-                      일별 근무시간을 탄력적으로 조정할 수 있는 제도입니다.
+                      일정 기간(보통 1개월~3개월) 동안 정산 주기 전체 평균이 주당 40시간이 되도록 하면서, 
+                      주별/일별 근무시간을 탄력적으로 조정할 수 있는 제도입니다.
                     </p>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -120,12 +120,15 @@ export default function WorkPolicyExplanationModal({
                       <div className="text-sm text-blue-800">
                         <p className="mb-2"><strong>4주 탄력근무제 적용 시:</strong></p>
                         <div className="bg-blue-50 p-3 rounded">
-                          <p>• 1주차: 30시간 근무 (10시간 부족)</p>
-                          <p>• 2주차: 45시간 근무 (5시간 초과)</p>
-                          <p>• 3주차: 40시간 근무 (정상)</p>
-                          <p>• 4주차: 45시간 근무 (5시간 초과)</p>
+                          <p>• 1주차: 30시간 근무</p>
+                          <p>• 2주차: 45시간 근무</p>
+                          <p>• 3주차: 40시간 근무</p>
+                          <p>• 4주차: 45시간 근무</p>
                           <p className="font-semibold mt-2 text-blue-900">
-                            → 총 160시간 = 정상 (4주×40시간), 초과근무 없음
+                            → 총 160시간 ÷ 4주 = 주평균 40시간 ✅ 정상
+                          </p>
+                          <p className="text-xs text-blue-700 mt-1">
+                            개별 주는 40시간과 달라도 OK, 전체 평균만 40시간이면 됨
                           </p>
                         </div>
                       </div>
