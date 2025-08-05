@@ -176,27 +176,37 @@ export default function APITestPanel() {
     setResults([])
 
     const tests = [
-      testSupabaseConnection,
-      testNaverHolidayAPI,
-      testCalendarConnection,
-      testDatabaseFunctions
+      { name: 'Supabase 연결', fn: testSupabaseConnection },
+      { name: '네이버 공휴일 API', fn: testNaverHolidayAPI },
+      { name: 'Google Calendar 연결', fn: testCalendarConnection },
+      { name: '데이터베이스 함수', fn: testDatabaseFunctions }
     ]
 
     for (const test of tests) {
       // 실행 중 상태 표시
-      const testName = test.name || 'Unknown Test'
       setResults(prev => [...prev, {
-        name: testName,
+        name: test.name,
         status: 'running',
         message: '테스트 실행 중...'
       }])
 
-      const result = await test()
-      
-      // 결과 업데이트
-      setResults(prev => prev.map(r => 
-        r.name === result.name ? result : r
-      ))
+      try {
+        const result = await test.fn()
+        
+        // 결과 업데이트
+        setResults(prev => prev.map(r => 
+          r.name === result.name ? result : r
+        ))
+      } catch (error) {
+        // 오류 발생 시 처리
+        setResults(prev => prev.map(r => 
+          r.name === test.name ? {
+            name: test.name,
+            status: 'error',
+            message: `오류: ${error instanceof Error ? error.message : String(error)}`
+          } : r
+        ))
+      }
 
       // 테스트 간 짧은 지연
       await new Promise(resolve => setTimeout(resolve, 500))
