@@ -31,10 +31,11 @@ interface AttendanceRecord {
   user_id: string
   record_date: string
   record_time: string
-  record_type: '출근' | '퇴근'
+  record_type: '출근' | '퇴근' | '해제' | '세트' | '출입' // CAPS 호환
   reason?: string
   had_dinner?: boolean
   is_manual?: boolean
+  source?: string // CAPS/WEB 구분
   users: {
     name: string
     department: string
@@ -46,7 +47,7 @@ interface MissingRecordRequest {
   user_id: string
   date_string: string
   time_string: string
-  record_type: '출근' | '퇴근'
+  record_type: '출근' | '퇴근' | '해제' | '세트' | '출입' // CAPS 호환
   reason: string
 }
 
@@ -58,7 +59,7 @@ export default function AdminAttendanceManagement() {
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
-  const [filterType, setFilterType] = useState<'all' | '출근' | '퇴근' | 'missing'>('all')
+  const [filterType, setFilterType] = useState<'all' | '출근' | '퇴근' | '해제' | '세트' | '출입' | 'missing'>('all')
   const [showMissingForm, setShowMissingForm] = useState(false)
   const [activeTab, setActiveTab] = useState<'attendance' | 'upload'>('attendance')
   const [missingFormData, setMissingFormData] = useState<MissingRecordRequest>({
@@ -172,8 +173,8 @@ export default function AdminAttendanceManagement() {
       query = query.gte('record_date', selectedDate)
       query = query.lte('record_date', selectedDate)
 
-      // 기록 유형 필터 적용
-      if (filterType !== 'all' && filterType !== 'missing' && ['출근', '퇴근'].includes(filterType)) {
+      // 기록 유형 필터 적용 (CAPS 호환)
+      if (filterType !== 'all' && filterType !== 'missing' && ['출근', '퇴근', '해제', '세트', '출입'].includes(filterType)) {
         query = query.eq('record_type', filterType)
       }
 
@@ -222,7 +223,7 @@ export default function AdminAttendanceManagement() {
       return
     }
 
-    if (!['출근', '퇴근'].includes(missingFormData.record_type)) {
+    if (!['출근', '퇴근', '해제', '세트', '출입'].includes(missingFormData.record_type)) {
       alert('기록 유형이 올바르지 않습니다.')
       return
     }
@@ -541,6 +542,9 @@ export default function AdminAttendanceManagement() {
             <option value="all">전체</option>
             <option value="출근">출근</option>
             <option value="퇴근">퇴근</option>
+            <option value="해제">해제 (CAPS)</option>
+            <option value="세트">세트 (CAPS)</option>
+            <option value="출입">출입 (CAPS)</option>
             <option value="missing">누락</option>
           </select>
         </div>
@@ -629,6 +633,17 @@ export default function AdminAttendanceManagement() {
                               수동
                             </span>
                           )}
+                          {/* CAPS 기록 표시 */}
+                          {status.checkIn.source?.includes('CAPS') && (
+                            <span className="ml-1 px-1 py-0.5 bg-purple-100 text-purple-800 text-xs rounded">
+                              CAPS
+                            </span>
+                          )}
+                          {status.checkIn.source === 'WEB' && (
+                            <span className="ml-1 px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">
+                              웹
+                            </span>
+                          )}
                         </div>
                       ) : (
                         <span className="text-sm text-gray-400">-</span>
@@ -641,6 +656,17 @@ export default function AdminAttendanceManagement() {
                           {status.checkOut.is_manual && (
                             <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded">
                               수동
+                            </span>
+                          )}
+                          {/* CAPS 기록 표시 */}
+                          {status.checkOut.source?.includes('CAPS') && (
+                            <span className="ml-1 px-1 py-0.5 bg-purple-100 text-purple-800 text-xs rounded">
+                              CAPS
+                            </span>
+                          )}
+                          {status.checkOut.source === 'WEB' && (
+                            <span className="ml-1 px-1 py-0.5 bg-green-100 text-green-800 text-xs rounded">
+                              웹
                             </span>
                           )}
                         </div>
@@ -734,11 +760,14 @@ export default function AdminAttendanceManagement() {
                 </label>
                 <select
                   value={missingFormData.record_type}
-                  onChange={(e) => setMissingFormData({...missingFormData, record_type: e.target.value as '출근' | '퇴근'})}
+                  onChange={(e) => setMissingFormData({...missingFormData, record_type: e.target.value as '출근' | '퇴근' | '해제' | '세트' | '출입'})}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="출근">출근</option>
                   <option value="퇴근">퇴근</option>
+                  <option value="해제">해제 (CAPS)</option>
+                  <option value="세트">세트 (CAPS)</option>
+                  <option value="출입">출입 (CAPS)</option>
                 </select>
               </div>
 

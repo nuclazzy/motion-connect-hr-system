@@ -15,9 +15,10 @@ interface User {
 interface AttendanceRecord {
   id: string
   record_time: string
-  record_type: '출근' | '퇴근'
+  record_type: '출근' | '퇴근' | '해제' | '세트' | '출입' // CAPS 호환
   reason?: string
   had_dinner?: boolean
+  source?: string // CAPS/WEB 구분
 }
 
 interface WorkSummary {
@@ -39,6 +40,10 @@ interface AttendanceStatus {
     checkIn: AttendanceRecord[]
     checkOut: AttendanceRecord[]
     total: number
+    // CAPS 호환 추가 정보
+    entryCount?: number // 출입 기록 수
+    capsRecords?: number // CAPS 기록 수
+    webRecords?: number // 웹 기록 수
   }
   workSummary: WorkSummary
 }
@@ -148,14 +153,16 @@ export default function AttendanceRecorder() {
         console.error('근무 요약 조회 오류:', summaryError)
       }
 
-      // 출퇴근 기록 분류
-      const checkInRecords = todayRecords?.filter(r => r.record_type === '출근') || []
-      const checkOutRecords = todayRecords?.filter(r => r.record_type === '퇴근') || []
+      // CAPS 호환 출퇴근 기록 분류
+      const checkInRecords = todayRecords?.filter(r => ['출근', '해제'].includes(r.record_type)) || []
+      const checkOutRecords = todayRecords?.filter(r => ['퇴근', '세트'].includes(r.record_type)) || []
+      const entryRecords = todayRecords?.filter(r => r.record_type === '출입') || []
       
-      // 상태 계산
+      // CAPS 호환 상태 계산
       const hasCheckIn = checkInRecords.length > 0
       const hasCheckOut = checkOutRecords.length > 0
       const totalRecords = (todayRecords?.length || 0)
+      const totalEntryRecords = entryRecords.length
       
       let currentStatus = '출근전'
       let statusMessage = '출근 기록을 해주세요'
@@ -164,12 +171,12 @@ export default function AttendanceRecorder() {
       
       if (hasCheckIn && !hasCheckOut) {
         currentStatus = '근무중'
-        statusMessage = '퇴근 기록을 해주세요'
+        statusMessage = `퇴근 기록을 해주세요 ${totalEntryRecords > 0 ? `(출입 ${totalEntryRecords}건)` : ''}`
         canCheckIn = false
         canCheckOut = true
       } else if (hasCheckIn && hasCheckOut) {
         currentStatus = '퇴근완료'
-        statusMessage = '오늘 업무가 완료되었습니다'
+        statusMessage = `오늘 업무가 완료되었습니다 ${totalRecords > 2 ? `(총 ${totalRecords}건 기록)` : ''}`
         canCheckIn = false
         canCheckOut = false
       }
@@ -191,17 +198,23 @@ export default function AttendanceRecorder() {
             id: r.id,
             record_time: r.record_time,
             record_type: r.record_type as '출근' | '퇴근',
-            reason: r.reason,
-            had_dinner: r.had_dinner
+            reason: r.reason || `${r.source} ${r.record_type}`,
+            had_dinner: r.had_dinner,
+            source: r.source // CAPS/WEB 구분
           })),
           checkOut: checkOutRecords.map(r => ({
             id: r.id,
             record_time: r.record_time,
             record_type: r.record_type as '출근' | '퇴근',
-            reason: r.reason,
-            had_dinner: r.had_dinner
+            reason: r.reason || `${r.source} ${r.record_type}`,
+            had_dinner: r.had_dinner,
+            source: r.source
           })),
-          total: totalRecords
+          total: totalRecords,
+          // CAPS 추가 정보
+          entryCount: totalEntryRecords,
+          capsRecords: todayRecords?.filter(r => r.source?.includes('CAPS')).length || 0,
+          webRecords: todayRecords?.filter(r => r.source === 'WEB').length || 0
         },
         workSummary: {
           basic_hours: workSummary?.basic_hours || 0,
@@ -284,13 +297,14 @@ export default function AttendanceRecorder() {
         recordTimestamp = new Date(`${recordDate}T${recordTime}`)
       }
 
-      // 중복 기록 확인
+      // 중복 기록 확인 (같은 날, 같은 타입의 웹 기록만 체크)
       const { data: existingRecords, error: duplicateError } = await supabase
         .from('attendance_records')
-        .select('id')
+        .select('id, source')
         .eq('user_id', currentUser.id)
         .eq('record_date', recordDate)
         .eq('record_type', recordType)
+        .eq('source', 'WEB') // 웹 기록만 중복 체크 (CAPS 기록과는 별도)
 
       if (duplicateError) {
         console.error('중복 기록 확인 오류:', duplicateError)
@@ -303,7 +317,7 @@ export default function AttendanceRecorder() {
         return
       }
 
-      // 출퇴근 기록 생성
+      // CAPS 형식 호환 출퇴근 기록 생성
       const { data: newRecord, error: insertError } = await supabase
         .from('attendance_records')
         .insert({
@@ -311,14 +325,16 @@ export default function AttendanceRecorder() {
           record_date: recordDate,
           record_time: recordTime,
           record_timestamp: recordTimestamp.toISOString(),
-          record_type: recordType,
-          reason: reason.trim() || null,
+          record_type: recordType, // '출근' 또는 '퇴근' (CAPS 호환)
+          reason: reason.trim() || `웹 ${recordType} 기록`,
           location_lat: location?.lat,
           location_lng: location?.lng,
           location_accuracy: location?.accuracy,
-          source: 'web',
+          source: 'WEB', // CAPS 형식에 맞춰 대문자로 통일
           had_dinner: recordType === '퇴근' ? hadDinner : false,
-          is_manual: !useCurrentTime
+          is_manual: !useCurrentTime,
+          // CAPS 호환 메타데이터 추가
+          notes: `웹앱 기록 - 사용자: ${user.name}, 시간: ${useCurrentTime ? '현재시간' : '수동선택'}`
         })
         .select()
         .single()
@@ -423,6 +439,22 @@ export default function AttendanceRecorder() {
           <div className="text-sm text-gray-600 mb-2">
             {status.statusMessage}
           </div>
+          
+          {/* CAPS/웹 기록 현황 */}
+          {status.todayRecords.total > 0 && (
+            <div className="text-xs text-gray-500 mb-2">
+              오늘 기록: 총 {status.todayRecords.total}건
+              {status.todayRecords.capsRecords && status.todayRecords.capsRecords > 0 && (
+                <span className="text-blue-600"> (CAPS {status.todayRecords.capsRecords}건)</span>
+              )}
+              {status.todayRecords.webRecords && status.todayRecords.webRecords > 0 && (
+                <span className="text-green-600"> (웹 {status.todayRecords.webRecords}건)</span>
+              )}
+              {status.todayRecords.entryCount && status.todayRecords.entryCount > 0 && (
+                <span className="text-orange-600"> (출입 {status.todayRecords.entryCount}건)</span>
+              )}
+            </div>
+          )}
           
           {/* 오늘 근무 현황 */}
           {status.workSummary && (
@@ -576,9 +608,17 @@ export default function AttendanceRecorder() {
                 <div key={index} className="flex justify-between items-center text-xs">
                   <div className="flex items-center">
                     <span className={`inline-block w-2 h-2 rounded-full mr-2 ${
-                      record.record_type === '출근' ? 'bg-green-500' : 'bg-red-500'
+                      ['출근', '해제'].includes(record.record_type) ? 'bg-green-500' : 
+                      ['퇴근', '세트'].includes(record.record_type) ? 'bg-red-500' : 'bg-orange-500'
                     }`} />
                     <span className="font-medium">{record.record_type}</span>
+                    {/* CAPS/웹 구분 배지 */}
+                    <span className={`ml-1 px-1 py-0.5 rounded text-xs ${
+                      record.source?.includes('CAPS') ? 'bg-blue-100 text-blue-800' :
+                      record.source === 'WEB' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {record.source?.includes('CAPS') ? 'CAPS' : record.source === 'WEB' ? '웹' : '기타'}
+                    </span>
                   </div>
                   <div className="text-gray-600">
                     {record.record_time}
@@ -594,11 +634,12 @@ export default function AttendanceRecorder() {
         <div className="flex items-start">
           <AlertCircle className="h-4 w-4 text-blue-500 mr-2 mt-0.5 flex-shrink-0" />
           <div className="text-xs text-blue-800">
-            <p className="mb-1">• <strong>평소에는 CAPS(지문인식기)로 출퇴근 처리해주세요</strong></p>
-            <p className="mb-1">• CAPS로 출퇴근 처리가 불가능한 경우에만 이 버튼을 사용해주세요</p>
+            <p className="mb-1">• <strong>원칙적으로 CAPS(지문인식기) 사용을 권장합니다</strong></p>
+            <p className="mb-1">• 웹 출퇴근과 CAPS 기록이 모두 저장되어 통합 관리됩니다</p>
             <p className="mb-1">• 출근 시에는 반드시 업무 사유를 입력해주세요</p>
-            <p className="mb-1">• 퇴근 시 저녁식사를 한 경우 체크해주세요 (1시간 차감)</p>
-            <p>• 기록은 실시간으로 저장되며 수정이 어려우니 신중히 입력해주세요</p>
+            <p className="mb-1">• 퇴근 시 저녁식사를 한 경우 체크해주세요 (근무시간 계산에 반영)</p>
+            <p className="mb-1">• CAPS 기록과 웹 기록이 모두 위 목록에 표시됩니다</p>
+            <p>• 모든 기록은 데이터베이스 트리거로 자동 근무시간 계산됩니다</p>
           </div>
         </div>
       </div>
