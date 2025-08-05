@@ -7,6 +7,7 @@ import AdminEmployeeManagement from '@/components/AdminEmployeeManagement'
 import AdminDocumentManagement from '@/components/AdminDocumentManagement'
 import AdminFormManagement from '@/components/AdminFormManagement'
 import AdminSalaryManagement from '@/components/AdminSalaryManagement'
+import AdminPayrollManagement from '@/components/AdminPayrollManagement'
 import AdminDetailedSalaryManagement from '@/components/AdminDetailedSalaryManagement'
 import UserFormManagement from '@/components/UserFormManagement'
 import UserProfile from '@/components/UserProfile'
@@ -196,6 +197,7 @@ export default function AdminDashboard() {
                   <AdminEmployeeManagement />
                   <AdminFormManagement />
                   <AdminLeaveManagement />
+                  <AdminPayrollManagement />
                   <WorkPolicyManagement />
                   <QuarterlyFlexibleWorkManager />
                   <AdminDocumentManagement />

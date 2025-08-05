@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Clock, MapPin, Coffee, AlertCircle, CheckCircle, XCircle, ChevronDown, ChevronUp, Calendar, Edit, HelpCircle } from 'lucide-react'
 import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
+import { formatTimeWithNextDay, convertNextDayTimeFormat } from '@/lib/time-utils'
 
 interface AttendanceStatus {
   user: {
@@ -804,21 +805,19 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.check_in_time ? 
-                            new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })
+                            formatTimeWithNextDay(
+                              new Date(record.check_in_time),
+                              new Date(record.work_date)
+                            )
                             : '--'
                           }
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.check_out_time ? 
-                            new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: false
-                            })
+                            formatTimeWithNextDay(
+                              new Date(record.check_out_time),
+                              new Date(record.work_date)
+                            )
                             : '--'
                           }
                         </td>
@@ -856,13 +855,17 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                                 수정
                               </button>
                             )}
-                            {!record.had_dinner && record.basic_hours >= 8 && (
+                            {record.basic_hours >= 8 && (
                               <button
-                                onClick={() => updateDinnerRecord(record.work_date, true)}
-                                className="text-orange-600 hover:text-orange-900 text-xs bg-orange-50 px-2 py-1 rounded"
+                                onClick={() => updateDinnerRecord(record.work_date, !record.had_dinner)}
+                                className={`text-xs px-2 py-1 rounded ${
+                                  record.had_dinner 
+                                    ? 'text-red-600 hover:text-red-900 bg-red-50' 
+                                    : 'text-orange-600 hover:text-orange-900 bg-orange-50'
+                                }`}
                               >
                                 <Coffee className="h-3 w-3 inline mr-1" />
-                                식사
+                                {record.had_dinner ? '식사취소' : '식사'}
                               </button>
                             )}
                           </div>
