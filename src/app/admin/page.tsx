@@ -13,7 +13,7 @@ import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
 import AdminLeaveManagement from '@/components/AdminLeaveManagement'
 import WorkPolicyManagement from '@/components/WorkPolicyManagement'
-import SimpleFlexibleWorkSettings from '@/components/SimpleFlexibleWorkSettings'
+import WorkScheduleManagement from '@/components/WorkScheduleManagement'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
 import AdminSystemSettings from '@/components/AdminSystemSettings'
@@ -104,15 +104,18 @@ export default function AdminDashboard() {
       {/* 헤더 */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">
-                Motion Connect - {viewMode === 'employee' ? '직원 대시보드' : '관리자 대시보드'}
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center min-w-0">
+              <h1 className="text-base sm:text-xl font-semibold text-gray-900 truncate">
+                <span className="hidden sm:inline">Motion Connect - </span>
+                <span className="sm:hidden">MC</span>
+                <span className="ml-1">{viewMode === 'employee' ? '직원' : '관리자'}</span>
+                <span className="hidden sm:inline"> 대시보드</span>
               </h1>
             </div>
-            <div className="flex items-center space-x-4">
-              {/* Role Toggle Switch */}
-              <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              {/* 모바일에서는 간단한 토글 버튼만 표시 */}
+              <div className="hidden sm:flex items-center space-x-3">
                 <span className="text-sm text-gray-700">모드 전환:</span>
                 <div className="relative inline-flex items-center">
                   <button
@@ -139,16 +142,31 @@ export default function AdminDashboard() {
                 </span>
               </div>
               
-              <div className="border-l border-gray-300 h-6"></div>
+              {/* 모바일 전용 토글 */}
+              <button
+                onClick={() => setViewMode(viewMode === 'employee' ? 'admin' : 'employee')}
+                className="sm:hidden p-2 rounded-md hover:bg-gray-100"
+              >
+                {viewMode === 'employee' ? 
+                  <Shield className="w-5 h-5 text-gray-600" /> : 
+                  <UserIcon className="w-5 h-5 text-gray-600" />
+                }
+              </button>
               
-              <span className="text-sm text-gray-700">
+              <div className="hidden sm:block border-l border-gray-300 h-6"></div>
+              
+              <span className="hidden lg:inline text-sm text-gray-700">
                 {user.name} ({user.position})
+              </span>
+              <span className="lg:hidden text-sm text-gray-700">
+                {user.name}
               </span>
               <button
                 onClick={logoutUser}
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-md text-sm font-medium"
+                className="bg-red-600 hover:bg-red-700 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-md text-xs sm:text-sm font-medium"
               >
-                로그아웃
+                <span className="hidden sm:inline">로그아웃</span>
+                <span className="sm:hidden">나가기</span>
               </button>
             </div>
           </div>
@@ -199,7 +217,7 @@ export default function AdminDashboard() {
                   <AdminPayrollManagement />
                   <AdminSystemSettings />
                   <WorkPolicyManagement />
-                  <SimpleFlexibleWorkSettings />
+                  <WorkScheduleManagement />
                   <AdminDocumentManagement />
                 </div>
               </div>

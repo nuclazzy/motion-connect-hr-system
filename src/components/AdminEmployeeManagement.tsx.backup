@@ -1,0 +1,1789 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getCurrentUser } from '@/lib/auth'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
+
+// Overtime management interfaces
+interface OvertimeRecord {
+  id: string
+  user_id: string
+  work_date: string
+  overtime_hours: number
+  night_hours: number
+  overtime_pay: number
+  night_pay: number
+  total_pay: number
+  notes?: string
+  status: 'pending' | 'approved' | 'rejected'
+  approved_by?: string
+  approved_at?: string
+  created_at: string
+  users: {
+    name: string
+    department: string
+    position: string
+  }
+}
+
+// Assuming a more complete User type
+interface Employee {
+  id: string
+  name: string
+  email: string
+  department: string
+  position: string
+  work_type: string
+  hire_date: string
+  dob: string
+  phone: string
+  address: string
+  is_active: boolean
+  resignation_date?: string
+  termination_date?: string
+  contract_end_date?: string
+  annual_leave: number
+  sick_leave: number
+  substitute_leave_hours: number
+  compensatory_leave_hours: number
+  // 급여 관련 필드
+  annual_salary?: number
+  monthly_salary?: number
+  basic_salary?: number
+  bonus?: number
+  meal_allowance?: number
+  transportation_allowance?: number
+  hourly_wage?: number
+  salary_details_updated_at?: string
+  // Add other fields as necessary
+}
+
+export default function AdminEmployeeManagement() {
+  const { supabase } = useSupabase()
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
+  const [formData, setFormData] = useState<Partial<Employee>>({})
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'salary' | 'attendance' | 'management'>('info')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [editingField, setEditingField] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned' | 'contract'>('all')
+  
+  // Overtime management states - removed as salary tab is removed
+  const [showOvertimeForm, setShowOvertimeForm] = useState(false)
+  const [overtimeFormData, setOvertimeFormData] = useState({
+    work_date: '',
+    overtime_hours: 0,
+    night_hours: 0,
+    notes: ''
+  })
+  const [overtimeSubmitting, setOvertimeSubmitting] = useState(false)
+  
+  // Attendance management states
+  const [attendanceMonth, setAttendanceMonth] = useState(() => {
+    const now = new Date()
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [attendanceData, setAttendanceData] = useState<any>(null)
+  const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<any>(null)
+
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        console.log('🚀 Fetching employees (direct Supabase)...')
+        
+        // localStorage에서 사용자 정보 가져오기
+        const userStr = localStorage.getItem('motion-connect-user')
+        if (!userStr) {
+          throw new Error('로그인이 필요합니다.')
+        }
+        
+        const user = JSON.parse(userStr)
+        if (user.role !== 'admin') {
+          throw new Error('관리자 권한이 필요합니다.')
+        }
+
+        // Supabase에서 직접 users 테이블 조회 (기본 컬럼 먼저 시도)
+        let { data: users, error } = await supabase
+          .from('users')
+          .select(`
+            id, name, email, department, position, hire_date,
+            annual_days, used_annual_days, sick_days, used_sick_days,
+            substitute_leave_hours, compensatory_leave_hours
+          `)
+          .order('hire_date', { ascending: true, nullsFirst: false })
+
+        // work_type, termination_date, contract_end_date 컬럼이 존재하는지 확인하고 추가 조회
+        let hasStatusColumns = false
+        try {
+          const { data: usersWithStatus, error: statusError } = await supabase
+            .from('users')
+            .select(`
+              id, name, email, department, position, hire_date,
+              annual_days, used_annual_days, sick_days, used_sick_days,
+              substitute_leave_hours, compensatory_leave_hours,
+              work_type, termination_date, contract_end_date,
+              annual_salary, monthly_salary, basic_salary, bonus,
+              meal_allowance, transportation_allowance, hourly_wage,
+              salary_details_updated_at
+            `)
+            .order('hire_date', { ascending: true, nullsFirst: false })
+          
+          if (!statusError && usersWithStatus) {
+            users = usersWithStatus
+            hasStatusColumns = true
+          }
+        } catch (statusErr) {
+          console.log('ℹ️ Status columns not found, using basic columns only')
+        }
+
+        if (error) {
+          console.error('❌ Supabase error:', error)
+          setError(`직원 데이터를 불러올 수 없습니다: ${error.message}`)
+          return
+        }
+
+        console.log('✅ Users fetched directly from Supabase:', users?.length, '명')
+        
+        // 데이터 변환 (퇴사자 및 계약직 분류 포함)
+        const result = users?.map((userData: any) => {
+          // work_type 컬럼이 있으면 그것을 사용, 없으면 로직으로 계산
+          let work_type = '정규직'
+          if (hasStatusColumns && userData.work_type) {
+            // 데이터베이스에서 자동 계산된 work_type 사용
+            work_type = userData.work_type
+          } else if (hasStatusColumns) {
+            // 컬럼은 있지만 work_type이 비어있는 경우 로직으로 계산
+            const isTerminated = !!userData.termination_date
+            const isContractEmployee = !!userData.contract_end_date
+            
+            if (isTerminated) {
+              work_type = '퇴사자'
+            } else if (isContractEmployee) {
+              work_type = '계약직'
+            }
+          }
+          
+          // 퇴사자 여부 (is_active 설정용)
+          const isTerminated = hasStatusColumns && !!userData.termination_date
+          
+          return {
+            ...userData,
+            // 기본 필드들
+            work_type,
+            dob: userData.dob || '',
+            phone: userData.phone || '',
+            address: userData.address || '',
+            is_active: !isTerminated, // 퇴사자는 비활성화
+            resignation_date: userData.resignation_date || null,
+            termination_date: userData.termination_date || null,
+            contract_end_date: userData.contract_end_date || null,
+            updated_at: userData.updated_at || new Date().toISOString(),
+            // 휴가 계산 필드들
+            annual_leave: Math.max(0, (userData.annual_days || 0) - (userData.used_annual_days || 0)),
+            sick_leave: Math.max(0, (userData.sick_days || 0) - (userData.used_sick_days || 0)),
+            substitute_leave_hours: userData.substitute_leave_hours || 0,
+            compensatory_leave_hours: userData.compensatory_leave_hours || 0,
+            leave_data: {
+              annual_days: userData.annual_days || 0,
+              used_annual_days: userData.used_annual_days || 0,
+              sick_days: userData.sick_days || 0,
+              used_sick_days: userData.used_sick_days || 0,
+              substitute_leave_hours: userData.substitute_leave_hours || 0,
+              compensatory_leave_hours: userData.compensatory_leave_hours || 0
+            }
+          }
+        }) || []
+        
+        setEmployees(result)
+      } catch (err) {
+        console.error('❌ Error:', err)
+        setError(err instanceof Error ? err.message : '알 수 없는 오류')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+
+  // employees가 변경될 때 선택된 직원 정보 업데이트 (순환 참조 방지)
+  useEffect(() => {
+    if (selectedEmployee && employees.length > 0) {
+      const updatedEmployee = employees.find(emp => emp.id === selectedEmployee.id)
+      if (updatedEmployee && JSON.stringify(updatedEmployee) !== JSON.stringify(selectedEmployee)) {
+        setSelectedEmployee(updatedEmployee)
+      }
+    }
+  }, [employees]) // selectedEmployee를 의존성에서 제거
+
+  // When an employee is selected, populate the form data
+  useEffect(() => {
+    if (selectedEmployee) {
+      setFormData(selectedEmployee)
+      // Fetch overtime records when employee is selected
+      fetchOvertimeRecords()
+    } else {
+      setFormData({})
+    }
+  }, [selectedEmployee])
+
+  // Overtime records fetch removed as salary tab is removed
+
+  // useEffect to fetch attendance data when attendanceMonth changes
+  useEffect(() => {
+    if (selectedEmployee && activeTab === 'attendance') {
+      fetchAttendanceData()
+    }
+  }, [attendanceMonth, selectedEmployee, activeTab])
+
+  const handleSelectEmployee = (employee: Employee) => {
+    setSelectedEmployee(employee)
+  }
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target
+    
+    let finalValue: string | boolean = value
+    if (type === 'checkbox') {
+        finalValue = (e.target as HTMLInputElement).checked
+    }
+
+    setFormData(prev => ({ ...prev, [name]: finalValue }))
+  }
+
+  // 급여 전용 입력 핸들러 (콤마 포매팅 지원)
+  const handleSalaryInputChange = (fieldName: string, value: string) => {
+    // 숫자만 추출
+    const numericValue = value.replace(/[^0-9]/g, '')
+    const intValue = numericValue ? parseInt(numericValue) : 0
+    
+    console.log(`💰 ${fieldName} 입력:`, value, '->', intValue)
+    
+    setFormData(prev => ({
+      ...prev,
+      [fieldName]: intValue
+    }))
+  }
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!selectedEmployee) return
+
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      // 디버깅: 전송할 데이터 로그
+      console.log('💾 업데이트할 데이터:', formData)
+      console.log('선택된 직원 ID:', selectedEmployee.id)
+      
+      // Supabase로 직접 업데이트
+      const { data, error } = await supabase
+        .from('users')
+        .update(formData)
+        .eq('id', selectedEmployee.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Supabase update error:', error)
+        throw new Error('직원 정보 업데이트에 실패했습니다.')
+      }
+      
+      console.log('✅ 업데이트 성공:', data)
+      alert('직원 정보가 성공적으로 업데이트되었습니다.')
+      // 로컬 상태 업데이트
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => 
+          emp.id === selectedEmployee.id ? { ...emp, ...formData } : emp
+        )
+      )
+      setSelectedEmployee({ ...selectedEmployee, ...formData })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '업데이트 중 오류가 발생했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleFieldEdit = (fieldKey: string, currentValue: number) => {
+    setEditingField(fieldKey)
+    setEditValue(currentValue.toString())
+  }
+
+  const handleFieldSave = async (fieldKey: string, leaveType: string, adjustmentType: 'granted' | 'used') => {
+    // 모든 휴가 관련 값은 소수점 허용
+    const newValue = parseFloat(editValue)
+    
+    if (isNaN(newValue) || newValue < 0) {
+      alert('유효한 숫자를 입력해주세요 (0 이상)')
+      return
+    }
+
+    if (!selectedEmployee) return
+
+    let currentValue = 0
+    let difference = 0
+
+    // 필드별 현재 값 계산
+    if (['substitute_hours', 'compensatory_hours'].includes(fieldKey)) {
+      // 대체휴가/보상휴가는 직접 값 설정
+      currentValue = fieldKey === 'substitute_hours' 
+        ? selectedEmployee.substitute_leave_hours || 0
+        : selectedEmployee.compensatory_leave_hours || 0
+      difference = newValue - currentValue
+    } else {
+      // 연차/병가는 leave_data에서 값 가져오기
+      const currentData = (selectedEmployee as any)?.leave_data || {}
+      const targetField = leaveType === 'annual_leave' 
+        ? (adjustmentType === 'granted' ? 'annual_days' : 'used_annual_days')
+        : (adjustmentType === 'granted' ? 'sick_days' : 'used_sick_days')
+      
+      currentValue = currentData[targetField] || 0
+      difference = newValue - currentValue
+    }
+
+    // 직접 값 설정이므로 차이값을 이용해 조정
+    await handleLeaveAdjustment(leaveType, adjustmentType, difference)
+    
+    setEditingField(null)
+    setEditValue('')
+  }
+
+  const handleFieldCancel = () => {
+    setEditingField(null)
+    setEditValue('')
+  }
+
+  // Removed overtime management functions as salary tab is removed
+      
+      // daily_work_summary에서 초과근무 데이터 조회
+      const { data: workSummary, error } = await supabase
+        .from('daily_work_summary')
+        .select(`
+          *,
+          users!inner(name, department, position)
+        `)
+        .eq('user_id', selectedEmployee.id)
+        .gte('work_date', startDateStr)
+        .lte('work_date', endDateStr)
+        .gt('overtime_hours', 0)
+        .order('work_date', { ascending: false })
+      
+      if (error) {
+        console.error('❌ 초과근무 기록 조회 오류:', error)
+        setOvertimeRecords([])
+        return
+      }
+      
+      // 데이터 변환 (기존 OvertimeRecord 인터페이스에 맞게)
+      const overtimeData = workSummary?.map((record: any) => ({
+        id: record.id,
+        user_id: record.user_id,
+        work_date: record.work_date,
+        overtime_hours: record.overtime_hours || 0,
+        night_hours: record.night_hours || 0,
+        overtime_pay: (record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5, // 1.5배 가산
+        night_pay: (record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5, // 0.5배 가산
+        total_pay: ((record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5) + ((record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5),
+        notes: record.notes || '',
+        status: 'approved' as const, // daily_work_summary에 있는 것은 이미 승인된 것으로 간주
+        approved_by: undefined,
+        approved_at: record.calculated_at,
+        created_at: record.created_at,
+        users: {
+          name: record.users.name,
+          department: record.users.department,
+          position: record.users.position
+        }
+      })) || []
+      
+      console.log('✅ 초과근무 기록 조회 완료:', overtimeData.length, '건')
+      setOvertimeRecords(overtimeData)
+      
+    } catch (err) {
+      console.error('❌ 초과근무 기록 조회 오류:', err)
+      setOvertimeRecords([])
+    }
+  }
+
+  const handleOvertimeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedEmployee || !overtimeFormData.work_date) {
+      alert('근무일을 선택해주세요.')
+      return
+    }
+
+    if (overtimeFormData.overtime_hours <= 0 && overtimeFormData.night_hours <= 0) {
+      alert('초과근무시간 또는 야간근무시간 중 하나는 입력해주세요.')
+      return
+    }
+
+    setOvertimeSubmitting(true)
+    try {
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
+      }
+
+      // daily_work_summary에서 해당 날짜 기록 조회 또는 생성
+      const { data: existingRecordsArray, error: fetchError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .eq('work_date', overtimeFormData.work_date)
+      
+      const existingRecord = existingRecordsArray && existingRecordsArray.length > 0 ? existingRecordsArray[0] : null
+
+      let updateData = {
+        overtime_hours: overtimeFormData.overtime_hours,
+        night_hours: overtimeFormData.night_hours,
+        notes: overtimeFormData.notes,
+        calculated_at: new Date().toISOString()
+      }
+
+      if (existingRecord) {
+        // 기존 기록 업데이트
+        const { error: updateError } = await supabase
+          .from('daily_work_summary')
+          .update(updateData)
+          .eq('id', existingRecord.id)
+
+        if (updateError) {
+          console.error('❌ 초과근무 기록 업데이트 오류:', updateError)
+          throw new Error('초과근무 기록 업데이트에 실패했습니다.')
+        }
+      } else {
+        // 새 기록 생성
+        const { error: insertError } = await supabase
+          .from('daily_work_summary')
+          .insert({
+            user_id: selectedEmployee.id,
+            work_date: overtimeFormData.work_date,
+            basic_hours: 0,
+            ...updateData,
+            auto_calculated: false
+          })
+
+        if (insertError) {
+          console.error('❌ 초과근무 기록 생성 오류:', insertError)
+          throw new Error('초과근무 기록 생성에 실패했습니다.')
+        }
+      }
+
+      alert('초과근무 기록이 성공적으로 저장되었습니다.')
+      setOvertimeFormData({
+        work_date: '',
+        overtime_hours: 0,
+        night_hours: 0,
+        notes: ''
+      })
+      setShowOvertimeForm(false)
+      await fetchOvertimeRecords()
+    } catch (err) {
+      console.error('초과근무 기록 생성 오류:', err)
+      alert(err instanceof Error ? err.message : '초과근무 기록 생성 중 오류가 발생했습니다.')
+    } finally {
+      setOvertimeSubmitting(false)
+    }
+  }
+
+  const handleOvertimeApproval = async (recordId: string, status: 'approved' | 'rejected') => {
+    const adminNotes = status === 'rejected' ? prompt('거절 사유를 입력하세요:') : undefined
+    if (status === 'rejected' && !adminNotes) return
+
+    try {
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
+      }
+
+      // daily_work_summary에서 해당 기록 업데이트
+      let updateData: any = {
+        notes: adminNotes || '',
+        calculated_at: new Date().toISOString()
+      }
+
+      if (status === 'rejected') {
+        // 거절 시 초과근무 시간을 0으로 설정
+        updateData.overtime_hours = 0
+        updateData.night_hours = 0
+      }
+
+      const { error } = await supabase
+        .from('daily_work_summary')
+        .update(updateData)
+        .eq('id', recordId)
+
+      if (error) {
+        console.error('❌ 초과근무 승인/거절 오류:', error)
+        throw new Error('처리에 실패했습니다.')
+      }
+
+      alert(status === 'approved' ? '초과근무가 승인되었습니다.' : '초과근무가 거절되었습니다.')
+      await fetchOvertimeRecords()
+    } catch (err) {
+      console.error('초과근무 승인/거절 오류:', err)
+      alert(err instanceof Error ? err.message : '처리 중 오류가 발생했습니다.')
+    }
+  }
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('ko-KR').format(amount)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('ko-KR')
+  }
+
+  // Attendance management functions
+  const fetchAttendanceData = async () => {
+    if (!selectedEmployee) return
+    
+    setAttendanceLoading(true)
+    try {
+      console.log('🔍 근무시간 데이터 조회 (직접 Supabase):', attendanceMonth, selectedEmployee.id)
+      
+      // 선택된 월의 시작일과 종료일 계산
+      const [year, month] = attendanceMonth.split('-').map(Number)
+      // 해당 월의 첫날
+      const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`
+      // 해당 월의 마지막날 계산
+      const lastDay = new Date(year, month, 0).getDate()
+      const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      
+      console.log(`📅 조회 기간: ${startDateStr} ~ ${endDateStr}`)
+      
+      // 월별 통계 조회
+      const { data: monthlyStatsArray, error: statsError } = await supabase
+        .from('monthly_work_stats')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .eq('work_month', `${year}-${String(month).padStart(2, '0')}-01`)
+      
+      const monthlyStats = monthlyStatsArray && monthlyStatsArray.length > 0 ? monthlyStatsArray[0] : null
+      
+      // 일별 상세 데이터 조회
+      const { data: dailyRecords, error: dailyError } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .gte('work_date', startDateStr)
+        .lte('work_date', endDateStr)
+        .order('work_date', { ascending: true })
+      
+      // 출퇴근 기록 조회
+      const { data: attendanceRecords, error: recordsError } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .gte('record_date', startDateStr)
+        .lte('record_date', endDateStr)
+        .order('record_date', { ascending: true })
+      
+      if (statsError || dailyError || recordsError) {
+        const error = statsError || dailyError || recordsError
+        console.error('❌ 근무시간 데이터 조회 오류:', error)
+        setError('근무시간 데이터를 불러올 수 없습니다.')
+        return
+      }
+      
+      // 데이터 변환
+      const attendanceData = {
+        summary: monthlyStats || {
+          total_work_days: dailyRecords?.length || 0,
+          total_basic_hours: dailyRecords?.reduce((sum, record) => sum + (record.basic_hours || 0), 0) || 0,
+          total_overtime_hours: dailyRecords?.reduce((sum, record) => sum + (record.overtime_hours || 0), 0) || 0,
+          average_daily_hours: dailyRecords?.length ? (dailyRecords.reduce((sum, record) => sum + (record.basic_hours || 0) + (record.overtime_hours || 0), 0) / dailyRecords.length) : 0,
+          dinner_count: dailyRecords?.filter(record => record.had_dinner).length || 0,
+          late_count: 0, // TODO: 지각 수 계산 로직 추가
+          early_leave_count: 0, // TODO: 조퇴 수 계산 로직 추가
+          absent_count: 0 // TODO: 결근 수 계산 로직 추가
+        },
+        daily_records: dailyRecords || [],
+        attendance_records: attendanceRecords || []
+      }
+      
+      console.log('✅ 근무시간 데이터 조회 완료:', attendanceData)
+      setAttendanceData(attendanceData)
+      
+    } catch (err) {
+      console.error('❌ 근무시간 조회 오류:', err)
+      setError('근무시간 조회 중 오류가 발생했습니다.')
+    } finally {
+      setAttendanceLoading(false)
+    }
+  }
+
+  const handleEditWorkTime = (record: any) => {
+    setEditingRecord(record)
+    setShowEditModal(true)
+  }
+
+  const handleAddAttendanceRecord = () => {
+    setEditingRecord({
+      work_date: new Date().toISOString().split('T')[0],
+      check_in_time: '',
+      check_out_time: '',
+      basic_hours: 0,
+      overtime_hours: 0,
+      had_dinner: false
+    })
+    setShowEditModal(true)
+  }
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800'
+      case 'approved': return 'bg-green-100 text-green-800'
+      case 'rejected': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending': return '대기중'
+      case 'approved': return '승인됨'
+      case 'rejected': return '거절됨'
+      default: return '알 수 없음'
+    }
+  }
+
+  const handleLeaveAdjustment = async (leaveType: string, adjustmentType: 'granted' | 'used', amount: number) => {
+    if (!selectedEmployee) return
+
+    try {
+      let updateData: any = {}
+      
+      if (['substitute_leave_hours', 'compensatory_leave_hours'].includes(leaveType)) {
+        // 대체휴가/보상휴가 직접 업데이트
+        const currentValue = leaveType === 'substitute_leave_hours' 
+          ? (selectedEmployee.substitute_leave_hours || 0)
+          : (selectedEmployee.compensatory_leave_hours || 0)
+        
+        updateData[leaveType] = currentValue + amount
+      } else {
+        // 연차/병가 업데이트
+        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
+        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
+        
+        const currentValue = (selectedEmployee as any).leave_data?.[targetField] || 0
+        updateData[targetField] = currentValue + amount
+      }
+
+      // Supabase로 직접 업데이트
+      const { error } = await supabase
+        .from('users')
+        .update(updateData)
+        .eq('id', selectedEmployee.id)
+
+      if (error) {
+        console.error('❌ Supabase leave adjustment error:', error)
+        throw new Error('휴가 일수 조정에 실패했습니다.')
+      }
+      
+      // 로컬 상태 즉시 업데이트
+      const updatedEmployee = { ...selectedEmployee }
+      
+      if (['substitute_leave_hours', 'compensatory_leave_hours'].includes(leaveType)) {
+        // 대체휴가/보상휴가 업데이트
+        if (leaveType === 'substitute_leave_hours') {
+          updatedEmployee.substitute_leave_hours = (selectedEmployee.substitute_leave_hours || 0) + amount
+        } else if (leaveType === 'compensatory_leave_hours') {
+          updatedEmployee.compensatory_leave_hours = (selectedEmployee.compensatory_leave_hours || 0) + amount
+        }
+      } else {
+        // 연차/병가 업데이트
+        const leaveData = (updatedEmployee as any).leave_data || {};
+        const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick';
+        const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`;
+        
+        leaveData[targetField] = (leaveData[targetField] || 0) + amount;
+        
+        // users 테이블 필드도 업데이트
+        (updatedEmployee as any)[targetField] = leaveData[targetField];
+        
+        // 잔여 일수 재계산
+        if (leaveType === 'annual_leave') {
+          updatedEmployee.annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0);
+        } else {
+          updatedEmployee.sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0);
+        }
+        
+        (updatedEmployee as any).leave_data = leaveData;
+      }
+      
+      // 직원 목록에서도 업데이트
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp)
+      )
+      setSelectedEmployee(updatedEmployee)
+      
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '휴가 일수 조정 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleResignation = async () => {
+    if (!selectedEmployee || !formData.resignation_date) return
+
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      // Supabase로 직접 퇴사 처리
+      const { error } = await supabase
+        .from('users')
+        .update({ 
+          resignation_date: formData.resignation_date,
+          termination_date: formData.resignation_date,
+          is_active: false
+        })
+        .eq('id', selectedEmployee.id)
+
+      if (error) {
+        console.error('❌ Supabase resignation error:', error)
+        throw new Error('퇴사 처리에 실패했습니다.')
+      }
+      
+      alert('퇴사 처리가 완료되었습니다.')
+      
+      // 로컬 상태 업데이트
+      const updatedEmployee = { 
+        ...selectedEmployee, 
+        resignation_date: formData.resignation_date,
+        termination_date: formData.resignation_date,
+        is_active: false
+      }
+      
+      setEmployees(prevEmployees => 
+        prevEmployees.map(emp => 
+          emp.id === selectedEmployee.id ? updatedEmployee : emp
+        )
+      )
+      setSelectedEmployee(updatedEmployee)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '퇴사 처리 중 오류가 발생했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteEmployee = async () => {
+    if (!selectedEmployee) return
+
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      // Supabase로 직접 직원 삭제
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', selectedEmployee.id)
+
+      if (error) {
+        console.error('❌ Supabase delete error:', error)
+        throw new Error('직원 삭제에 실패했습니다.')
+      }
+      
+      alert('직원이 성공적으로 삭제되었습니다.')
+      
+      // 로컬 상태에서 직원 제거
+      setEmployees(prevEmployees => 
+        prevEmployees.filter(emp => emp.id !== selectedEmployee.id)
+      )
+      setSelectedEmployee(null)
+      setShowDeleteConfirm(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '직원 삭제 중 오류가 발생했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // 상태별 직원 필터링 (termination_date 기준)
+  const getFilteredEmployees = () => {
+    switch (statusFilter) {
+      case 'active':
+        return employees.filter(emp => emp.work_type === '정규직')
+      case 'resigned':
+        return employees.filter(emp => emp.work_type === '퇴사자')
+      case 'contract':
+        return employees.filter(emp => emp.work_type === '계약직')
+      default:
+        return employees
+    }
+  }
+
+  const filteredEmployees = getFilteredEmployees()
+
+  if (loading) return (
+    <div className="p-8 text-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+      <p className="text-gray-600">직원 목록을 불러오는 중...</p>
+    </div>
+  )
+  
+  if (error && !employees.length) return (
+    <div className="p-8 text-center">
+      <div className="bg-red-50 border border-red-300 rounded-lg p-6">
+        <div className="text-red-600 font-semibold mb-2">❌ 오류 발생</div>
+        <p className="text-red-800 mb-4">{error}</p>
+        <button 
+          onClick={() => window.location.reload()} 
+          className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+        >
+          페이지 새로고침
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="bg-white overflow-hidden shadow rounded-lg">
+      <div className="p-5">
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">직원 정보 관리</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              전체 {employees.length}명 | 재직 {employees.filter(emp => !emp.termination_date).length}명 | 퇴사 {employees.filter(emp => !!emp.termination_date).length}명
+            </p>
+          </div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              전체
+            </button>
+            <button
+              onClick={() => setStatusFilter('active')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'active' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              재직중
+            </button>
+            <button
+              onClick={() => setStatusFilter('contract')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'contract' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              계약직
+            </button>
+            <button
+              onClick={() => setStatusFilter('resigned')}
+              className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'resigned' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+            >
+              퇴사
+            </button>
+          </div>
+        </div>
+        {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+      </div>
+      <div className="border-t border-gray-200 md:grid md:grid-cols-3">
+        {/* Employee List */}
+        <div className="md:col-span-1 border-r border-gray-200 h-96 overflow-y-auto">
+          <ul>
+            {filteredEmployees.map(emp => (
+              <li key={emp.id}>
+                <button
+                  onClick={() => handleSelectEmployee(emp)}
+                  className={`w-full text-left p-4 ${selectedEmployee?.id === emp.id ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-indigo-600">{emp.name} ({emp.position})</p>
+                      <p className="text-sm text-gray-500">{emp.department}</p>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                        !emp.termination_date 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {!emp.termination_date ? '재직' : '퇴사'}
+                      </span>
+                      {emp.termination_date && (
+                        <span className="text-xs text-gray-400 mt-1">
+                          {new Date(emp.termination_date).toLocaleDateString('ko-KR')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Employee Management Panel */}
+        <div className="md:col-span-2 p-6">
+          {selectedEmployee ? (
+            <div>
+              {/* Tab Navigation */}
+              <div className="border-b border-gray-200 mb-6">
+                <nav className="-mb-px flex space-x-8">
+                  <button
+                    onClick={() => setActiveTab('info')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'info'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    기본 정보
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('leave')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'leave'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    휴가 관리
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('attendance')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'attendance'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    근무시간 관리
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('management')}
+                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                      activeTab === 'management'
+                        ? 'border-indigo-500 text-indigo-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    인사 관리
+                  </button>
+                </nav>
+              </div>
+
+              {/* Basic Info Tab */}
+              {activeTab === 'info' && (
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="name" className="block text-sm font-medium text-gray-700">이름</label>
+                      <input type="text" name="name" id="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">이메일</label>
+                      <input type="email" name="email" id="email" value={formData.email || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="department" className="block text-sm font-medium text-gray-700">부서</label>
+                      <input type="text" name="department" id="department" value={formData.department || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="position" className="block text-sm font-medium text-gray-700">직책</label>
+                      <input type="text" name="position" id="position" value={formData.position || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="work_type" className="block text-sm font-medium text-gray-700">근무 형태</label>
+                      <select name="work_type" id="work_type" value={formData.work_type || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm">
+                        <option value="정규직">정규직</option>
+                        <option value="계약직">계약직</option>
+                        <option value="인턴">인턴</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="hire_date" className="block text-sm font-medium text-gray-700">입사일</label>
+                      <input type="date" name="hire_date" id="hire_date" value={formData.hire_date || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {submitting ? '저장 중...' : '정보 저장'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Leave Management Tab */}
+              {activeTab === 'leave' && (
+                <div className="space-y-6">
+                  <h4 className="font-medium text-gray-900 mb-4">휴가 현황 및 조정</h4>
+                  <p className="text-sm text-gray-600 mb-4">각 항목을 클릭하여 직접 수정할 수 있습니다.</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* 연차 카드 */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-blue-900">연차</h5>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {selectedEmployee.annual_leave || 0}일 잔여
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {/* 지급 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('annual_granted', (selectedEmployee as any)?.leave_data?.annual_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
+                          {editingField === 'annual_granted' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('annual_granted', 'annual_leave', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_granted', 'annual_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.annual_days || 0}일</span>
+                          )}
+                        </div>
+                        
+                        {/* 사용 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('annual_used', (selectedEmployee as any)?.leave_data?.used_annual_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
+                          {editingField === 'annual_used' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('annual_used', 'annual_leave', 'used')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_used', 'annual_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_annual_days || 0}일</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 병가 카드 */}
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-red-900">병가</h5>
+                        <div className="text-2xl font-bold text-red-600">
+                          {selectedEmployee.sick_leave || 0}일 잔여
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        {/* 지급 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('sick_granted', (selectedEmployee as any)?.leave_data?.sick_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
+                          {editingField === 'sick_granted' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('sick_granted', 'sick_leave', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_granted', 'sick_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.sick_days || 0}일</span>
+                          )}
+                        </div>
+                        
+                        {/* 사용 일수 */}
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('sick_used', (selectedEmployee as any)?.leave_data?.used_sick_days || 0)}>
+                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
+                          {editingField === 'sick_used' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('sick_used', 'sick_leave', 'used')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_used', 'sick_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_sick_days || 0}일</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 대체휴가 카드 */}
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-purple-900">대체휴가</h5>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {selectedEmployee.substitute_leave_hours || 0}시간
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('substitute_hours', selectedEmployee.substitute_leave_hours || 0)}>
+                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
+                          {editingField === 'substitute_hours' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-purple-600">{selectedEmployee.substitute_leave_hours || 0}시간</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 보상휴가 카드 */}
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <h5 className="text-lg font-semibold text-orange-900">보상휴가</h5>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {selectedEmployee.compensatory_leave_hours || 0}시간
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
+                             onClick={() => handleFieldEdit('compensatory_hours', selectedEmployee.compensatory_leave_hours || 0)}>
+                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
+                          {editingField === 'compensatory_hours' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                step="0.1"
+                                value={editValue}
+                                onChange={(e) => setEditValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')
+                                  } else if (e.key === 'Escape') {
+                                    handleFieldCancel()
+                                  }
+                                }}
+                                className="w-16 px-2 py-1 text-sm border rounded"
+                                autoFocus
+                              />
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
+                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-semibold text-orange-600">{selectedEmployee.compensatory_leave_hours || 0}시간</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <h5 className="text-sm font-medium text-yellow-800 mb-2">💡 사용 안내</h5>
+                    <ul className="text-sm text-yellow-700 space-y-1">
+                      <li>• 각 항목을 클릭하면 직접 수정할 수 있습니다</li>
+                      <li>• Enter 키로 저장, Esc 키로 취소할 수 있습니다</li>
+                      <li>• 연차/병가는 지급 일수와 사용 일수를 별도로 관리합니다</li>
+                      <li>• 대체휴가/보상휴가는 보유 시간을 직접 설정합니다</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {/* Attendance Management Tab */}
+              {activeTab === 'attendance' && (
+                <div className="space-y-6">
+                  {/* Month Selector and Summary */}
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <div className="flex justify-between items-center mb-4">
+                      <h4 className="font-medium text-gray-900">근무시간 조회 및 관리</h4>
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <label htmlFor="attendance-month" className="text-sm font-medium text-gray-700">
+                            조회 월:
+                          </label>
+                          <div className="flex items-center space-x-1">
+                            <button
+                              onClick={() => {
+                                const [year, month] = attendanceMonth.split('-').map(Number)
+                                const prevDate = new Date(year, month - 2, 1)
+                                setAttendanceMonth(`${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`)
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded"
+                              title="이전 달"
+                            >
+                              <ChevronLeft className="w-5 h-5 text-gray-600" />
+                            </button>
+                            <div className="px-4 py-1.5 text-sm border rounded-md bg-white min-w-[140px] text-center">
+                              {attendanceMonth.split('-')[0]}년 {parseInt(attendanceMonth.split('-')[1])}월
+                            </div>
+                            <button
+                              onClick={() => {
+                                const [year, month] = attendanceMonth.split('-').map(Number)
+                                const nextDate = new Date(year, month, 1)
+                                setAttendanceMonth(`${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}`)
+                              }}
+                              className="p-1 hover:bg-gray-100 rounded"
+                              title="다음 달"
+                            >
+                              <ChevronRight className="w-5 h-5 text-gray-600" />
+                            </button>
+                          </div>
+                        </div>
+                        <button
+                          onClick={handleAddAttendanceRecord}
+                          className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
+                        >
+                          출퇴근 기록 추가
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Loading State */}
+                    {attendanceLoading && (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mx-auto mb-4"></div>
+                        <p className="text-gray-600">근무시간 데이터를 불러오는 중...</p>
+                      </div>
+                    )}
+
+                    {/* Attendance Summary */}
+                    {!attendanceLoading && attendanceData && (
+                      <>
+                        {/* Monthly Summary Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">총 근무일수</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {attendanceData.summary?.total_work_days || 0}일
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">총 근무시간</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {Math.round(((attendanceData.summary?.total_basic_hours || 0) + (attendanceData.summary?.total_overtime_hours || 0)) * 10) / 10}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">초과근무시간</div>
+                            <div className="text-2xl font-bold text-blue-600">
+                              {attendanceData.summary?.total_overtime_hours || 0}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-4 border">
+                            <div className="text-sm text-gray-500">평균 일일 근무시간</div>
+                            <div className="text-2xl font-bold text-gray-900">
+                              {Math.round(attendanceData.summary?.average_daily_hours * 10) / 10 || 0}시간
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Daily Records Table */}
+                        <div className="bg-white rounded-lg border overflow-hidden">
+                          <div className="px-4 py-3 border-b bg-gray-50">
+                            <h5 className="text-sm font-medium text-gray-900">일별 근무시간 상세</h5>
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">날짜</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">출근시간</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">퇴근시간</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">기본근무</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">초과근무</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
+                                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">관리</th>
+                                </tr>
+                              </thead>
+                              <tbody className="bg-white divide-y divide-gray-200">
+                                {attendanceData.daily_records && attendanceData.daily_records.length > 0 ? (
+                                  attendanceData.daily_records.map((record: any) => (
+                                    <tr key={record.work_date} className="hover:bg-gray-50">
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                        {new Date(record.work_date).toLocaleDateString('ko-KR', {
+                                          month: 'long',
+                                          day: 'numeric',
+                                          weekday: 'short'
+                                        })}
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.check_in_time ? 
+                                          new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: false
+                                          }) : '--'
+                                        }
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.check_out_time ? 
+                                          new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                            hour12: false
+                                          }) : '--'
+                                        }
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {record.basic_hours || 0}시간
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                        {record.overtime_hours || 0}시간
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                          record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
+                                          record.work_status === '지각' ? 'bg-yellow-100 text-yellow-800' :
+                                          record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
+                                          record.work_status === '결근' ? 'bg-red-100 text-red-800' :
+                                          record.work_status?.includes('누락') ? 'bg-gray-100 text-gray-800' :
+                                          'bg-gray-100 text-gray-800'
+                                        }`}>
+                                          {record.work_status || '미확인'}
+                                        </span>
+                                        {record.had_dinner && (
+                                          <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
+                                            저녁식사
+                                          </span>
+                                        )}
+                                        {record.missing_records && record.missing_records.length > 0 && (
+                                          <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                                            {record.missing_records.join(', ')}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button
+                                          onClick={() => handleEditWorkTime(record)}
+                                          className="text-indigo-600 hover:text-indigo-900"
+                                        >
+                                          수정
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                ) : (
+                                  <tr>
+                                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
+                                      {attendanceMonth} 근무 기록이 없습니다.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Attendance Stats */}
+                        {attendanceData.attendanceStats && (
+                          <div className="mt-4 bg-yellow-50 rounded-lg p-4">
+                            <h5 className="text-sm font-medium text-gray-900 mb-2">출퇴근 통계</h5>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-600">정상출근: </span>
+                                <span className="font-medium text-green-600">{attendanceData.attendanceStats.onTimeCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">지각: </span>
+                                <span className="font-medium text-yellow-600">{attendanceData.attendanceStats.lateCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">조퇴: </span>
+                                <span className="font-medium text-orange-600">{attendanceData.attendanceStats.earlyLeaveCount}일</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">결근: </span>
+                                <span className="font-medium text-red-600">{attendanceData.attendanceStats.absentCount}일</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Instructions */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">근무시간 관리 안내</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div>• <strong>근무시간 수정:</strong> 각 일자의 수정 버튼을 클릭하여 출퇴근 시간 및 근무시간 수정</div>
+                      <div>• <strong>기록 추가:</strong> 누락된 출퇴근 기록 추가 가능</div>
+                      <div>• <strong>자동 계산:</strong> 기본/초과 근무시간은 시스템에서 자동 계산</div>
+                      <div>• <strong>수정 이력:</strong> 모든 수정 내역은 시스템에 기록됨</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* HR Management Tab */}
+              {activeTab === 'management' && (
+                <div className="space-y-6">
+                  {/* Resignation Processing */}
+                  <div className="bg-yellow-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-4">퇴사 처리</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label htmlFor="resignation_date" className="block text-sm font-medium text-gray-700">퇴사일</label>
+                        <input
+                          type="date"
+                          name="resignation_date"
+                          id="resignation_date"
+                          value={formData.resignation_date || ''}
+                          onChange={handleInputChange}
+                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResignation}
+                        disabled={submitting || !formData.resignation_date}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
+                      >
+                        {submitting ? '처리 중...' : '퇴사 처리'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Employee Deletion */}
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-4">직원 삭제</h4>
+                    <p className="text-sm text-gray-600 mb-4">
+                      주의: 직원을 삭제하면 모든 관련 데이터가 영구적으로 삭제됩니다.
+                    </p>
+                    {!showDeleteConfirm ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowDeleteConfirm(true)}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700"
+                      >
+                        직원 삭제
+                      </button>
+                    ) : (
+                      <div className="space-y-3">
+                        <p className="text-sm font-medium text-red-800">
+                          정말로 {selectedEmployee.name} 직원을 삭제하시겠습니까?
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleDeleteEmployee}
+                            disabled={submitting}
+                            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {submitting ? '삭제 중...' : '삭제 확인'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowDeleteConfirm(false)}
+                            className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">왼쪽 목록에서 직원을 선택하여 관리하세요.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Work Time Edit Modal */}
+      {showEditModal && editingRecord && selectedEmployee && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              근무시간 수정 - {selectedEmployee.name}
+            </h3>
+            
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              
+              const formData = new FormData(e.currentTarget)
+              const checkInTime = formData.get('check_in_time') as string
+              const checkOutTime = formData.get('check_out_time') as string
+              const hadDinner = formData.get('had_dinner') === 'on'
+              const notes = formData.get('notes') as string
+              
+              try {
+                const currentUser = await getCurrentUser()
+                if (!currentUser || currentUser.role !== 'admin') {
+                  alert('관리자 권한이 필요합니다.')
+                  return
+                }
+
+                // 출퇴근 기록이 있는 경우 수정
+                if (editingRecord.check_in_time || editingRecord.check_out_time) {
+                  // daily_work_summary 업데이트
+                  const updateData: any = {
+                    notes,
+                    had_dinner: hadDinner,
+                    auto_calculated: false,
+                    calculated_at: new Date().toISOString()
+                  }
+
+                  if (checkInTime) {
+                    updateData.check_in_time = `${editingRecord.work_date}T${checkInTime}:00+00:00`
+                  }
+                  if (checkOutTime) {
+                    updateData.check_out_time = `${editingRecord.work_date}T${checkOutTime}:00+00:00`
+                  }
+
+                  const { error: updateError } = await supabase
+                    .from('daily_work_summary')
+                    .update(updateData)
+                    .eq('user_id', selectedEmployee.id)
+                    .eq('work_date', editingRecord.work_date)
+
+                  if (updateError) {
+                    console.error('❌ 근무시간 수정 오류:', updateError)
+                    throw new Error('근무시간 수정에 실패했습니다.')
+                  }
+
+                  alert('근무시간이 수정되었습니다.')
+                } else {
+                  // 새로운 출퇴근 기록 추가
+                  const recordsToInsert = []
+
+                  if (checkInTime) {
+                    recordsToInsert.push({
+                      user_id: selectedEmployee.id,
+                      record_date: editingRecord.work_date,
+                      record_time: checkInTime,
+                      record_timestamp: `${editingRecord.work_date}T${checkInTime}:00+00:00`,
+                      record_type: '출근',
+                      reason: notes || '관리자 추가',
+                      is_manual: true,
+                      approved_by: currentUser.id,
+                      approved_at: new Date().toISOString(),
+                      notes: notes || '관리자 추가'
+                    })
+                  }
+
+                  if (checkOutTime) {
+                    recordsToInsert.push({
+                      user_id: selectedEmployee.id,
+                      record_date: editingRecord.work_date,
+                      record_time: checkOutTime,
+                      record_timestamp: `${editingRecord.work_date}T${checkOutTime}:00+00:00`,
+                      record_type: '퇴근',
+                      reason: notes || '관리자 추가',
+                      had_dinner: hadDinner,
+                      is_manual: true,
+                      approved_by: currentUser.id,
+                      approved_at: new Date().toISOString(),
+                      notes: notes || '관리자 추가'
+                    })
+                  }
+
+                  if (recordsToInsert.length > 0) {
+                    const { error: insertError } = await supabase
+                      .from('attendance_records')
+                      .insert(recordsToInsert)
+
+                    if (insertError) {
+                      console.error('❌ 출퇴근 기록 추가 오류:', insertError)
+                      throw new Error('출퇴근 기록 추가에 실패했습니다.')
+                    }
+
+                    // daily_work_summary도 함께 생성/업데이트 (PostgreSQL 트리거가 자동 처리)
+                    // 하지만 수동으로도 확인하여 생성
+                    const { data: existingSummaryArray } = await supabase
+                      .from('daily_work_summary')
+                      .select('*')
+                      .eq('user_id', selectedEmployee.id)
+                      .eq('work_date', editingRecord.work_date)
+                    
+                    const existingSummary = existingSummaryArray && existingSummaryArray.length > 0 ? existingSummaryArray[0] : null
+
+                    if (!existingSummary) {
+                      await supabase
+                        .from('daily_work_summary')
+                        .insert({
+                          user_id: selectedEmployee.id,
+                          work_date: editingRecord.work_date,
+                          check_in_time: checkInTime ? `${editingRecord.work_date}T${checkInTime}:00+00:00` : null,
+                          check_out_time: checkOutTime ? `${editingRecord.work_date}T${checkOutTime}:00+00:00` : null,
+                          basic_hours: 0, // 트리거가 자동 계산
+                          had_dinner: hadDinner,
+                          notes: notes,
+                          auto_calculated: false,
+                          calculated_at: new Date().toISOString()
+                        })
+                    }
+                  }
+
+                  alert('출퇴근 기록이 추가되었습니다.')
+                }
+                
+                setShowEditModal(false)
+                setEditingRecord(null)
+                await fetchAttendanceData()
+                
+              } catch (err) {
+                console.error('근무시간 수정 오류:', err)
+                alert(err instanceof Error ? err.message : '근무시간 수정 중 오류가 발생했습니다.')
+              }
+            }} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">날짜</label>
+                <input
+                  type="date"
+                  value={editingRecord.work_date}
+                  disabled
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">출근시간</label>
+                  <input
+                    type="time"
+                    name="check_in_time"
+                    defaultValue={editingRecord.check_in_time ? 
+                      new Date(editingRecord.check_in_time).toTimeString().slice(0, 5) : ''
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">퇴근시간</label>
+                  <input
+                    type="time"
+                    name="check_out_time"
+                    defaultValue={editingRecord.check_out_time ? 
+                      new Date(editingRecord.check_out_time).toTimeString().slice(0, 5) : ''
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="had_dinner"
+                    defaultChecked={editingRecord.had_dinner}
+                    className="mr-2"
+                  />
+                  <span className="text-sm text-gray-700">저녁식사 여부</span>
+                </label>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">메모</label>
+                <textarea
+                  name="notes"
+                  rows={3}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  placeholder="수정 사유 또는 메모"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setEditingRecord(null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700"
+                >
+                  저장
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}

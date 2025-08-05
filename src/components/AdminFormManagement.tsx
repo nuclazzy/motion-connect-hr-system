@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders } from '@/lib/auth'
+import { getLeaveCalendarConfig, syncLeaveDataFromCalendar, createLeaveEvent } from '@/lib/actions/calendar-sync'
 import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
@@ -91,34 +92,27 @@ export default function AdminFormManagement() {
 
     try {
       // 먼저 연차 캘린더 설정 조회
-      const calendarResponse = await fetch('/api/calendar/sync-leave-data')
-      const calendarData = await calendarResponse.json()
+      const leaveCalendars = await getLeaveCalendarConfig()
 
-      if (!calendarData.leaveCalendars || calendarData.leaveCalendars.length === 0) {
+      if (!leaveCalendars || leaveCalendars.length === 0) {
         setError('연차 캘린더가 설정되지 않았습니다. 먼저 캘린더 설정에서 연차 캘린더를 등록해주세요.')
         return
       }
 
       // 첫 번째 연차 캘린더로 동기화 실행
-      const leaveCalendar = calendarData.leaveCalendars[0]
-      const syncResponse = await fetch('/api/calendar/sync-leave-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          calendarId: leaveCalendar.calendar_id,
-          startDate: new Date('2025-08-01').toISOString(), // 8월부터
-          endDate: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 3개월 후까지
-        })
-      })
-
-      const syncData = await syncResponse.json()
+      const leaveCalendar = leaveCalendars[0]
+      const syncData = await syncLeaveDataFromCalendar(
+        leaveCalendar.calendar_id,
+        new Date('2025-06-01').toISOString(), // 6월부터
+        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 3개월 후까지
+      )
 
       if (syncData.success) {
         setSyncResult(syncData)
         // 동기화 후 요청 목록 새로고침
         fetchRequests()
       } else {
-        setError(syncData.error || 'Google Calendar 동기화에 실패했습니다.')
+        setError('Google Calendar 동기화에 실패했습니다.')
       }
 
     } catch (error) {
@@ -255,7 +249,7 @@ export default function AdminFormManagement() {
           }
         }
 
-        // 휴가 승인 시 Google Calendar에 이벤트 생성
+        // 휴가 승인 시 Google Calendar에 이벤트 생성 (Server Action 사용)
         try {
           const startDate = request.request_data?.['시작일'] || '';
           const endDate = request.request_data?.['종료일'] || startDate;
@@ -265,9 +259,12 @@ export default function AdminFormManagement() {
             const endDateObj = new Date(endDate);
             endDateObj.setDate(endDateObj.getDate() + 1);
             const adjustedEndDate = endDateObj.toISOString().split('T')[0];
-            
-            const calendarEventData = {
-              leaveData: {
+
+            console.log('📅 캘린더 이벤트 생성 요청');
+
+            // Server Action 호출
+            const calendarResult = await createLeaveEvent(
+              {
                 leaveType: leaveType,
                 leaveDays: leaveDays,
                 startDate: startDate,
@@ -275,29 +272,17 @@ export default function AdminFormManagement() {
                 reason: request.request_data?.['사유'] || request.request_data?.['휴가사유'] || '',
                 formRequestId: request.id
               },
-              userData: {
+              {
                 id: request.user_id,
                 name: request.user.name,
                 department: request.user.department
               }
-            };
+            );
 
-            console.log('📅 캘린더 이벤트 생성 요청:', calendarEventData);
-
-            const calendarResponse = await fetch('/api/calendar/create-leave-event', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(calendarEventData)
-            });
-
-            if (calendarResponse.ok) {
-              const calendarResult = await calendarResponse.json();
+            if (calendarResult.success) {
               console.log('✅ 휴가 캘린더 이벤트 생성 성공:', calendarResult);
             } else {
-              const errorData = await calendarResponse.json();
-              console.error('❌ 휴가 캘린더 이벤트 생성 실패:', errorData);
+              console.error('❌ 휴가 캘린더 이벤트 생성 실패:', calendarResult.error);
             }
           }
         } catch (calendarError) {
