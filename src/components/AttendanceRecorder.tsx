@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { Clock, MapPin, Coffee, User, Calendar, AlertCircle } from 'lucide-react'
 import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 import { useSupabase } from '@/components/SupabaseProvider'
+import WorkTimePreview from './WorkTimePreview'
+import { detectDinnerEligibility, formatDinnerDetectionResult } from '@/lib/dinner-detection'
 
 interface User {
   id: string
@@ -57,9 +59,12 @@ export default function AttendanceRecorder() {
   const [selectedTime, setSelectedTime] = useState('')
   const [useCurrentTime, setUseCurrentTime] = useState(true)
   const [location, setLocation] = useState<{lat: number, lng: number, accuracy: number} | null>(null)
+  const [locationError, setLocationError] = useState<string>('')
+  const [networkError, setNetworkError] = useState<string>('')
   const [currentTime, setCurrentTime] = useState(new Date())
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null)
   const [authLoading, setAuthLoading] = useState(true)
+  const [editingDinner, setEditingDinner] = useState(false)
 
   // 사용자 인증 확인
   useEffect(() => {
@@ -91,7 +96,7 @@ export default function AttendanceRecorder() {
     }
   }, [currentTime, useCurrentTime])
 
-  // 위치 정보 가져오기
+  // 위치 정보 가져오기 - 오류 처리 개선
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -101,11 +106,34 @@ export default function AttendanceRecorder() {
             lng: position.coords.longitude,
             accuracy: position.coords.accuracy
           })
+          setLocationError('')
         },
         (error) => {
-          console.log('위치 정보를 가져올 수 없습니다:', error)
+          let errorMessage = ''
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = '위치 접근이 거부되었습니다. 브라우저 설정에서 위치 접근을 허용해주세요.'
+              break
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = '위치 정보를 사용할 수 없습니다.'
+              break
+            case error.TIMEOUT:
+              errorMessage = '위치 정보 요청이 시간 초과되었습니다.'
+              break
+            default:
+              errorMessage = '위치 정보를 가져올 수 없습니다.'
+          }
+          setLocationError(errorMessage)
+          console.log('위치 정보 오류:', error, errorMessage)
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5분
         }
       )
+    } else {
+      setLocationError('이 브라우저는 위치 서비스를 지원하지 않습니다.')
     }
   }, [])
 
@@ -226,8 +254,10 @@ export default function AttendanceRecorder() {
       }
 
       setStatus(statusData)
+      setNetworkError('') // 성공 시 네트워크 오류 상태 초기화
     } catch (error) {
       console.error('출퇴근 현황 조회 오류:', error)
+      setNetworkError('네트워크 연결을 확인하고 다시 시도해주세요.')
     }
   }
 
@@ -237,6 +267,67 @@ export default function AttendanceRecorder() {
       fetchAttendanceStatus()
     }
   }, [currentUser])
+
+  // 자동 체크 제거 - 사용자가 직접 판단하도록 유도
+
+  // 저녁식사 체크 수정 함수
+  const updateDinnerStatus = async (newStatus: boolean) => {
+    if (!currentUser?.id || !status) {
+      alert('사용자 인증이 필요합니다.')
+      return
+    }
+
+    // 오늘 날짜의 퇴근 기록 찾기
+    const todayCheckOut = status.todayRecords.checkOut[status.todayRecords.checkOut.length - 1]
+    if (!todayCheckOut) {
+      alert('퇴근 기록이 없습니다.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      // 퇴근 기록의 저녁식사 상태 업데이트
+      const { error: updateError } = await supabase
+        .from('attendance_records')
+        .update({ 
+          had_dinner: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', todayCheckOut.id)
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // daily_work_summary도 업데이트 (트리거가 처리하지만 즉시 반영을 위해)
+      const { error: summaryError } = await supabase
+        .from('daily_work_summary')
+        .update({ 
+          had_dinner: newStatus,
+          // 근무시간 재계산 (저녁식사 1시간 차감/추가)
+          basic_hours: status.workSummary.basic_hours + (newStatus ? -1 : 1),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', currentUser.id)
+        .eq('work_date', status.date)
+
+      if (summaryError) {
+        console.error('daily_work_summary 업데이트 오류:', summaryError)
+      }
+
+      alert(`저녁식사 ${newStatus ? '체크' : '체크 해제'} 완료`)
+      setHadDinner(newStatus)
+      setEditingDinner(false)
+      
+      // 상태 새로고침
+      await fetchAttendanceStatus()
+    } catch (error) {
+      console.error('저녁식사 상태 업데이트 오류:', error)
+      alert('저녁식사 상태 업데이트에 실패했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   // 출퇴근 기록 (직접 Supabase 연동)
   const recordAttendance = async (recordType: '출근' | '퇴근') => {
@@ -413,18 +504,18 @@ export default function AttendanceRecorder() {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-8 p-6 bg-white rounded-lg shadow-lg">
-      {/* 현재 시간 및 날짜 */}
-      <div className="text-center mb-6">
+    <div className="w-full max-w-md mx-auto mt-4 md:mt-8 p-4 md:p-6 bg-white rounded-lg shadow-lg">
+      {/* 현재 시간 및 날짜 - 모바일 최적화 */}
+      <div className="text-center mb-4 md:mb-6">
         <div className="flex items-center justify-center mb-2">
           <Clock className="h-5 w-5 text-blue-500 mr-2" />
-          <div className="text-2xl font-mono font-bold text-gray-800">
+          <div className="text-xl md:text-2xl font-mono font-bold text-gray-800">
             {formatTime(currentTime)}
           </div>
         </div>
         <div className="flex items-center justify-center text-gray-600">
           <Calendar className="h-4 w-4 mr-1" />
-          <div className="text-sm">{formatDate(currentTime)}</div>
+          <div className="text-xs md:text-sm">{formatDate(currentTime)}</div>
         </div>
       </div>
 
@@ -456,27 +547,105 @@ export default function AttendanceRecorder() {
             </div>
           )}
           
-          {/* 오늘 근무 현황 */}
+          {/* 오늘 근무 현황 - 실시간 피드백 향상 */}
           {status.workSummary && (
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <span className="text-gray-500">기본시간:</span>
-                <span className="font-medium ml-1">{status.workSummary.basic_hours}h</span>
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-gray-500">기본시간:</span>
+                  <span className="font-medium ml-1">{status.workSummary.basic_hours}h</span>
+                </div>
+                <div>
+                  <span className="text-gray-500">연장시간:</span>
+                  <span className="font-medium ml-1">{status.workSummary.overtime_hours}h</span>
+                </div>
               </div>
-              <div>
-                <span className="text-gray-500">연장시간:</span>
-                <span className="font-medium ml-1">{status.workSummary.overtime_hours}h</span>
-              </div>
+              
+              {/* 실시간 근무시간 및 예상 퇴근시간 */}
+              {status.currentStatus === '근무중' && status.todayRecords.checkIn.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 mt-2">
+                  <div className="text-xs space-y-1">
+                    {(() => {
+                      const checkInTime = status.todayRecords.checkIn[status.todayRecords.checkIn.length - 1]?.record_time
+                      if (!checkInTime) return null
+                      
+                      const checkInDate = new Date(`2000-01-01T${checkInTime}`)
+                      const now = new Date()
+                      const currentWorkTime = (now.getTime() - checkInDate.getTime()) / (1000 * 60 * 60)
+                      
+                      // 8시간 완료 시점 계산
+                      const expectedEndTime = new Date(checkInDate.getTime() + 8 * 60 * 60 * 1000)
+                      const expectedEndTimeStr = expectedEndTime.toTimeString().split(' ')[0].substring(0, 5)
+                      
+                      return (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-blue-600 font-medium">현재 근무시간:</span>
+                            <span className="text-blue-800 font-bold">{currentWorkTime.toFixed(1)}h</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-blue-600">8시간 완료:</span>
+                            <span className="text-blue-800 font-medium">{expectedEndTimeStr}</span>
+                          </div>
+                          {currentWorkTime >= 8 && (
+                            <div className="text-green-700 font-medium text-center mt-1">
+                              ✅ 기본 근무시간 완료
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* 위치 정보 */}
+      {/* 위치 정보 및 오류 상태 */}
       {location && (
         <div className="mb-4 flex items-center text-xs text-gray-500">
           <MapPin className="h-3 w-3 mr-1" />
           <span>위치: {location.lat.toFixed(4)}, {location.lng.toFixed(4)} (±{Math.round(location.accuracy)}m)</span>
+        </div>
+      )}
+      
+      {/* 위치 오류 메시지 */}
+      {locationError && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-start">
+            <AlertCircle className="h-4 w-4 text-yellow-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="text-yellow-800 font-medium">위치 정보 오류</p>
+              <p className="text-yellow-700 text-xs mt-1">{locationError}</p>
+              <p className="text-yellow-600 text-xs mt-1">
+                위치 정보 없이도 출퇴근 기록은 가능하지만, 정확한 위치 추적을 위해 위치 접근을 허용하는 것을 권장합니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 네트워크 오류 메시지 */}
+      {networkError && (
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-start">
+            <AlertCircle className="h-4 w-4 text-red-600 mr-2 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <p className="text-red-800 font-medium">네트워크 오류</p>
+              <p className="text-red-700 text-xs mt-1">{networkError}</p>
+              <button
+                onClick={() => {
+                  setNetworkError('')
+                  fetchAttendanceStatus()
+                }}
+                className="text-red-600 text-xs underline mt-2 hover:text-red-700"
+              >
+                다시 시도
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -551,49 +720,139 @@ export default function AttendanceRecorder() {
       </div>
 
       {/* 저녁식사 여부 (퇴근 시) */}
-      {status?.canCheckOut && (
-        <div className="mb-4">
-          <label className="flex items-center">
-            <input
-              type="checkbox"
-              checked={hadDinner}
-              onChange={(e) => setHadDinner(e.target.checked)}
-              className="mr-2"
-              disabled={loading}
-            />
-            <Coffee className="h-4 w-4 mr-1" />
-            <span className="text-sm">저녁식사를 했습니다</span>
-          </label>
-          <p className="text-xs text-gray-500 mt-1">
-            저녁식사를 한 경우 체크해주세요 (1시간 차감)
+      {status?.canCheckOut && (() => {
+        // 저녁식사 요건 확인
+        const checkInTime = status.todayRecords.checkIn[status.todayRecords.checkIn.length - 1]?.record_time
+        const currentTime = new Date().toTimeString().split(' ')[0]
+        
+        let needsConfirmation = false
+        
+        if (checkInTime) {
+          const dinnerDetection = detectDinnerEligibility(
+            checkInTime,
+            currentTime,
+            '',
+            hadDinner
+          )
+          needsConfirmation = dinnerDetection.isDinnerMissing
+        }
+        
+        return (
+          <div className="mb-4">
+            {needsConfirmation && (
+              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded">
+                <p className="text-sm text-blue-800 font-medium">
+                  ℹ️ 저녁식사 여부를 확인해주세요
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  오늘 8시간 이상 근무하시고 19시 전후에 근무하셨네요.
+                </p>
+              </div>
+            )}
+            
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                checked={hadDinner}
+                onChange={(e) => setHadDinner(e.target.checked)}
+                className="mr-2"
+                disabled={loading}
+              />
+              <Coffee className="h-4 w-4 mr-1" />
+              <span className="text-sm">저녁식사를 했습니다</span>
+            </label>
+            
+            <p className="text-xs text-gray-500 mt-1">
+              저녁식사를 한 경우 체크해주세요 (근무시간에서 1시간 차감됩니다)
+            </p>
+          </div>
+        )
+      })()}
+
+      {/* 저녁식사 상태 수정 (퇴근 후) */}
+      {!status?.canCheckOut && status?.todayRecords?.checkOut && status.todayRecords.checkOut.length > 0 && (
+        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <Coffee className="h-4 w-4 mr-2 text-yellow-600" />
+              <span className="text-sm font-medium text-yellow-800">
+                저녁식사 상태: {status.todayRecords.checkOut[status.todayRecords.checkOut.length - 1]?.had_dinner ? '체크됨' : '체크 안됨'}
+              </span>
+            </div>
+            {!editingDinner ? (
+              <button
+                onClick={() => setEditingDinner(true)}
+                className="text-xs text-yellow-600 hover:text-yellow-700 underline"
+                disabled={loading}
+              >
+                수정
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const currentStatus = status.todayRecords.checkOut[status.todayRecords.checkOut.length - 1]?.had_dinner || false
+                    updateDinnerStatus(!currentStatus)
+                  }}
+                  className="text-xs bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700"
+                  disabled={loading}
+                >
+                  {status.todayRecords.checkOut[status.todayRecords.checkOut.length - 1]?.had_dinner ? '체크 해제' : '체크'}
+                </button>
+                <button
+                  onClick={() => setEditingDinner(false)}
+                  className="text-xs text-gray-600 hover:text-gray-700"
+                  disabled={loading}
+                >
+                  취소
+                </button>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-yellow-600 mt-1">
+            저녁식사 체크를 실수로 했거나 변경이 필요한 경우 언제든지 수정할 수 있습니다.
           </p>
         </div>
       )}
 
-      {/* 출퇴근 버튼 */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 근무시간 미리보기 - 출근 후 퇴근 전만 표시 */}
+      {status?.todayRecords?.checkIn && status.todayRecords.checkIn.length > 0 && 
+       status?.todayRecords?.checkOut && status.todayRecords.checkOut.length === 0 && 
+       selectedTime && (
+        <div className="mb-4">
+          <WorkTimePreview
+            checkInTime={status.todayRecords.checkIn[status.todayRecords.checkIn.length - 1]?.record_time?.substring(11, 16)}
+            checkOutTime={selectedTime}
+            workDate={new Date().toISOString().split('T')[0]}
+            className="border-blue-200"
+          />
+        </div>
+      )}
+
+      {/* 출퇴근 버튼 - 모바일 최적화 */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <button
           onClick={() => recordAttendance('출근')}
           disabled={loading || !status?.canCheckIn}
-          className={`py-3 px-4 rounded-lg font-medium text-white transition-colors ${
+          className={`py-4 md:py-3 px-4 rounded-lg font-medium text-white transition-colors text-lg md:text-base ${
             loading || !status?.canCheckIn
               ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-green-500 hover:bg-green-600 active:bg-green-700'
+              : 'bg-green-500 hover:bg-green-600 active:bg-green-700 touch-manipulation'
           }`}
         >
-          {loading ? '처리중...' : '출근'}
+          {loading ? '처리중...' : '🟢 출근'}
         </button>
 
         <button
           onClick={() => recordAttendance('퇴근')}
           disabled={loading || !status?.canCheckOut}
-          className={`py-3 px-4 rounded-lg font-medium text-white transition-colors ${
+          className={`py-4 md:py-3 px-4 rounded-lg font-medium text-white transition-colors text-lg md:text-base ${
             loading || !status?.canCheckOut
               ? 'bg-gray-300 cursor-not-allowed'
-              : 'bg-red-500 hover:bg-red-600 active:bg-red-700'
+              : 'bg-red-500 hover:bg-red-600 active:bg-red-700 touch-manipulation'
           }`}
         >
-          {loading ? '처리중...' : '퇴근'}
+          {loading ? '처리중...' : '🔴 퇴근'}
         </button>
       </div>
 
@@ -637,7 +896,7 @@ export default function AttendanceRecorder() {
             <p className="mb-1">• <strong>원칙적으로 CAPS(지문인식기) 사용을 권장합니다</strong></p>
             <p className="mb-1">• 웹 출퇴근과 CAPS 기록이 모두 저장되어 통합 관리됩니다</p>
             <p className="mb-1">• 출근 시에는 반드시 업무 사유를 입력해주세요</p>
-            <p className="mb-1">• 퇴근 시 저녁식사를 한 경우 체크해주세요 (근무시간 계산에 반영)</p>
+            <p className="mb-1">• 퇴근 시 저녁식사를 한 경우 반드시 체크해주세요 (체크하지 않으면 차감 안됨)</p>
             <p className="mb-1">• CAPS 기록과 웹 기록이 모두 위 목록에 표시됩니다</p>
             <p>• 모든 기록은 데이터베이스 트리거로 자동 근무시간 계산됩니다</p>
           </div>

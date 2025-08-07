@@ -171,7 +171,7 @@ export default function UserDashboard() {
                     📢 연차 사용 촉진 안내
                   </h3>
                   <div className="mt-2 text-sm text-red-700">
-                    <p className="font-semibold">잔여 연차가 5일 이상 남았습니다.</p>
+                    <p className="font-semibold">잔여 연차가 10일 이상 남았습니다.</p>
                     <p className="mt-1">
                       <span className="font-medium text-red-900">연차 촉진 시즌에 할당된 연차를 모두 사용하지 않으면 자동 소멸됩니다.</span>
                     </p>

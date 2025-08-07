@@ -10,12 +10,20 @@ import {
   Save,
   RefreshCw,
   AlertCircle,
-  TrendingUp
+  TrendingUp,
+  Settings,
+  X,
+  Plus,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Download
 } from 'lucide-react'
 import { formatTimeWithNextDay } from '@/lib/time-utils'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import { getSystemSettings, type SystemSettings } from '@/lib/settings'
+import { downloadPayrollPDF } from '@/lib/payroll-pdf-generator'
 
 interface Employee {
   id: string
@@ -38,12 +46,41 @@ interface Employee {
   overtime_pay?: number // 초과근무수당
   night_pay?: number // 야간근무수당
   total_pay?: number // 지급액 합계
+  // 수동 조정
+  manual_overtime_hours?: number // 수동 조정 초과근무
+  manual_night_hours?: number // 수동 조정 야간근무
+  adjustment_reason?: string // 조정 사유
 }
 
 interface WorkSummary {
   user_id: string
   total_overtime_hours: number
   total_night_hours: number
+}
+
+interface ManualAdjustment {
+  id?: string
+  user_id: string
+  adjustment_month: string
+  overtime_hours: number
+  night_hours: number
+  reason: string
+  created_by?: string
+  created_at?: string
+  updated_at?: string
+}
+
+interface DailyWorkDetail {
+  work_date: string
+  check_in_time?: string
+  check_out_time?: string
+  basic_hours: number
+  overtime_hours: number
+  night_hours: number
+  substitute_hours?: number
+  work_status: string
+  had_dinner: boolean
+  is_holiday?: boolean
 }
 
 export default function AdminPayrollManagement() {
@@ -69,6 +106,22 @@ export default function AdminPayrollManagement() {
     bonus: ''
   })
   const [settings, setSettings] = useState<SystemSettings | null>(null)
+  const [manualAdjustments, setManualAdjustments] = useState<ManualAdjustment[]>([])
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false)
+  const [adjustmentForm, setAdjustmentForm] = useState<{
+    employeeId: string
+    overtimeHours: string
+    nightHours: string
+    reason: string
+  }>({
+    employeeId: '',
+    overtimeHours: '',
+    nightHours: '',
+    reason: ''
+  })
+  const [expandedEmployee, setExpandedEmployee] = useState<string | null>(null)
+  const [dailyDetails, setDailyDetails] = useState<{ [key: string]: DailyWorkDetail[] }>({})
+  const [loadingDetails, setLoadingDetails] = useState<string | null>(null)
 
   // 직원 데이터 조회 (직접 Supabase 연동)
   const fetchEmployees = async () => {
@@ -93,6 +146,28 @@ export default function AdminPayrollManagement() {
       console.error('직원 데이터 조회 오류:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // 수동 조정 데이터 조회
+  const fetchManualAdjustments = async () => {
+    try {
+      const monthStart = `${selectedMonth}-01`
+      
+      const { data, error } = await supabase
+        .from('overtime_manual_adjustments')
+        .select('*')
+        .eq('adjustment_month', monthStart)
+      
+      if (error && error.code !== 'PGRST116') {
+        console.error('수동 조정 데이터 조회 오류:', error)
+        return
+      }
+      
+      setManualAdjustments(data || [])
+    } catch (error) {
+      console.error('수동 조정 조회 오류:', error)
+      setManualAdjustments([])
     }
   }
 
@@ -185,7 +260,7 @@ export default function AdminPayrollManagement() {
   }
 
   // 급여 계산
-  const calculatePayroll = (employee: Employee, workSummary?: WorkSummary): Employee => {
+  const calculatePayroll = (employee: Employee, workSummary?: WorkSummary, adjustment?: ManualAdjustment): Employee => {
     const annualSalary = employee.annual_salary || 0
     const mealAllowance = employee.meal_allowance || 0
     const carAllowance = employee.car_allowance || 0
@@ -201,9 +276,15 @@ export default function AdminPayrollManagement() {
     const monthlyHours = settings?.monthly_standard_hours || 209
     const hourlyRate = Math.round((basicSalary + mealAllowance + carAllowance) / monthlyHours)
     
-    // 근무시간 데이터
-    const overtimeHours = workSummary?.total_overtime_hours || 0
-    const nightHours = workSummary?.total_night_hours || 0
+    // 근무시간 데이터 (자동 계산 + 수동 조정)
+    const autoOvertimeHours = workSummary?.total_overtime_hours || 0
+    const autoNightHours = workSummary?.total_night_hours || 0
+    const manualOvertimeHours = adjustment?.overtime_hours || 0
+    const manualNightHours = adjustment?.night_hours || 0
+    
+    // 최종 시간 = 자동 계산 + 수동 조정
+    const overtimeHours = autoOvertimeHours + manualOvertimeHours
+    const nightHours = autoNightHours + manualNightHours
     
     // 수당 비율 (설정값 사용)
     const overtimeRate = settings?.overtime_rate || 1.5
@@ -227,7 +308,10 @@ export default function AdminPayrollManagement() {
       night_hours: nightHours,
       overtime_pay: overtimePay,
       night_pay: nightPay,
-      total_pay: totalPay
+      total_pay: totalPay,
+      manual_overtime_hours: manualOvertimeHours,
+      manual_night_hours: manualNightHours,
+      adjustment_reason: adjustment?.reason
     }
   }
 
@@ -297,6 +381,138 @@ export default function AdminPayrollManagement() {
     })
   }
 
+  // 수동 조정 저장
+  const saveManualAdjustment = async () => {
+    try {
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        alert('관리자 권한이 필요합니다.')
+        return
+      }
+
+      const monthStart = `${selectedMonth}-01`
+      
+      // 기존 조정 데이터 확인
+      const { data: existing } = await supabase
+        .from('overtime_manual_adjustments')
+        .select('id')
+        .eq('user_id', adjustmentForm.employeeId)
+        .eq('adjustment_month', monthStart)
+        .single()
+
+      const adjustmentData = {
+        user_id: adjustmentForm.employeeId,
+        adjustment_month: monthStart,
+        overtime_hours: parseFloat(adjustmentForm.overtimeHours) || 0,
+        night_hours: parseFloat(adjustmentForm.nightHours) || 0,
+        reason: adjustmentForm.reason,
+        created_by: currentUser.id,
+        updated_at: new Date().toISOString()
+      }
+
+      if (existing) {
+        // 업데이트
+        const { error } = await supabase
+          .from('overtime_manual_adjustments')
+          .update(adjustmentData)
+          .eq('id', existing.id)
+        
+        if (error) throw error
+      } else {
+        // 신규 생성
+        const { error } = await supabase
+          .from('overtime_manual_adjustments')
+          .insert({
+            ...adjustmentData,
+            created_at: new Date().toISOString()
+          })
+        
+        if (error) throw error
+      }
+
+      alert('수동 조정이 저장되었습니다.')
+      setShowAdjustmentModal(false)
+      setAdjustmentForm({
+        employeeId: '',
+        overtimeHours: '',
+        nightHours: '',
+        reason: ''
+      })
+      fetchManualAdjustments()
+    } catch (error) {
+      console.error('수동 조정 저장 오류:', error)
+      alert('수동 조정 저장 중 오류가 발생했습니다.')
+    }
+  }
+
+  // 일자별 상세 데이터 조회
+  const fetchDailyDetails = async (employeeId: string) => {
+    try {
+      setLoadingDetails(employeeId)
+      const monthStart = `${selectedMonth}-01`
+      const nextMonth = new Date(selectedMonth + '-01')
+      nextMonth.setMonth(nextMonth.getMonth() + 1)
+      const monthEnd = new Date(nextMonth.getTime() - 1).toISOString().split('T')[0]
+      
+      const { data, error } = await supabase
+        .from('daily_work_summary')
+        .select('*')
+        .eq('user_id', employeeId)
+        .gte('work_date', monthStart)
+        .lte('work_date', monthEnd)
+        .order('work_date', { ascending: false })
+      
+      if (error) {
+        console.error('일자별 데이터 조회 오류:', error)
+        return
+      }
+      
+      setDailyDetails(prev => ({
+        ...prev,
+        [employeeId]: data || []
+      }))
+    } catch (error) {
+      console.error('일자별 데이터 조회 오류:', error)
+    } finally {
+      setLoadingDetails(null)
+    }
+  }
+
+  // 상세 보기 토글
+  const toggleEmployeeDetails = async (employeeId: string) => {
+    if (expandedEmployee === employeeId) {
+      setExpandedEmployee(null)
+    } else {
+      setExpandedEmployee(employeeId)
+      if (!dailyDetails[employeeId]) {
+        await fetchDailyDetails(employeeId)
+      }
+    }
+  }
+
+  // 수동 조정 삭제
+  const deleteManualAdjustment = async (userId: string) => {
+    if (!confirm('이 직원의 수동 조정을 삭제하시겠습니까?')) return
+    
+    try {
+      const monthStart = `${selectedMonth}-01`
+      
+      const { error } = await supabase
+        .from('overtime_manual_adjustments')
+        .delete()
+        .eq('user_id', userId)
+        .eq('adjustment_month', monthStart)
+      
+      if (error) throw error
+      
+      alert('수동 조정이 삭제되었습니다.')
+      fetchManualAdjustments()
+    } catch (error) {
+      console.error('수동 조정 삭제 오류:', error)
+      alert('수동 조정 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
   useEffect(() => {
     fetchEmployees()
     // 시스템 설정 로드
@@ -306,13 +522,15 @@ export default function AdminPayrollManagement() {
   useEffect(() => {
     if (!loading && employees.length > 0) {
       fetchWorkSummaries()
+      fetchManualAdjustments()
     }
   }, [selectedMonth, loading, employees])
 
   // 직원 데이터와 근무시간 데이터 결합
   const employeesWithPayroll = employees.map(emp => {
     const workSummary = workSummaries.find(w => w.user_id === emp.id)
-    return calculatePayroll(emp, workSummary)
+    const adjustment = manualAdjustments.find(a => a.user_id === emp.id)
+    return calculatePayroll(emp, workSummary, adjustment)
   })
 
   // 통계 계산
@@ -352,8 +570,34 @@ export default function AdminPayrollManagement() {
               fetchWorkSummaries()
             }}
             className="px-3 py-1 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+            title="새로고침"
           >
             <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                // PDF 생성을 위한 데이터 준비
+                const pdfData = employeesWithPayroll.map(emp => ({
+                  ...emp,
+                  monthlyBaseSalary: emp.basic_salary || 0,
+                  overtimeAllowance: emp.overtime_pay || 0,
+                  nightAllowance: emp.night_pay || 0,
+                  totalSalary: emp.total_pay || 0
+                }))
+                
+                await downloadPayrollPDF(pdfData, selectedMonth)
+                alert('급여내역 PDF가 다운로드되었습니다.')
+              } catch (error) {
+                console.error('PDF 다운로드 오류:', error)
+                alert('PDF 다운로드 중 오류가 발생했습니다.')
+              }
+            }}
+            className="px-4 py-1 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm flex items-center space-x-2"
+            title="급여내역 PDF 다운로드"
+          >
+            <Download className="h-4 w-4" />
+            <span>PDF 다운로드</span>
           </button>
         </div>
       </div>
@@ -489,13 +733,14 @@ export default function AdminPayrollManagement() {
               </tr>
             ) : (
               employeesWithPayroll.map((employee) => (
-                <tr key={employee.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                      <div className="text-xs text-gray-500">{employee.department} · {employee.position}</div>
-                    </div>
-                  </td>
+                <>
+                  <tr key={employee.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{employee.name}</div>
+                        <div className="text-xs text-gray-500">{employee.department} · {employee.position}</div>
+                      </div>
+                    </td>
                   
                   {editingEmployee === employee.id ? (
                     <>
@@ -564,8 +809,17 @@ export default function AdminPayrollManagement() {
                     </>
                   )}
                   
-                  <td className="px-3 py-4 text-sm text-gray-900">
-                    {employee.hourly_rate?.toLocaleString() || '-'}
+                  <td className="px-3 py-4 text-sm">
+                    <div>
+                      <span className={employee.hourly_rate && employee.hourly_rate < 9860 ? 'text-red-600 font-medium' : 'text-gray-900'}>
+                        {employee.hourly_rate?.toLocaleString() || '-'}
+                      </span>
+                      {employee.hourly_rate && employee.hourly_rate < 9860 && (
+                        <div className="text-xs text-red-500 mt-1">
+                          ⚠️ 최저시급 미달
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-4 text-sm">
                     <span className="text-orange-600">
@@ -598,15 +852,147 @@ export default function AdminPayrollManagement() {
                         </button>
                       </div>
                     ) : (
-                      <button
-                        onClick={() => startEdit(employee)}
-                        className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                      >
-                        수정
-                      </button>
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => startEdit(employee)}
+                          className="px-3 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                        >
+                          수정
+                        </button>
+                        <button
+                          onClick={() => toggleEmployeeDetails(employee.id)}
+                          disabled={loadingDetails === employee.id}
+                          className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 flex items-center"
+                        >
+                          {loadingDetails === employee.id ? (
+                            '로딩...'
+                          ) : (
+                            <>
+                              <Calendar className="h-3 w-3 mr-1" />
+                              상세
+                              {expandedEmployee === employee.id ? (
+                                <ChevronUp className="h-3 w-3 ml-1" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3 ml-1" />
+                              )}
+                            </>
+                          )}
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
+                {/* 일자별 상세 테이블 */}
+                {expandedEmployee === employee.id && dailyDetails[employee.id] && (
+                  <tr>
+                    <td colSpan={11} className="px-3 py-4 bg-gray-50">
+                      <div className="bg-white rounded-lg shadow-inner p-4">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+                          <Calendar className="h-4 w-4 mr-2" />
+                          {selectedMonth} 일자별 근무 상세
+                        </h4>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">날짜</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">출근</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">퇴근</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">기본</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">초과</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">야간</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">대체</th>
+                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">상태</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {dailyDetails[employee.id].length > 0 ? (
+                                dailyDetails[employee.id].map((detail) => (
+                                  <tr key={detail.work_date} className="hover:bg-gray-50">
+                                    <td className="px-3 py-2 text-xs">
+                                      {new Date(detail.work_date).toLocaleDateString('ko-KR', {
+                                        month: 'numeric',
+                                        day: 'numeric',
+                                        weekday: 'short'
+                                      })}
+                                    </td>
+                                    <td className="px-3 py-2 text-xs">
+                                      {detail.check_in_time ? 
+                                        new Date(detail.check_in_time).toLocaleTimeString('ko-KR', {
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        }) : '-'
+                                      }
+                                    </td>
+                                    <td className="px-3 py-2 text-xs">
+                                      {detail.check_out_time ? 
+                                        new Date(detail.check_out_time).toLocaleTimeString('ko-KR', {
+                                          hour: '2-digit',
+                                          minute: '2-digit'
+                                        }) : '-'
+                                      }
+                                    </td>
+                                    <td className="px-3 py-2 text-xs">{detail.basic_hours || 0}h</td>
+                                    <td className="px-3 py-2 text-xs text-orange-600">
+                                      {detail.overtime_hours || 0}h
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-purple-600">
+                                      {detail.night_hours || 0}h
+                                    </td>
+                                    <td className="px-3 py-2 text-xs text-blue-600">
+                                      {detail.substitute_hours || 0}h
+                                    </td>
+                                    <td className="px-3 py-2 text-xs">
+                                      <span className={`inline-flex px-2 py-0.5 text-xs rounded-full ${
+                                        detail.work_status?.includes('공휴일') || detail.work_status?.includes('주말') ?
+                                          'bg-blue-100 text-blue-800' :
+                                        detail.work_status?.includes('누락') ?
+                                          'bg-red-100 text-red-800' :
+                                          'bg-green-100 text-green-800'
+                                      }`}>
+                                        {detail.work_status}
+                                      </span>
+                                      {detail.had_dinner && (
+                                        <span className="ml-1 text-xs text-gray-500">저녁</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))
+                              ) : (
+                                <tr>
+                                  <td colSpan={8} className="px-3 py-4 text-center text-xs text-gray-500">
+                                    근무 기록이 없습니다.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                            {dailyDetails[employee.id].length > 0 && (
+                              <tfoot className="bg-gray-100">
+                                <tr>
+                                  <td colSpan={3} className="px-3 py-2 text-xs font-semibold">합계</td>
+                                  <td className="px-3 py-2 text-xs font-semibold">
+                                    {dailyDetails[employee.id].reduce((sum, d) => sum + (d.basic_hours || 0), 0).toFixed(1)}h
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-semibold text-orange-600">
+                                    {dailyDetails[employee.id].reduce((sum, d) => sum + (d.overtime_hours || 0), 0).toFixed(1)}h
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-semibold text-purple-600">
+                                    {dailyDetails[employee.id].reduce((sum, d) => sum + (d.night_hours || 0), 0).toFixed(1)}h
+                                  </td>
+                                  <td className="px-3 py-2 text-xs font-semibold text-blue-600">
+                                    {dailyDetails[employee.id].reduce((sum, d) => sum + (d.substitute_hours || 0), 0).toFixed(1)}h
+                                  </td>
+                                  <td></td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                </>
               ))
             )}
           </tbody>

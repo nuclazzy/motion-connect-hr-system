@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getAuthHeaders } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 import PolicyCreationModal from './PolicyCreationModal'
 
 interface WorkPolicy {
@@ -64,7 +64,7 @@ export default function WorkPolicyManagement() {
   const [policies, setPolicies] = useState<WorkPolicy[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'flexible'>('flexible')
+  const [activeTab, setActiveTab] = useState<'flexible' | 'overtime' | 'leave'>('flexible')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
 
@@ -75,14 +75,23 @@ export default function WorkPolicyManagement() {
   const fetchPolicies = async () => {
     try {
       setLoading(true)
-      const headers = getAuthHeaders()
-      const response = await fetch('/api/admin/work-policies', { headers })
-      const data = await response.json()
+      
+      // Supabase 직접 연동으로 근무정책 조회
+      const { data, error: fetchError } = await supabase
+        .from('work_policies')
+        .select(`
+          *,
+          flexible_work_settings(*),
+          overtime_night_settings(*),
+          leave_calculation_settings(*)
+        `)
+        .order('created_at', { ascending: false })
 
-      if (data.success) {
-        setPolicies(data.data)
+      if (fetchError) {
+        setError('근무정책 조회에 실패했습니다.')
+        console.error('근무정책 조회 오류:', fetchError)
       } else {
-        setError(data.error || '근무정책 조회에 실패했습니다.')
+        setPolicies(data || [])
       }
     } catch (err) {
       setError('서버 오류가 발생했습니다.')
@@ -94,7 +103,9 @@ export default function WorkPolicyManagement() {
 
   const getFilteredPolicies = () => {
     const typeMap = {
-      'flexible': 'flexible_work'
+      'flexible': 'flexible_work',
+      'overtime': 'overtime_night',
+      'leave': 'leave_calculation'
     }
     return policies.filter(p => p.policy_type === typeMap[activeTab])
   }
@@ -103,17 +114,20 @@ export default function WorkPolicyManagement() {
 
   const togglePolicyStatus = async (policyId: string, currentStatus: boolean) => {
     try {
-      const headers = getAuthHeaders()
-      const response = await fetch(`/api/admin/work-policies/${policyId}`, {
-        method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_active: !currentStatus })
-      })
+      // Supabase 직접 연동으로 정책 상태 업데이트
+      const { error: updateError } = await supabase
+        .from('work_policies')
+        .update({ 
+          is_active: !currentStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', policyId)
       
-      if (response.ok) {
-        fetchPolicies() // 새로고침
-      } else {
+      if (updateError) {
         setError('정책 상태 변경에 실패했습니다.')
+        console.error('정책 상태 변경 오류:', updateError)
+      } else {
+        fetchPolicies() // 새로고침
       }
     } catch (err) {
       setError('서버 오류가 발생했습니다.')
@@ -124,19 +138,38 @@ export default function WorkPolicyManagement() {
   const createNewPolicy = async (policyData: any) => {
     try {
       setIsCreating(true)
-      const headers = getAuthHeaders()
-      const response = await fetch('/api/admin/work-policies', {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify(policyData)
-      })
       
-      const data = await response.json()
-      if (data.success) {
+      // Supabase 직접 연동으로 정책 생성
+      const { data: newPolicy, error: insertError } = await supabase
+        .from('work_policies')
+        .insert({
+          policy_name: policyData.policy_name,
+          policy_type: policyData.policy_type,
+          is_active: policyData.is_active || false,
+          effective_start_date: policyData.effective_start_date,
+          effective_end_date: policyData.effective_end_date,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+      
+      if (insertError) {
+        setError('정책 생성에 실패했습니다.')
+        console.error('정책 생성 오류:', insertError)
+      } else {
+        // 관련 설정도 생성 (flexible_work_settings 등)
+        if (policyData.flexible_work_settings && newPolicy) {
+          await supabase
+            .from('flexible_work_settings')
+            .insert({
+              ...policyData.flexible_work_settings,
+              policy_id: newPolicy.id
+            })
+        }
+        
         fetchPolicies()
         setShowCreateForm(false)
-      } else {
-        setError(data.error || '정책 생성에 실패했습니다.')
       }
     } catch (err) {
       setError('서버 오류가 발생했습니다.')
@@ -174,7 +207,41 @@ export default function WorkPolicyManagement() {
             </button>
           </div>
           
-          {/* 탭 메뉴 - 탄력근무제만 표시 */}
+          {/* 탭 메뉴 */}
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab('flexible')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'flexible' 
+                    ? 'border-indigo-500 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                탄력근무제
+              </button>
+              <button
+                onClick={() => setActiveTab('overtime')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'overtime' 
+                    ? 'border-indigo-500 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                야간/초과근무
+              </button>
+              <button
+                onClick={() => setActiveTab('leave')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === 'leave' 
+                    ? 'border-indigo-500 text-indigo-600' 
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                대체/보상휴가
+              </button>
+            </nav>
+          </div>
         </div>
 
         <div className="p-6">
@@ -185,7 +252,7 @@ export default function WorkPolicyManagement() {
           )}
 
           {/* 탄력근무제 내용 */}
-          {
+          {activeTab === 'flexible' && (
             <div className="space-y-4">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h4 className="text-md font-medium text-blue-900 mb-2">💡 탄력근무제란?</h4>
@@ -256,10 +323,10 @@ export default function WorkPolicyManagement() {
                 </div>
               ))}
             </div>
-          }
+          )}
 
-          {/* 야간/초과근무 탭 - 제거됨 */}
-          {false && (
+          {/* 야간/초과근무 탭 */}
+          {activeTab === 'overtime' && (
             <div className="space-y-4">
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                 <h4 className="text-md font-medium text-orange-900 mb-2">🌙 야간근무 & ⏰ 초과근무 계산</h4>
@@ -337,8 +404,8 @@ export default function WorkPolicyManagement() {
             </div>
           )}
 
-          {/* 대체/보상휴가 탭 - 제거됨 */}
-          {false && (
+          {/* 대체/보상휴가 탭 */}
+          {activeTab === 'leave' && (
             <div className="space-y-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <h4 className="text-md font-medium text-green-900 mb-3">📅 대체/보상휴가 계산 방식</h4>

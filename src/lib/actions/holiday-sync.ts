@@ -1,7 +1,7 @@
 'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { fetchHolidaysFromNaver, initializeHolidayCache, formatDateForHoliday } from '@/lib/holidays'
+import { fetchHolidaysFromAPI, initializeHolidayCache, formatDateForHoliday } from '@/lib/holidays'
 
 interface HolidaySyncResult {
   success: boolean
@@ -17,18 +17,18 @@ interface HolidaySyncResult {
   error?: string
 }
 
-// 네이버 API에서 공휴일 데이터를 가져와서 DB에 저장하는 함수
-export async function syncHolidaysFromNaver(year: number): Promise<HolidaySyncResult> {
+// 공공데이터포털 API에서 공휴일 데이터를 가져와서 DB에 저장하는 함수
+export async function syncHolidaysFromAPI(year: number): Promise<HolidaySyncResult> {
   console.log(`🔄 ${year}년 공휴일 데이터 동기화 시작`)
   
   const supabase = await createServiceRoleClient()
   
   try {
-    // 1. 네이버 API에서 공휴일 데이터 가져오기
-    const holidays = await fetchHolidaysFromNaver(year)
+    // 1. 공공데이터포털 API에서 공휴일 데이터 가져오기
+    const holidays = await fetchHolidaysFromAPI(year)
     const holidayEntries = Object.entries(holidays)
     
-    console.log(`📅 네이버 API에서 ${holidayEntries.length}개 공휴일 데이터 수신`)
+    console.log(`📅 공공데이터포털 API에서 ${holidayEntries.length}개 공휴일 데이터 수신`)
     
     if (holidayEntries.length === 0) {
       return {
@@ -70,7 +70,7 @@ export async function syncHolidaysFromNaver(year: number): Promise<HolidaySyncRe
             .from('holidays')
             .update({
               holiday_name: holidayName,
-              source: 'naver_api',
+              source: 'public_api',
               updated_at: new Date().toISOString()
             })
             .eq('holiday_date', dateString)
@@ -90,7 +90,7 @@ export async function syncHolidaysFromNaver(year: number): Promise<HolidaySyncRe
               holiday_date: dateString,
               holiday_name: holidayName,
               year: parseInt(dateString.split('-')[0]),
-              source: 'naver_api',
+              source: 'public_api',
               is_active: true
             })
           
@@ -169,7 +169,7 @@ export async function syncMultipleYears(years: number[]): Promise<HolidaySyncRes
   let totalWorkRecords = 0
   
   for (const year of years) {
-    const result = await syncHolidaysFromNaver(year)
+    const result = await syncHolidaysFromAPI(year)
     results.push({ year, ...result })
     
     if (result.results) {

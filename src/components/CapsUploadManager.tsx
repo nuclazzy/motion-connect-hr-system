@@ -40,6 +40,7 @@ interface ProcessedRecord {
   device_id: string
   reason: string
   is_manual: boolean
+  had_dinner?: boolean
 }
 
 export default function CapsUploadManager() {
@@ -106,12 +107,17 @@ export default function CapsUploadManager() {
         return
       }
 
-      // 헤더 검증
+      // 헤더 검증 (저녁식사 컬럼 옵션)
       const header = lines[0].trim()
-      const expectedHeader = '발생일자,발생시각,단말기ID,사용자ID,이름,사원번호,직급,구분,모드,인증,결과'
+      const expectedHeaders = [
+        '발생일자,발생시각,단말기ID,사용자ID,이름,사원번호,직급,구분,모드,인증,결과',
+        '발생일자,발생시각,단말기ID,사용자ID,이름,사원번호,직급,구분,모드,인증,결과,저녁식사'
+      ]
       
-      if (header !== expectedHeader) {
-        console.log('헤더 불일치:', { expected: expectedHeader, actual: header })
+      const hasDinnerColumn = header.includes(',저녁식사')
+      
+      if (!expectedHeaders.includes(header)) {
+        console.log('헤더 불일치:', { expected: expectedHeaders, actual: header })
         setError('CAPS CSV 형식이 올바르지 않습니다. 헤더를 확인해주세요.')
         return
       }
@@ -163,9 +169,26 @@ export default function CapsUploadManager() {
             인증: values[9]?.trim(),
             결과: values[10]?.trim()
           }
+          
+          // 저녁식사 정보 파싱 (있는 경우)
+          const hasDinner = hasDinnerColumn && values[11]?.trim()?.toUpperCase() === 'O'
 
-          // 출퇴근 기록만 처리 (출입, 해제, 세트 등은 제외)
-          if (record.구분 !== '출근' && record.구분 !== '퇴근') {
+          // 구분을 출퇴근으로 변환
+          // 해제 = 경비 해제 = 출근
+          // 세트 = 경비 설정 = 퇴근
+          // 출입 = 무시
+          let recordType: '출근' | '퇴근' | null = null
+          
+          if (record.구분 === '출근' || record.구분 === '해제') {
+            recordType = '출근'
+          } else if (record.구분 === '퇴근' || record.구분 === '세트') {
+            recordType = '퇴근'
+          } else if (record.구분 === '출입') {
+            // 출입은 무시
+            continue
+          } else {
+            // 기타 알 수 없는 구분도 무시
+            console.log(`⚠️ 알 수 없는 구분: ${record.구분} (${i + 1}행)`)
             continue
           }
 
@@ -177,16 +200,58 @@ export default function CapsUploadManager() {
             continue
           }
 
+          // 날짜 형식 정규화 (2025. 7. 8 -> 2025-07-08)
+          const parseDateString = (dateStr: string): string => {
+            // "2025. 7. 8." 또는 "2025. 7. 1." 형식 처리
+            const match = dateStr.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?/)
+            if (match) {
+              const [_, year, month, day] = match
+              return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+            }
+            return dateStr // 이미 올바른 형식이면 그대로 반환
+          }
+          
+          // 시간 형식 정규화 (오전 9:59:23 -> 09:59:23, PM 10:31:19 -> 22:31:19)
+          const parseTimeString = (timeStr: string): string => {
+            // "오전/오후" 한글 형식 처리
+            if (timeStr.includes('오전') || timeStr.includes('오후')) {
+              const isPM = timeStr.includes('오후')
+              const time = timeStr.replace(/오전|오후/g, '').trim()
+              const [hour, minute, second] = time.split(':').map(n => parseInt(n))
+              let hour24 = hour
+              if (isPM && hour !== 12) hour24 += 12
+              if (!isPM && hour === 12) hour24 = 0
+              return `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+            }
+            // "AM/PM" 영문 형식 처리
+            if (timeStr.includes('AM') || timeStr.includes('PM')) {
+              const isPM = timeStr.includes('PM')
+              const time = timeStr.replace(/AM|PM/g, '').trim()
+              const [hour, minute, second] = time.split(':').map(n => parseInt(n))
+              let hour24 = hour
+              if (isPM && hour !== 12) hour24 += 12
+              if (!isPM && hour === 12) hour24 = 0
+              return `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+            }
+            return timeStr // 이미 24시간 형식이면 그대로 반환
+          }
+          
+          // 웹앱 데이터는 건너뛰기 (별도 처리 필요)
+          if (record.단말기ID === '웹앱') {
+            console.log(`⚠️ 웹앱 데이터는 건너뜁니다: ${record.이름} ${record.발생일자} ${record.발생시각}`)
+            continue
+          }
+          
           // 날짜/시간 파싱
-          const recordDate = record.발생일자
-          const recordTime = record.발생시각
+          const recordDate = parseDateString(record.발생일자)
+          const recordTime = parseTimeString(record.발생시각)
           const recordTimestamp = new Date(`${recordDate}T${recordTime}+09:00`) // KST
 
-          // 같은 배치 내 중복 체크 (핵심 수정사항)
-          const batchKey = `${userId}-${recordTimestamp.toISOString()}-${record.구분}`
+          // 같은 배치 내 중복 체크 (변환된 recordType 사용)
+          const batchKey = `${userId}-${recordTimestamp.toISOString()}-${recordType}`
           if (batchRecordSet.has(batchKey)) {
             duplicateCount++
-            console.log(`⚠️ 배치 내 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${record.구분}`)
+            console.log(`⚠️ 배치 내 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${recordType} (원본: ${record.구분})`)
             continue
           }
           batchRecordSet.add(batchKey)
@@ -197,12 +262,12 @@ export default function CapsUploadManager() {
             .select('id')
             .eq('user_id', userId)
             .eq('record_timestamp', recordTimestamp.toISOString())
-            .eq('record_type', record.구분)
+            .eq('record_type', recordType)
             .single()
 
           if (existingRecord) {
             duplicateCount++
-            console.log(`⚠️ DB 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${record.구분}`)
+            console.log(`⚠️ DB 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${recordType} (원본: ${record.구분})`)
             continue
           }
 
@@ -212,11 +277,12 @@ export default function CapsUploadManager() {
             record_date: recordDate,
             record_time: recordTime,
             record_timestamp: recordTimestamp.toISOString(),
-            record_type: record.구분 as '출근' | '퇴근',
+            record_type: recordType,
             source: 'CAPS',
             device_id: record.단말기ID,
-            reason: `CAPS 지문인식 (${record.인증})`,
-            is_manual: false
+            reason: `CAPS 지문인식 (${record.인증})${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
+            is_manual: false,
+            had_dinner: recordType === '퇴근' ? hasDinner : false  // 퇴근 시에만 저녁식사 정보 적용
           })
 
         } catch (error) {
@@ -246,38 +312,62 @@ export default function CapsUploadManager() {
 
         console.log(`🔍 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
 
-        // 2. 안전한 CAPS 전용 함수 사용 (UPSERT 충돌 완전 방지)
-        for (const record of uniqueRecords) {
-          try {
-            // 새로운 안전한 CAPS UPSERT 함수 호출
-            const { data: upsertResult, error: upsertError } = await supabase
-              .rpc('safe_upsert_caps_attendance', {
-                p_user_id: record.user_id,
-                p_record_date: record.record_date,
-                p_record_time: record.record_time,
-                p_record_timestamp: record.record_timestamp,
-                p_record_type: record.record_type,
-                p_reason: record.reason,
-                p_device_id: record.device_id
-              })
+        // 2. 배치 처리로 성능 최적화 (기존 Sequential 처리 개선)
+        console.log(`🚀 배치 처리 시작: ${uniqueRecords.length}개 레코드`)
+        const BATCH_SIZE = 50 // 배치 크기 설정
+        
+        for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
+          const batch = uniqueRecords.slice(i, i + BATCH_SIZE)
+          console.log(`📦 배치 ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(uniqueRecords.length/BATCH_SIZE)} 처리 중...`)
+          
+          // 배치 내 병렬 처리
+          const batchPromises = batch.map(async (record) => {
+            try {
+              // 새로운 안전한 CAPS UPSERT 함수 호출
+              const { data: upsertResult, error: upsertError } = await supabase
+                .rpc('safe_upsert_caps_attendance', {
+                  p_user_id: record.user_id,
+                  p_record_date: record.record_date,
+                  p_record_time: record.record_time,
+                  p_record_timestamp: record.record_timestamp,
+                  p_record_type: record.record_type,
+                  p_reason: record.reason,
+                  p_device_id: record.device_id
+                })
 
-            if (upsertError) {
-              console.error('❌ 안전한 UPSERT 오류:', upsertError, 'Record:', record)
-              upsertErrors++
-            } else if (upsertResult && upsertResult.length > 0) {
-              const result = upsertResult[0]
-              if (result.success) {
-                insertedCount++
-                console.log(`✅ 안전한 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type} (${result.action_taken})`)
-              } else {
-                console.error('❌ UPSERT 함수 실패:', record)
-                upsertErrors++
+              if (upsertError) {
+                console.error('❌ 안전한 UPSERT 오류:', upsertError, 'Record:', record)
+                return { success: false, error: upsertError }
+              } else if (upsertResult && upsertResult.length > 0) {
+                const result = upsertResult[0]
+                if (result.success) {
+                  console.log(`✅ 안전한 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type} (${result.action_taken})`)
+                  return { success: true, action: result.action_taken }
+                } else {
+                  console.error('❌ UPSERT 함수 실패:', record)
+                  return { success: false, error: result.message }
+                }
               }
+              return { success: false, error: 'No result returned' }
+            } catch (error) {
+              console.error('❌ 안전한 UPSERT 처리 중 예외:', error, 'Record:', record)
+              return { success: false, error }
             }
-          } catch (error) {
-            console.error('❌ 안전한 UPSERT 처리 중 예외:', error, 'Record:', record)
-            upsertErrors++
-          }
+          })
+
+          // 배치 결과 대기 및 처리
+          const batchResults = await Promise.allSettled(batchPromises)
+          
+          // 결과 집계
+          batchResults.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value.success) {
+              insertedCount++
+            } else {
+              upsertErrors++
+            }
+          })
+          
+          console.log(`✅ 배치 완료: 성공 ${batchResults.filter(r => r.status === 'fulfilled' && r.value.success).length}/${batch.length}`)
         }
       }
 
@@ -509,7 +599,8 @@ export default function CapsUploadManager() {
           <li>• 파일명 예시: "7월4주차.xls - Sheet1.csv"</li>
           <li>• 중복 데이터는 자동으로 스킵되므로 안전하게 재업로드 가능</li>
           <li>• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
-          <li>• "출입", "해제", "세트" 등 보안 기록은 제외하고 "출근", "퇴근"만 처리</li>
+          <li>• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
+          <li>• "출입" 기록은 무시됩니다</li>
         </ul>
       </div>
     </div>

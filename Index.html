@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif; padding: 20px; text-align: center; background-color: #f4f7f6; }
+      #main { max-width: 400px; margin: 20px auto; background-color: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+      h2 { color: #333; }
+      select, button, textarea, input[type="text"], input[type="time"], input[type="date"] { width: 100%; padding: 15px; margin: 10px 0; font-size: 16px; border-radius: 8px; box-sizing: border-box; border: 1px solid #ccc; font-family: inherit; }
+      textarea { resize: vertical; min-height: 80px; }
+      button { cursor: pointer; color: white; border: none; font-weight: bold; }
+      button:disabled { background-color: #cccccc; cursor: not-allowed; }
+      #btn-checkin { background-color: #28a745; }
+      #btn-checkout { background-color: #dc3545; }
+      #status { margin-top: 20px; font-weight: bold; min-height: 40px; color: #555; line-height: 1.5; }
+      #name { background-color: #f0f0f0; font-weight: bold; text-align: center; }
+      label { display: block; margin-top: 15px; font-weight: bold; color: #555; text-align: left; }
+    </style>
+  </head>
+  <body>
+    <div id="main">
+      <h2>📍 출퇴근 기록하기</h2>
+      
+      <input type="text" id="name" placeholder="사용자 정보 확인 중..." readonly>
+
+      <label for="manual-date">기록 날짜 (수정 가능)</label>
+      <input type="date" id="manual-date">
+
+      <label for="manual-time">기록 시간 (수정 가능)</label>
+      <input type="time" id="manual-time">
+
+      <label for="reason">사유</label>
+      <textarea id="reason" placeholder="출근 시 정확한 프로젝트명, 업무 내용 등을 입력해주세요."></textarea>
+      
+      <button id="btn-checkin" onclick="checkInOrOut('출근')" disabled>출근하기</button>
+      <button id="btn-checkout" onclick="checkInOrOut('퇴근')" disabled>퇴근하기</button>
+      
+      <div id="status">사용자 정보를 확인 중입니다...</div>
+    </div>
+    
+    <script>
+      window.onload = function() {
+        google.script.run
+          .withSuccessHandler(populateUserInfo)
+          .withFailureHandler(handleError)
+          .getCurrentUserInfo();
+      };
+      
+      function populateUserInfo(userInfo) {
+        const nameInput = document.getElementById('name');
+        const checkinBtn = document.getElementById('btn-checkin');
+        const checkoutBtn = document.getElementById('btn-checkout');
+        const statusDiv = document.getElementById('status');
+        const dateInput = document.getElementById('manual-date');
+        const timeInput = document.getElementById('manual-time');
+
+        const now = new Date();
+        
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        timeInput.value = `${hours}:${minutes}`;
+
+        if (userInfo.success) {
+          const name = userInfo.name;
+          nameInput.value = name;
+          checkinBtn.disabled = false;
+          checkoutBtn.disabled = false;
+          statusDiv.textContent = name + '님, 환영합니다. 날짜와 시간을 확인하고 버튼을 눌러주세요.';
+        } else {
+          nameInput.value = '등록되지 않은 사용자';
+          statusDiv.innerHTML = "❌ 접근 권한 없음<br>" + (userInfo.error || "직원 명부에 등록된 구글 계정으로 로그인해주세요.");
+          dateInput.disabled = true;
+          timeInput.disabled = true;
+        }
+      }
+
+      function checkInOrOut(status) {
+        const name = document.getElementById('name').value;
+        const reason = document.getElementById('reason').value.trim();
+        const manualDate = document.getElementById('manual-date').value;
+        const manualTime = document.getElementById('manual-time').value;
+        const statusDiv = document.getElementById('status');
+        
+        if (!name || name === '등록되지 않은 사용자') {
+          statusDiv.innerText = "⚠️ 유효한 사용자가 아닙니다.";
+          return;
+        }
+
+        if (!manualDate || !manualTime) {
+            statusDiv.innerText = "⚠️ 날짜와 시간을 모두 입력해주세요.";
+            return;
+        }
+        
+        if (status === '출근' && reason === "") {
+            statusDiv.innerText = "⚠️ 출근 시에는 사유를 반드시 입력해주세요.";
+            return;
+        }
+        
+        document.getElementById('btn-checkin').disabled = true;
+        document.getElementById('btn-checkout').disabled = true;
+        statusDiv.innerText = "⏳ 위치 정보 수집 중... (브라우저 권한을 허용해주세요)";
+        
+        const hadDinner = false; // 저녁식사 여부 체크 기능 제거
+
+        if ("geolocation" in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              statusDiv.innerText = "📡 데이터를 서버로 전송 중입니다...";
+              google.script.run
+                .withSuccessHandler(updateStatus)
+                .withFailureHandler(handleError)
+                .recordAttendance(name, status, reason, manualDate, manualTime, position.coords.latitude, position.coords.longitude, position.coords.accuracy, hadDinner);
+            }, 
+            () => {
+              statusDiv.innerText = "❌ 위치 정보를 가져올 수 없습니다. 위치 정보 없이 기록합니다.";
+              recordWithoutLocation(name, status, reason, manualDate, manualTime, hadDinner);
+            }, 
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        } else {
+          statusDiv.innerText = "❌ 이 브라우저에서는 위치 정보를 지원하지 않습니다.";
+          recordWithoutLocation(name, status, reason, manualDate, manualTime, hadDinner);
+        }
+      }
+
+      function recordWithoutLocation(name, status, reason, manualDate, manualTime, hadDinner) {
+        google.script.run
+            .withSuccessHandler(updateStatus)
+            .withFailureHandler(handleError)
+            .recordAttendance(name, status, reason, manualDate, manualTime, null, null, null, hadDinner);
+      }
+      
+      function updateStatus(message) {
+        const statusDiv = document.getElementById('status');
+        const mainDiv = document.getElementById('main');
+        statusDiv.innerText = message;
+        document.getElementById('btn-checkin').disabled = false;
+        document.getElementById('btn-checkout').disabled = false;
+        
+        if (message.startsWith("✅")) {
+            document.getElementById('reason').value = "";
+            mainDiv.style.transition = 'background-color 0.3s';
+            mainDiv.style.backgroundColor = '#d4edda';
+            setTimeout(() => { mainDiv.style.backgroundColor = 'white'; }, 1500);
+        }
+      }
+
+      function handleError(error) {
+        const statusDiv = document.getElementById('status');
+        const mainDiv = document.getElementById('main');
+        statusDiv.innerText = '❌ 스크립트 오류: ' + error.message;
+        document.getElementById('btn-checkin').disabled = false;
+        document.getElementById('btn-checkout').disabled = false;
+        
+        mainDiv.style.transition = 'background-color 0.3s';
+        mainDiv.style.backgroundColor = '#f8d7da';
+        setTimeout(() => { mainDiv.style.backgroundColor = 'white'; }, 2000);
+      }
+    </script>
+  </body>
+</html>

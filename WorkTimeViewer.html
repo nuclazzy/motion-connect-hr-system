@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>개인 근무시간 조회</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 20px; background-color: #f8f9fa; margin: 0; }
+        .container { max-width: 800px; margin: 0 auto; background-color: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; margin-bottom: 30px; font-size: 24px; }
+        .user-info { background-color: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; }
+        .user-info strong { color: #495057; font-size: 18px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #495057; }
+        select { width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: 6px; font-size: 16px; background-color: white; }
+        button { width: 100%; padding: 15px; background-color: #007bff; color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        .loading, .error { text-align: center; padding: 12px; border-radius: 6px; margin: 15px 0; }
+        .loading { color: #6c757d; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .work-time-data { background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-top: 20px; }
+        .data-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #dee2e6; }
+        .data-row:last-child { border-bottom: none; }
+        .data-label { font-weight: bold; color: #495057; }
+        .data-value { font-size: 18px; color: #007bff; font-weight: bold; }
+        .last-updated { text-align: center; color: #6c757d; font-size: 14px; margin-top: 10px; font-style: italic; }
+        .details-container { margin-top: 25px; }
+        .details-toggle { font-weight: bold; color: #007bff; cursor: pointer; user-select: none; padding: 10px; background-color: #e6f3ff; border-radius: 8px; text-align: center; }
+        .details-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        .details-table th, .details-table td { padding: 10px; text-align: center; border-bottom: 1px solid #dee2e6; font-size: 14px; vertical-align: middle; }
+        .details-table th { background-color: #f2f2f2; font-weight: bold; }
+        .missing-record { background-color: #fff3cd !important; }
+        .missing-note { color: #dc3545; font-weight: bold; }
+        .input-group { display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .time-input { padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; width: 80px; }
+        .submit-btn { padding: 5px 10px; font-size: 12px; width: auto; background-color: #28a745; }
+        .submit-btn:hover:not(:disabled) { background-color: #218838; }
+        .dinner-select { padding: 4px 8px; border: 1px solid #ced4da; border-radius: 4px; font-size: 14px; }
+        #toast { visibility: hidden; min-width: 250px; margin-left: -125px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 10; left: 50%; bottom: 30px; font-size: 16px; opacity: 0; transition: visibility 0s, opacity 0.5s linear; }
+        #toast.show { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 개인 근무시간 조회</h1>
+        <div id="user-info-section" class="user-info" style="display: none;"><strong id="user-name"></strong>님, 안녕하세요!</div>
+        <div id="loading-section" class="loading">사용자 정보를 확인 중입니다...</div>
+        <div id="error-section" class="error" style="display: none;"><span id="error-message"></span></div>
+        <div id="main-section" style="display: none;">
+            <div class="form-group">
+                <label for="month-select">조회할 월 선택</label>
+                <select id="month-select"></select>
+            </div>
+            <button id="search-btn" onclick="searchWorkTime()" disabled>근무시간 조회</button>
+            <div id="loading-search" class="loading" style="display: none;">데이터를 조회 중입니다...</div>
+            <div id="work-time-result" style="display: none;">
+                <div class="work-time-data">
+                    <h3 id="result-title"></h3>
+                    <div class="data-row" style="background-color: #f8f9fa; padding: 10px; border-radius: 6px; border-left: 4px solid #28a745;">
+                        <span class="data-label" style="color: #28a745;">📋 해당 월 기준 정보</span>
+                        <span id="a1-text" style="font-size: 14px; color: #495057; text-align: right; white-space: pre-line;">-</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">일평균 근무시간</span>
+                        <span class="data-value" id="daily-average">-</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">실근무시간 (출근일만)</span>
+                        <span class="data-value" id="actual-total">-</span>
+                    </div>
+                    <div class="data-row">
+                        <span class="data-label">인정시간 (유급휴가 포함)</span>
+                        <span class="data-value" id="grand-total">-</span>
+                    </div>
+                    <div class="last-updated" id="l1-text">-</div>
+                </div>
+
+                <div class="details-container">
+                    <details open>
+                        <summary class="details-toggle">상세 근무내역 보기/숨기기</summary>
+                        <table class="details-table">
+                            <thead><tr><th>날짜</th><th>요일</th><th>근무유형</th><th>출근</th><th>퇴근</th><th>비고</th><th>작업</th></tr></thead>
+                            <tbody id="details-tbody"></tbody>
+                        </table>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toast"></div>
+
+    <script>
+        let currentUser = null;
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            google.script.run.withSuccessHandler(handleUserInfoSuccess).withFailureHandler(handleError).getCurrentUserInfo();
+        });
+
+        function handleUserInfoSuccess(userInfo) {
+            document.getElementById('loading-section').style.display = 'none';
+            if (userInfo.success) {
+                currentUser = userInfo;
+                document.getElementById('user-name').textContent = userInfo.name;
+                document.getElementById('user-info-section').style.display = 'block';
+                loadAvailableMonths();
+            } else {
+                showError(userInfo.error);
+            }
+        }
+
+        function loadAvailableMonths() {
+            google.script.run.withSuccessHandler(handleMonthsSuccess).withFailureHandler(handleError).getAvailableWorkTimeMonths();
+        }
+
+        function handleMonthsSuccess(result) {
+            if (result.success) {
+                const select = document.getElementById('month-select');
+                select.innerHTML = '<option value="">-- 월 선택 --</option>';
+                result.months.forEach(month => {
+                    const option = document.createElement('option');
+                    option.value = month.key;
+                    option.textContent = month.displayName;
+                    select.appendChild(option);
+                });
+                select.addEventListener('change', () => { document.getElementById('search-btn').disabled = !select.value; });
+                document.getElementById('main-section').style.display = 'block';
+            } else {
+                showError(result.error);
+            }
+        }
+
+        function searchWorkTime() {
+            const selectedMonth = document.getElementById('month-select').value;
+            if (!selectedMonth) return;
+            document.getElementById('loading-search').style.display = 'block';
+            document.getElementById('work-time-result').style.display = 'none';
+            document.getElementById('search-btn').disabled = true;
+            google.script.run.withSuccessHandler(handleWorkTimeSuccess).withFailureHandler(handleError).getPersonalWorkTimeDataWithDetails(selectedMonth, currentUser.name);
+        }
+
+        function handleWorkTimeSuccess(result) {
+            document.getElementById('loading-search').style.display = 'none';
+            document.getElementById('search-btn').disabled = false;
+            if (result.success) {
+                displayWorkTimeData(result.data);
+            } else {
+                showError(result.error);
+            }
+        }
+
+        function displayWorkTimeData(data) {
+            const { summary, details } = data;
+            
+            document.getElementById('result-title').textContent = `${summary.monthKey.split('-')[0]}년 ${summary.monthKey.split('-')[1]}월 근무시간`;
+            document.getElementById('a1-text').textContent = summary.a1Text || "정보 없음";
+            document.getElementById('l1-text').textContent = summary.l1Text || "정보 없음";
+            document.getElementById('daily-average').textContent = (summary.dailyAverage || 0).toFixed(1) + '시간';
+            document.getElementById('actual-total').textContent = (summary.actualTotal || 0).toFixed(1) + '시간';
+            document.getElementById('grand-total').textContent = (summary.grandTotal || 0).toFixed(1) + '시간';
+
+            const tbody = document.getElementById('details-tbody');
+            tbody.innerHTML = ''; 
+            if (details && details.length > 0) {
+                details.forEach(rec => {
+                    const tr = document.createElement('tr');
+                    const isTimeMissing = rec.note && rec.note.includes('누락');
+                    
+                    let noteCellHtml = rec.note || '--';
+                    if (isTimeMissing) {
+                        noteCellHtml = `<span class="missing-note">${rec.note}</span>`;
+                        tr.classList.add('missing-record');
+                    } else if (rec.isDinnerMissing) {
+                        noteCellHtml = `<span class="missing-note">저녁식사 확인 필요</span>`;
+                        tr.classList.add('missing-record');
+                    }
+
+                    let actionCellHtml = '--';
+                    if (isTimeMissing) {
+                        const recordType = rec.note.includes('출근') ? '출근' : '퇴근';
+                        actionCellHtml = `<div class="input-group"><input type="time" id="timeInput-${rec.date}" class="time-input"><button onclick="submitMissingRecord(this, '${rec.date}', '${recordType}')" class="submit-btn">${recordType} 입력</button></div>`;
+                    } else if (rec.isDinnerMissing) { // [수정] 저녁식사 누락으로 판단된 경우에만 드롭다운 표시
+                        actionCellHtml = `
+                          <select class="dinner-select" onchange="updateDinner(this, '${rec.date}')">
+                            <option value="" selected>-- 선택 --</option>
+                            <option value="O">O (식사함)</option>
+                            <option value="X">X (안함)</option>
+                          </select>
+                        `;
+                    }
+                    
+                    tr.innerHTML = `<td>${rec.date.substring(5)}</td><td>${rec.dayOfWeek}</td><td>${rec.status}</td><td>${rec.checkin || '--'}</td><td>${rec.checkout || '--'}</td><td>${noteCellHtml}</td><td>${actionCellHtml}</td>`;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="7">상세 근무 내역이 없습니다.</td></tr>';
+            }
+            document.getElementById('work-time-result').style.display = 'block';
+        }
+
+        function submitMissingRecord(btn, dateString, recordType) {
+            const timeInput = document.getElementById(`timeInput-${dateString}`);
+            if (!timeInput.value) {
+                showToast("시간을 입력해주세요.", true);
+                return;
+            }
+            btn.disabled = true;
+            showToast("기록을 전송하는 중입니다...");
+            google.script.run.withSuccessHandler(onRecordAdded).withFailureHandler(handleError).addMissingRecord(currentUser.name, dateString, timeInput.value, recordType);
+        }
+
+        function updateDinner(selectElement, dateString) {
+            const status = selectElement.value;
+            if (!status) return;
+            selectElement.disabled = true;
+            showToast("저녁식사 상태를 업데이트하는 중입니다...");
+            google.script.run.withSuccessHandler(onRecordAdded).withFailureHandler(handleError).updateDinnerStatus(currentUser.name, dateString, status);
+        }
+
+        function onRecordAdded(result) {
+            showToast(result);
+            if (result.startsWith("✅")) {
+                // 성공 시 새로고침 없이 유지
+            } else {
+                searchWorkTime(); 
+            }
+        }
+
+        function handleError(error) {
+            document.getElementById('loading-search').style.display = 'none';
+            document.getElementById('search-btn').disabled = false;
+            showError((error && error.message) ? error.message : '알 수 없는 오류가 발생했습니다.');
+        }
+
+        function showError(message) {
+            const errorSection = document.getElementById('error-section');
+            document.getElementById('error-message').textContent = message;
+            errorSection.style.display = 'block';
+        }
+
+        function showToast(message, isError = false) {
+            const toast = document.getElementById("toast");
+            toast.textContent = message;
+            toast.style.backgroundColor = isError ? '#dc3545' : '#333';
+            toast.className = "show";
+            setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
+        }
+    </script>
+</body>
+</html>

@@ -11,13 +11,11 @@ import UserFormManagement from '@/components/UserFormManagement'
 import UserProfile from '@/components/UserProfile'
 import AdminTeamSchedule from '@/components/AdminTeamSchedule'
 import UserWeeklySchedule from '@/components/UserWeeklySchedule'
-import AdminLeaveManagement from '@/components/AdminLeaveManagement'
-import WorkPolicyManagement from '@/components/WorkPolicyManagement'
+import AdminLeaveOverview from '@/components/AdminLeaveOverview'
 import WorkScheduleManagement from '@/components/WorkScheduleManagement'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
-import AdminSystemSettings from '@/components/AdminSystemSettings'
-import AdminCalendarSync from '@/components/AdminCalendarSync'
+import AdminSettingsUnified from '@/components/AdminSettingsUnified'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { User as UserIcon, Shield } from 'lucide-react'
 
@@ -214,11 +212,11 @@ export default function AdminDashboard() {
                 <div className="space-y-6">
                   <AdminEmployeeManagement />
                   <AdminFormManagement />
-                  <AdminLeaveManagement />
+                  <AdminLeaveOverview />
                   <AdminPayrollManagement />
-                  <AdminSystemSettings />
-                  <AdminCalendarSync />
-                  <WorkPolicyManagement />
+                  <AdminSettingsUnified />
+                  {/* AdminCalendarSync 컴포넌트 제거됨 - 직접 연동 전환 */}
+                  {/* AdminSystemSettings와 WorkPolicyManagement 통합됨 - AdminSettingsUnified로 교체 */}
                   <WorkScheduleManagement />
                   <AdminDocumentManagement />
                 </div>

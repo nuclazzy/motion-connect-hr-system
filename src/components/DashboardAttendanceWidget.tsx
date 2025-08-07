@@ -6,6 +6,8 @@ import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
 import { formatTimeWithNextDay, convertNextDayTimeFormat } from '@/lib/time-utils'
 import { useSupabase } from '@/components/SupabaseProvider'
+import { isWeekendOrHoliday, getHolidayInfo, formatDateForHoliday } from '@/lib/holidays'
+import { detectDinnerEligibility, formatDinnerDetectionResult } from '@/lib/dinner-detection'
 
 interface AttendanceStatus {
   user: {
@@ -71,6 +73,9 @@ interface MonthlyWorkSummary {
     work_status: string
     had_dinner: boolean
     missing_records?: string[]
+    day_type?: string
+    day_type_name?: string
+    night_hours?: number
   }>
 }
 
@@ -288,11 +293,27 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
       const averageDailyHours = workDays > 0 ? totalWorkHours / workDays : 0
       const dinnerCount = dailyData?.filter(d => d.had_dinner).length || 0
 
-      // 출근/지각/조퇴/결근 통계
+      // 연차 기록 조회
+      const { data: leaveRecords, error: leaveError } = await supabase
+        .from('form_requests')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('form_type', '연차신청')
+        .eq('status', '승인됨')
+        .gte('created_at', monthStart)
+        .lte('created_at', monthEnd + 'T23:59:59')
+
+      if (leaveError) {
+        console.error('연차 기록 조회 오류:', leaveError)
+      }
+
+      // 출근/지각/조퇴/결근 통계 (공휴일 및 연차 고려)
       let onTimeCount = 0
       let lateCount = 0
       let earlyLeaveCount = 0
       let absentCount = 0
+      let holidayCount = 0
+      let leaveCount = 0
 
       const workingDays = new Date(nextMonth.getTime() - 1).getDate()
       
@@ -300,50 +321,150 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
         const dateStr = `${targetMonth}-${day.toString().padStart(2, '0')}`
         const dayData = dailyData?.find(d => d.work_date === dateStr)
         
-        if (!dayData || (!dayData.check_in_time && !dayData.check_out_time)) {
-          // 주말/공휴일인지 확인 (여기서는 단순화)
-          const dayOfWeek = new Date(dateStr).getDay()
-          if (dayOfWeek !== 0 && dayOfWeek !== 6) { // 평일만 결근으로 계산
-            absentCount++
-          }
-        } else {
-          if (dayData.check_in_time) {
-            const checkInHour = new Date(dayData.check_in_time).getHours()
-            if (checkInHour > 9) {
-              lateCount++
-            } else {
-              onTimeCount++
+        try {
+          // 공휴일 체크
+          const holidayInfo = await getHolidayInfo(new Date(dateStr))
+          
+          // 연차 사용 체크 (해당 날짜의 연차 신청이 있는지)
+          const hasLeaveRequest = leaveRecords?.some(leave => {
+            try {
+              const leaveData = typeof leave.form_data === 'string' 
+                ? JSON.parse(leave.form_data) 
+                : leave.form_data
+              const startDate = leaveData.start_date
+              const endDate = leaveData.end_date
+              return dateStr >= startDate && dateStr <= endDate
+            } catch (e) {
+              return false
             }
+          })
+          
+          if (holidayInfo.isHoliday) {
+            holidayCount++
+            // 공휴일은 통계에서 제외
+            continue
           }
           
-          if (dayData.check_out_time) {
-            const checkOutHour = new Date(dayData.check_out_time).getHours()
-            if (checkOutHour < 17) { // 17시 이전 퇴근을 조퇴로 간주
-              earlyLeaveCount++
+          if (hasLeaveRequest) {
+            leaveCount++
+            // 연차는 통계에서 제외
+            continue
+          }
+          
+          // 주말 체크
+          const dayOfWeek = new Date(dateStr).getDay()
+          if (dayOfWeek === 0 || dayOfWeek === 6) {
+            // 주말은 통계에서 제외
+            continue
+          }
+          
+          if (!dayData || (!dayData.check_in_time && !dayData.check_out_time)) {
+            // 평일이면서 출퇴근 기록이 없으면 결근
+            absentCount++
+          } else {
+            if (dayData.check_in_time) {
+              const checkInHour = new Date(dayData.check_in_time).getHours()
+              const checkInMinute = new Date(dayData.check_in_time).getMinutes()
+              
+              // 9시 정각까지는 정시출근, 이후는 지각
+              if (checkInHour > 9 || (checkInHour === 9 && checkInMinute > 0)) {
+                lateCount++
+              } else {
+                onTimeCount++
+              }
+            }
+            
+            if (dayData.check_out_time) {
+              const checkOutHour = new Date(dayData.check_out_time).getHours()
+              // 17시 이전 퇴근을 조퇴로 간주 (단, 반차인 경우는 제외)
+              if (checkOutHour < 17 && !hasLeaveRequest) {
+                earlyLeaveCount++
+              }
+            }
+          }
+        } catch (error) {
+          console.error(`날짜 ${dateStr} 처리 오류:`, error)
+          // 오류 발생 시 기존 로직으로 처리
+          const dayOfWeek = new Date(dateStr).getDay()
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            if (!dayData || (!dayData.check_in_time && !dayData.check_out_time)) {
+              absentCount++
             }
           }
         }
       }
 
-      // 각 일별 기록에 누락된 기록 정보 추가
-      const enhancedDailyData = dailyData?.map(day => {
-        const missing_records: string[] = []
-        
-        // 출근 기록이 없는 경우
-        if (!day.check_in_time && day.work_status !== '휴가' && day.work_status !== '결근') {
-          missing_records.push('출근기록누락')
-        }
-        
-        // 퇴근 기록이 없는 경우 (출근은 했지만 퇴근이 없는 경우)
-        if (day.check_in_time && !day.check_out_time) {
-          missing_records.push('퇴근기록누락')
-        }
+      // 각 일별 기록에 누락된 기록 정보와 공휴일/연차 정보 추가
+      const enhancedDailyData = await Promise.all(
+        (dailyData || []).map(async (day) => {
+          const missing_records: string[] = []
+          let dayType = 'workday' // workday, holiday, weekend, leave
+          let dayTypeName = '근무일'
+          
+          try {
+            // 공휴일 체크
+            const holidayInfo = await getHolidayInfo(new Date(day.work_date))
+            
+            // 연차 사용 체크
+            const hasLeaveRequest = leaveRecords?.some(leave => {
+              try {
+                const leaveData = typeof leave.form_data === 'string' 
+                  ? JSON.parse(leave.form_data) 
+                  : leave.form_data
+                const startDate = leaveData.start_date
+                const endDate = leaveData.end_date
+                return day.work_date >= startDate && day.work_date <= endDate
+              } catch (e) {
+                return false
+              }
+            })
+            
+            // 주말 체크
+            const dayOfWeek = new Date(day.work_date).getDay()
+            
+            if (holidayInfo.isHoliday) {
+              dayType = 'holiday'
+              dayTypeName = holidayInfo.name || '공휴일'
+            } else if (hasLeaveRequest) {
+              dayType = 'leave'
+              dayTypeName = '연차'
+            } else if (dayOfWeek === 0 || dayOfWeek === 6) {
+              dayType = 'weekend'
+              dayTypeName = dayOfWeek === 0 ? '일요일' : '토요일'
+            }
+            
+            // 근무일인 경우에만 누락 기록 체크
+            if (dayType === 'workday') {
+              // 출근 기록이 없는 경우
+              if (!day.check_in_time && day.work_status !== '휴가' && day.work_status !== '결근') {
+                missing_records.push('출근기록누락')
+              }
+              
+              // 퇴근 기록이 없는 경우 (출근은 했지만 퇴근이 없는 경우)
+              if (day.check_in_time && !day.check_out_time) {
+                missing_records.push('퇴근기록누락')
+              }
+            }
+            
+          } catch (error) {
+            console.error(`날짜 ${day.work_date} 처리 오류:`, error)
+            // 오류 발생 시 기본 누락 기록 체크만 수행
+            if (!day.check_in_time && day.work_status !== '휴가' && day.work_status !== '결근') {
+              missing_records.push('출근기록누락')
+            }
+            if (day.check_in_time && !day.check_out_time) {
+              missing_records.push('퇴근기록누락')
+            }
+          }
 
-        return {
-          ...day,
-          missing_records: missing_records.length > 0 ? missing_records : undefined
-        }
-      }) || []
+          return {
+            ...day,
+            missing_records: missing_records.length > 0 ? missing_records : undefined,
+            day_type: dayType,
+            day_type_name: dayTypeName
+          }
+        })
+      )
 
       const summaryData: MonthlyWorkSummary = {
         user: {
@@ -411,7 +532,11 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
   // 출퇴근 기록 실행
   const executeAttendance = async () => {
     if (!selectedAction || !user?.id || !supabase) return
+    
+    // 중복 클릭 방지
+    if (loading) return
 
+    // 입력값 검증
     if (selectedAction === '출근' && !reason.trim()) {
       alert('출근 시에는 업무 사유를 반드시 입력해주세요.')
       return
@@ -419,6 +544,12 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
     if (!useCurrentTime && !selectedTime) {
       alert('시간을 선택해주세요.')
+      return
+    }
+
+    // 업무 사유 길이 제한 (500자)
+    if (reason.length > 500) {
+      alert('업무 사유는 500자 이내로 입력해주세요.')
       return
     }
 
@@ -513,7 +644,14 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
 
       if (insertError) {
         console.error('출퇴근 기록 저장 오류:', insertError)
-        alert('출퇴근 기록 저장에 실패했습니다.')
+        // 구체적인 에러 메시지 제공
+        if (insertError.message?.includes('duplicate')) {
+          alert('이미 해당 시간에 기록이 존재합니다.')
+        } else if (insertError.message?.includes('network')) {
+          alert('네트워크 연결을 확인해주세요.')
+        } else {
+          alert('출퇴근 기록 저장에 실패했습니다.')
+        }
         setLoading(false)
         return
       }
@@ -530,9 +668,16 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
       await fetchAttendanceStatus()
       await fetchMonthlySummary()
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('출퇴근 기록 오류:', error)
-      alert('출퇴근 기록 중 오류가 발생했습니다.')
+      // 구체적인 에러 메시지 제공
+      if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
+        alert('인터넷 연결을 확인해주세요.')
+      } else if (error?.message?.includes('timeout')) {
+        alert('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.')
+      } else {
+        alert('출퇴근 기록 중 오류가 발생했습니다.')
+      }
     } finally {
       setLoading(false)
     }
@@ -597,9 +742,19 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
   // 누락 기록 추가
   const submitMissingRecord = async () => {
     if (!user?.id || !editingRecord || !supabase) return
+    
+    // 중복 클릭 방지
+    if (submittingMissingRecord) return
 
+    // 입력값 검증
     if (!missingRecordForm.selectedDate || !missingRecordForm.selectedTime || !missingRecordForm.reason.trim()) {
       alert('모든 필드를 입력해주세요.')
+      return
+    }
+    
+    // 사유 길이 제한 (200자)
+    if (missingRecordForm.reason.length > 200) {
+      alert('사유는 200자 이내로 입력해주세요.')
       return
     }
 
@@ -788,7 +943,7 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
           </div>
 
           {/* 출퇴근 버튼 */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-3 mb-3">
             <button
               onClick={() => handleAttendanceClick('출근')}
               disabled={loading || !status?.canCheckIn}
@@ -812,6 +967,17 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
             >
               {loading && selectedAction === '퇴근' ? '처리중...' : '퇴근'}
             </button>
+          </div>
+          
+          {/* 출퇴근 관리 페이지로 이동 버튼 */}
+          <div className="text-center">
+            <a
+              href="/attendance"
+              className="inline-flex items-center px-4 py-2 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Clock className="h-4 w-4 mr-2" />
+              출퇴근 관리 페이지로 이동
+            </a>
           </div>
 
           {/* CAPS 우선 사용 안내 */}
@@ -1140,19 +1306,50 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                           {getDayOfWeek(record.work_date)}
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            record.work_status === '정상근무' 
-                              ? 'bg-green-100 text-green-800'
-                              : record.work_status === '지각'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : record.work_status === '조퇴'
-                              ? 'bg-orange-100 text-orange-800'
-                              : record.work_status === '결근'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {record.work_status}
-                          </span>
+                          <div className="flex flex-col space-y-1">
+                            {/* 일별 유형 표시 (공휴일, 연차, 주말) */}
+                            {record.day_type && record.day_type !== 'workday' && (
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                record.day_type === 'holiday' 
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : record.day_type === 'leave'
+                                  ? 'bg-green-100 text-green-800'
+                                  : record.day_type === 'weekend'
+                                  ? 'bg-gray-100 text-gray-600'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {record.day_type === 'holiday' && '🏛️'} 
+                                {record.day_type === 'leave' && '🌴'} 
+                                {record.day_type === 'weekend' && '📅'} 
+                                {record.day_type_name}
+                              </span>
+                            )}
+                            
+                            {/* 근무 상태 표시 */}
+                            {record.work_status && record.day_type === 'workday' && (
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                record.work_status === '정상근무' 
+                                  ? 'bg-green-100 text-green-800'
+                                  : record.work_status === '지각'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : record.work_status === '조퇴'
+                                  ? 'bg-orange-100 text-orange-800'
+                                  : record.work_status === '결근'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {record.work_status}
+                              </span>
+                            )}
+                            
+                            {/* 공휴일 또는 연차 근무 시 특별 표시 */}
+                            {(record.day_type === 'holiday' || record.day_type === 'weekend') && 
+                             (record.check_in_time || record.check_out_time) && (
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                                💼 특근
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
                           {record.check_in_time ? 
@@ -1174,14 +1371,60 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                         </td>
                         <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex items-center space-x-2">
+                            {/* 저녁식사 기록 표시 */}
                             {record.had_dinner && (
-                              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                출장: 기록
+                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded flex items-center">
+                                <Coffee className="h-3 w-3 mr-1" />
+                                저녁식사
                               </span>
                             )}
+                            
+                            {/* 저녁식사 확인 요청 */}
+                            {(() => {
+                              // 저녁식사 감지 로직
+                              if (!record.check_in_time || !record.check_out_time || record.had_dinner) {
+                                return null
+                              }
+                              
+                              const dinnerDetection = detectDinnerEligibility(
+                                record.check_in_time.split('T')[1]?.substring(0, 8) || '',
+                                record.check_out_time.split('T')[1]?.substring(0, 8) || '',
+                                '',
+                                false
+                              )
+                              
+                              // 요건 충족 시 간단한 확인 메시지
+                              if (dinnerDetection.isDinnerMissing) {
+                                return (
+                                  <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded flex items-center">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    저녁식사 여부 확인 필요
+                                  </span>
+                                )
+                              }
+                              
+                              return null
+                            })()}
+                            
+                            {/* 누락 기록 표시 */}
                             {record.missing_records && record.missing_records.length > 0 && (
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                                누락
+                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded flex items-center">
+                                <XCircle className="h-3 w-3 mr-1" />
+                                {record.missing_records.includes('출근기록누락') && record.missing_records.includes('퇴근기록누락') 
+                                  ? '출퇴근 누락' 
+                                  : record.missing_records.includes('출근기록누락') 
+                                    ? '출근 누락'
+                                    : '퇴근 누락'
+                                }
+                              </span>
+                            )}
+                            
+                            {/* 기본 근무시간 표시 */}
+                            {record.basic_hours > 0 && (
+                              <span className="text-xs text-gray-600">
+                                {record.basic_hours}h
+                                {record.overtime_hours > 0 && ` +${record.overtime_hours}h`}
+                                {(record.night_hours || 0) > 0 && ` (야간 ${record.night_hours}h)`}
                               </span>
                             )}
                           </div>
@@ -1206,19 +1449,38 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                                 수정
                               </button>
                             )}
-                            {record.basic_hours >= 8 && (
-                              <button
-                                onClick={() => updateDinnerRecord(record.work_date, !record.had_dinner)}
-                                className={`text-xs px-2 py-1 rounded ${
-                                  record.had_dinner 
-                                    ? 'text-red-600 hover:text-red-900 bg-red-50' 
-                                    : 'text-orange-600 hover:text-orange-900 bg-orange-50'
-                                }`}
-                              >
-                                <Coffee className="h-3 w-3 inline mr-1" />
-                                {record.had_dinner ? '식사취소' : '식사'}
-                              </button>
-                            )}
+                            {/* 간단한 체크/취소 버튼 */}
+                            {(() => {
+                              if (!record.check_in_time || !record.check_out_time) {
+                                return null
+                              }
+                              
+                              const dinnerDetection = detectDinnerEligibility(
+                                record.check_in_time.split('T')[1]?.substring(0, 8) || '',
+                                record.check_out_time.split('T')[1]?.substring(0, 8) || '',
+                                '',
+                                record.had_dinner
+                              )
+                              
+                              // 요건 충족 시 버튼 표시 (이미 체크된 경우도 취소 가능)
+                              if (dinnerDetection.isDinnerMissing || record.had_dinner) {
+                                return (
+                                  <button
+                                    onClick={() => updateDinnerRecord(record.work_date, !record.had_dinner)}
+                                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                                      record.had_dinner 
+                                        ? 'text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100' 
+                                        : 'text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100'
+                                    }`}
+                                  >
+                                    <Coffee className="h-3 w-3 inline mr-1" />
+                                    {record.had_dinner ? '식사 취소' : '식사 체크'}
+                                  </button>
+                                )
+                              }
+                              
+                              return null
+                            })()}
                           </div>
                         </td>
                       </tr>

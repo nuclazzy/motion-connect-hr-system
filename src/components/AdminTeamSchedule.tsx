@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { ADMIN_TEAM_CALENDARS } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
+import { 
+  fetchCalendarEvents as fetchGoogleCalendarEvents,
+  deleteCalendarEvent,
+  initializeGoogleAPI,
+  parseEventDate 
+} from '@/lib/googleCalendar'
 
 interface CalendarEvent {
   id: string
@@ -52,6 +58,9 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
   const fetchCalendarEvents = useCallback(async () => {
     setLoading(true)
     try {
+      // Google API 초기화
+      await initializeGoogleAPI()
+      
       const allEvents: CalendarEvent[] = []
       // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
       const startOfWeek = new Date(currentDate)
@@ -71,58 +80,28 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
       for (const calendarConfig of ADMIN_TEAM_CALENDARS) {
         console.log(`📅 [DEBUG] 캘린더 이벤트 조회: ${calendarConfig.name} (${calendarConfig.id})`)
         try {
-          const response = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              calendarId: calendarConfig.id,
-              timeMin,
-              timeMax,
-              maxResults: 250
-            }),
-          })
-
-          console.log(`📅 [DEBUG] ${calendarConfig.name} API 응답 상태:`, response.status)
+          // Google Calendar 직접 연동으로 이벤트 가져오기
+          const googleEvents = await fetchGoogleCalendarEvents(calendarConfig.id, timeMin, timeMax, 250)
           
-          if (response.ok) {
-            const data = await response.json()
-            console.log(`📅 [DEBUG] ${calendarConfig.name} 가져온 이벤트 수:`, data.events?.length || 0)
-            if (data.events) {
-              const eventsWithCalendarInfo = data.events.map((event: unknown) => {                
-                const googleEvent = event as { 
-                  id: string; 
-                  summary?: string; 
-                  title?: string; 
-                  start?: { dateTime?: string; date?: string } | string; 
-                  end?: { dateTime?: string; date?: string } | string; 
-                  description?: string; 
-                  location?: string 
-                }
-                const getEventTime = (timeObj: { dateTime?: string; date?: string } | string | undefined) => {
-                  if (typeof timeObj === 'string') return timeObj
-                  if (timeObj && typeof timeObj === 'object') {
-                    return timeObj.dateTime || timeObj.date || ''
-                  }
-                  return ''
-                }
-                
-                return {
-                  id: googleEvent.id,
-                  title: googleEvent.summary || googleEvent.title || '',
-                  start: getEventTime(googleEvent.start),
-                  end: getEventTime(googleEvent.end),
-                  description: googleEvent.description,
-                  location: googleEvent.location,
-                  calendarName: calendarConfig.name,
-                  calendarId: calendarConfig.id,
-                  color: getCalendarColor(calendarConfig.id)
-                }
-              })
-              allEvents.push(...eventsWithCalendarInfo)
-            }
-          } else {
-            const errorText = await response.text()
-            console.error(`📅 [ERROR] ${calendarConfig.name} API 오류: ${response.status} - ${errorText}`)
+          console.log(`📅 [DEBUG] ${calendarConfig.name} 가져온 이벤트 수:`, googleEvents.length)
+          
+          if (googleEvents && googleEvents.length > 0) {
+            const eventsWithCalendarInfo = googleEvents.map((event: any) => {
+              const { start, end, isAllDay } = parseEventDate(event)
+              
+              return {
+                id: event.id || '',
+                title: event.summary || '',
+                start: isAllDay ? event.start?.date || '' : event.start?.dateTime || '',
+                end: isAllDay ? event.end?.date || '' : event.end?.dateTime || '',
+                description: event.description,
+                location: event.location,
+                calendarName: calendarConfig.name,
+                calendarId: calendarConfig.id,
+                color: getCalendarColor(calendarConfig.id)
+              }
+            })
+            allEvents.push(...eventsWithCalendarInfo)
           }
         } catch (error) {
           console.error(`캘린더 ${calendarConfig.name} 이벤트 조회 오류:`, error)
@@ -309,11 +288,8 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
     }
 
     try {
-      await fetch('/api/calendar/delete-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: event.id, calendarId: event.calendarId })
-      })
+      // Google Calendar 직접 연동으로 이벤트 삭제
+      await deleteCalendarEvent(event.calendarId || '', event.id)
 
       alert('일정이 성공적으로 삭제되었습니다!')
       fetchCalendarEvents() // 목록 새로고침

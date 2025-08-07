@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { getAuthHeaders } from '@/lib/auth'
-import { getLeaveCalendarConfig, syncLeaveDataFromCalendar, createLeaveEvent } from '@/lib/actions/calendar-sync'
 import { supabase } from '@/lib/supabase'
 
 interface FormRequest {
@@ -38,9 +37,11 @@ export default function AdminFormManagement() {
     setError(null)
     try {
       // Supabase에서 직접 form_requests 조회 (user 정보 별도로 조회)
+      // 휴가 신청서는 AdminLeaveOverview에서 처리하므로 제외
       let query = supabase
         .from('form_requests')
         .select('*')
+        .neq('form_type', '휴가 신청서')
         .order('submitted_at', { ascending: false })
 
       // 필터 적용
@@ -84,37 +85,17 @@ export default function AdminFormManagement() {
     fetchRequests(true)
   }, [fetchRequests])
 
-  // Google Calendar 연차 데이터 동기화
+  // Google Calendar 연차 데이터 동기화 - 직접 연동 방식으로 업데이트 필요
   const handleSyncLeaveData = async () => {
     setIsSyncing(true)
     setSyncResult(null)
     setError(null)
 
     try {
-      // 먼저 연차 캘린더 설정 조회
-      const leaveCalendars = await getLeaveCalendarConfig()
-
-      if (!leaveCalendars || leaveCalendars.length === 0) {
-        setError('연차 캘린더가 설정되지 않았습니다. 먼저 캘린더 설정에서 연차 캘린더를 등록해주세요.')
-        return
-      }
-
-      // 첫 번째 연차 캘린더로 동기화 실행
-      const leaveCalendar = leaveCalendars[0]
-      const syncData = await syncLeaveDataFromCalendar(
-        leaveCalendar.calendar_id,
-        new Date('2025-06-01').toISOString(), // 6월부터
-        new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() // 3개월 후까지
-      )
-
-      if (syncData.success) {
-        setSyncResult(syncData)
-        // 동기화 후 요청 목록 새로고침
-        fetchRequests()
-      } else {
-        setError('Google Calendar 동기화에 실패했습니다.')
-      }
-
+      // TODO: Google Calendar 직접 연동으로 구현 필요
+      setError('Google Calendar 동기화 기능은 직접 연동 방식으로 업데이트 중입니다.')
+      // 동기화 후 요청 목록 새로고침
+      fetchRequests()
     } catch (error) {
       console.error('Google Calendar 동기화 오류:', error)
       setError('Google Calendar 동기화 중 오류가 발생했습니다.')
@@ -183,113 +164,8 @@ export default function AdminFormManagement() {
         throw new Error('승인 처리에 실패했습니다.')
       }
 
-      // 휴가 신청인 경우 users 테이블 휴가 데이터도 업데이트
-      if (newStatus === 'approved' && request.form_type.includes('휴가')) {
-        const leaveType = request.request_data?.['휴가형태'] || '';
-        // 휴가일수 필드명 확인 (신청일수 또는 휴가일수)
-        const leaveDays = parseFloat(request.request_data?.['휴가일수'] || request.request_data?.['신청일수'] || '0');
-
-        if (leaveDays > 0) {
-          let updateField = '';
-          let isHourlyLeave = false;
-          
-          // 휴가 타입별 필드 매핑
-          if (leaveType === '연차') {
-            updateField = 'used_annual_days';
-          } else if (leaveType === '병가') {
-            updateField = 'used_sick_days';
-          } else if (leaveType === '대체휴가' || request.request_data?.['_leaveCategory'] === 'substitute') {
-            updateField = 'substitute_leave_hours';
-            isHourlyLeave = true;
-          } else if (leaveType === '보상휴가' || request.request_data?.['_leaveCategory'] === 'compensatory') {
-            updateField = 'compensatory_leave_hours';
-            isHourlyLeave = true;
-          }
-
-          if (updateField) {
-            console.log('🔍 휴가 차감 처리:', {
-              leaveType,
-              leaveDays,
-              updateField,
-              isHourlyLeave,
-              userId: request.user_id
-            });
-
-            const { data: userData } = await supabase
-              .from('users')
-              .select(updateField)
-              .eq('id', request.user_id)
-              .single();
-
-            let newValue;
-            const currentValue = (userData as any)?.[updateField] || 0;
-            
-            if (isHourlyLeave) {
-              // 시간 단위 휴가는 시간으로 차감 (1일 = 8시간)
-              const hoursToDeduct = leaveDays * 8;
-              newValue = Math.max(0, currentValue - hoursToDeduct);
-            } else {
-              // 일 단위 휴가는 사용 일수에 추가
-              newValue = currentValue + leaveDays;
-            }
-            
-            console.log('🔍 휴가 차감 계산:', {
-              currentValue,
-              leaveDays,
-              newValue,
-              operation: isHourlyLeave ? 'subtract_hours' : 'add_used_days'
-            });
-
-            await supabase
-              .from('users')
-              .update({ [updateField]: newValue })
-              .eq('id', request.user_id);
-              
-            console.log('✅ 휴가 차감 완료:', { updateField, newValue });
-          }
-        }
-
-        // 휴가 승인 시 Google Calendar에 이벤트 생성 (Server Action 사용)
-        try {
-          const startDate = request.request_data?.['시작일'] || '';
-          const endDate = request.request_data?.['종료일'] || startDate;
-          
-          if (startDate) {
-            // 종료일 계산 (Google Calendar는 종일 이벤트의 경우 다음날까지 포함해야 함)
-            const endDateObj = new Date(endDate);
-            endDateObj.setDate(endDateObj.getDate() + 1);
-            const adjustedEndDate = endDateObj.toISOString().split('T')[0];
-
-            console.log('📅 캘린더 이벤트 생성 요청');
-
-            // Server Action 호출
-            const calendarResult = await createLeaveEvent(
-              {
-                leaveType: leaveType,
-                leaveDays: leaveDays,
-                startDate: startDate,
-                endDate: adjustedEndDate,
-                reason: request.request_data?.['사유'] || request.request_data?.['휴가사유'] || '',
-                formRequestId: request.id
-              },
-              {
-                id: request.user_id,
-                name: request.user.name,
-                department: request.user.department
-              }
-            );
-
-            if (calendarResult.success) {
-              console.log('✅ 휴가 캘린더 이벤트 생성 성공:', calendarResult);
-            } else {
-              console.error('❌ 휴가 캘린더 이벤트 생성 실패:', calendarResult.error);
-            }
-          }
-        } catch (calendarError) {
-          console.error('❌ 캘린더 이벤트 생성 중 오류:', calendarError);
-          // 캘린더 오류는 휴가 승인 자체에는 영향을 주지 않음
-        }
-      }
+      // 휴가 관련 처리는 AdminLeaveOverview에서 담당
+      // 이 컴포넌트는 휴가 외 서식(재직증명서, 휴직계, 경위서)만 처리
 
       const successMessage = newStatus === 'approved' ? '승인되었습니다.' : '반려되었습니다.';
       
@@ -478,16 +354,6 @@ export default function AdminFormManagement() {
                     </td>
                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                       <div>{request.form_type}</div>
-                      {request.form_type === '휴가 신청서' && request.request_data && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          <span className="font-medium">{request.request_data['휴가형태']}</span>
-                          {request.request_data['시작일'] && request.request_data['종료일'] && (
-                            <span className="ml-1">
-                              ({request.request_data['시작일']} ~ {request.request_data['종료일']})
-                            </span>
-                          )}
-                        </div>
-                      )}
                       {request.form_type === '초과근무 신청서' && request.request_data && (
                         <div className="text-xs text-gray-500 mt-1">
                           {request.request_data['근무일']} {request.request_data['시작시간']} ~ {request.request_data['종료시간']}

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import LeavePromotionResponse from '@/components/LeavePromotionResponse'
 
 interface FormRequest {
   id: string
@@ -31,6 +32,8 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
   const [formRequests, setFormRequests] = useState<FormRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+  const [promotions, setPromotions] = useState<any[]>([])
+  const [loadingPromotions, setLoadingPromotions] = useState(true)
 
   const fetchMyFormRequests = useCallback(async () => {
     try {
@@ -64,8 +67,36 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     }
   }, [user.id])
 
+  // 연차 촉진 통보 조회
+  const fetchPromotions = useCallback(async () => {
+    try {
+      setLoadingPromotions(true)
+      const currentYear = new Date().getFullYear()
+      
+      const { data, error } = await supabase
+        .from('leave_promotion_records')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('promotion_year', currentYear)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        console.error('Error fetching promotions:', error)
+        return
+      }
+      
+      setPromotions(data || [])
+    } catch (err) {
+      console.error('연차 촉진 조회 오류:', err)
+    } finally {
+      setLoadingPromotions(false)
+    }
+  }, [user.id])
+
   useEffect(() => {
     fetchMyFormRequests()
+    fetchPromotions()
     
     // 폼 제출 성공 이벤트 리스너 추가
     const handleFormSubmitSuccess = () => {
@@ -77,7 +108,7 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
     return () => {
       window.removeEventListener('formSubmitSuccess', handleFormSubmitSuccess)
     }
-  }, [fetchMyFormRequests])
+  }, [fetchMyFormRequests, fetchPromotions])
 
   const handleCancelRequest = async (requestId: string) => {
     if (!confirm('정말로 이 신청을 취소하시겠습니까?\n승인된 휴가인 경우 사용된 휴가일수가 복원됩니다.')) {
@@ -86,22 +117,73 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
 
     setCancellingId(requestId)
     try {
-      const response = await fetch('/api/user/cancel-leave', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ requestId }),
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        alert(result.message || '신청이 취소되었습니다.')
-        await fetchMyFormRequests() // 목록 새로고침
-      } else {
-        alert(result.error || '취소 처리에 실패했습니다.')
+      // 요청 정보 가져오기
+      const request = formRequests.find(r => r.id === requestId)
+      if (!request) {
+        throw new Error('신청 정보를 찾을 수 없습니다.')
       }
+
+      // Supabase 직접 연동으로 상태 업데이트
+      const { error: updateError } = await supabase
+        .from('form_requests')
+        .update({
+          status: 'cancelled' as any,
+          processed_at: new Date().toISOString(),
+          admin_notes: '사용자가 직접 취소'
+        })
+        .eq('id', requestId)
+        .eq('user_id', user.id) // 본인의 요청만 취소 가능
+
+      if (updateError) {
+        throw updateError
+      }
+
+      // 승인된 휴가인 경우 휴가일수 복원
+      if (request.status === 'approved' && request.form_type.includes('휴가')) {
+        const leaveType = request.request_data?.['휴가형태'] || ''
+        const leaveDays = parseFloat(request.request_data?.['휴가일수'] || request.request_data?.['신청일수'] || '0')
+
+        if (leaveDays > 0) {
+          // 사용자의 현재 휴가 데이터 조회
+          const { data: userData, error: fetchError } = await supabase
+            .from('users')
+            .select('used_annual_days, used_sick_days, substitute_leave_hours, compensatory_leave_hours')
+            .eq('id', user.id)
+            .single()
+
+          if (!fetchError && userData) {
+            let updateData: any = {}
+
+            if (leaveType === '연차' || leaveType.includes('연차')) {
+              const currentValue = userData.used_annual_days || 0
+              updateData.used_annual_days = Math.max(0, currentValue - leaveDays)
+            } else if (leaveType === '병가') {
+              const currentValue = userData.used_sick_days || 0
+              updateData.used_sick_days = Math.max(0, currentValue - leaveDays)
+            } else if (leaveType.includes('대체휴가')) {
+              // 대체휴가 복원 (시간 단위)
+              const hoursToRestore = leaveDays * 8
+              const currentHours = userData.substitute_leave_hours || 0
+              updateData.substitute_leave_hours = currentHours + hoursToRestore
+            } else if (leaveType.includes('보상휴가')) {
+              // 보상휴가 복원 (시간 단위)
+              const hoursToRestore = leaveDays * 8
+              const currentHours = userData.compensatory_leave_hours || 0
+              updateData.compensatory_leave_hours = currentHours + hoursToRestore
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              await supabase
+                .from('users')
+                .update(updateData)
+                .eq('id', user.id)
+            }
+          }
+        }
+      }
+
+      alert('신청이 취소되었습니다.')
+      await fetchMyFormRequests() // 목록 새로고침
     } catch (error) {
       console.error('취소 요청 오류:', error)
       alert('취소 처리 중 오류가 발생했습니다.')
@@ -171,6 +253,19 @@ export default function UserFormManagement({ user, onApplyClick }: UserFormManag
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="p-5">
+        {/* 연차 촉진 통보 표시 */}
+        {!loadingPromotions && promotions.length > 0 && (
+          <div className="mb-6">
+            {promotions.map(promotion => (
+              <LeavePromotionResponse
+                key={promotion.id}
+                promotion={promotion}
+                onSubmit={() => fetchPromotions()}
+              />
+            ))}
+          </div>
+        )}
+        
         <div className="mb-6">
           <div className="flex items-center mb-6">
             <div className="flex-shrink-0">

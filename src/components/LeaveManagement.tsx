@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
+import { 
+  fetchCalendarEvents,
+  parseEventDate,
+  initializeGoogleAPI 
+} from '@/lib/googleCalendar'
 
 // 한국 공휴일 데이터 (2024-2025년)
 const koreanHolidays = {
@@ -66,6 +71,9 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   const fetchLeaveEvents = useCallback(async () => {
     setLoading(true)
     try {
+      // Google API 초기화
+      await initializeGoogleAPI()
+      
       // 현재 월의 데이터만 가져오기
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth()
@@ -78,53 +86,33 @@ export default function LeaveManagement({}: LeaveManagementProps) {
         timeMax 
       })
 
-      const response = await fetch('/api/calendar/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT,
-          timeMin,
-          timeMax,
-          maxResults: 250
-        }),
-      })
-
-      console.log('📅 [DEBUG] 휴가 캘린더 API 응답 상태:', response.status)
-
+      // Google Calendar 직접 연동으로 이벤트 가져오기
+      const googleEvents = await fetchCalendarEvents(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax, 250)
+      console.log('📅 [DEBUG] 가져온 흔가 이벤트 수:', googleEvents.length)
+      
       let fetchedEvents: CalendarEvent[] = []
-      if (response.ok) {
-        const data = await response.json()
-        console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', data.events?.length || 0)
-        if (data.events) {
-          // API 응답을 우리 인터페이스에 맞게 변환
-          fetchedEvents = data.events.map((event: unknown) => {
-            const googleEvent = event as { id: string; summary?: string; title?: string; start?: { date?: string; dateTime?: string } | string; end?: { date?: string; dateTime?: string } | string; description?: string; location?: string }
-            const getEventTime = (timeObj: { date?: string; dateTime?: string } | string | undefined) => {
-              if (typeof timeObj === 'string') return timeObj
-              if (timeObj && typeof timeObj === 'object') {
-                return timeObj.date || timeObj.dateTime || ''
-              }
-              return ''
-            }
-            
-            return {
-              id: googleEvent.id,
-              title: googleEvent.summary || googleEvent.title || '',
-              start: getEventTime(googleEvent.start),
-              end: getEventTime(googleEvent.end),
-              description: googleEvent.description,
-              location: googleEvent.location
-            }
-          })
-        }
-      } else {
-        const errorText = await response.text()
-        console.error('휴가 캘린더 이벤트 조회 실패:', response.status, errorText)
+      if (googleEvents && googleEvents.length > 0) {
+        // API 응답을 우리 인터페이스에 맞게 변환
+        fetchedEvents = googleEvents.map((event: any) => {
+          const { start, end, isAllDay } = parseEventDate(event)
+          return {
+            id: event.id || '',
+            title: event.summary || '',
+            start: isAllDay ? event.start?.date || '' : event.start?.dateTime || '',
+            end: isAllDay ? event.end?.date || '' : event.end?.dateTime || '',
+            description: event.description,
+            location: event.location
+          }
+        })
       }
 
       setLeaveEvents(fetchedEvents)
     } catch (error) {
       console.error('휴가 캘린더 이벤트 조회 오류:', error)
+      // 권한 오류인 경우 사용자에게 알림
+      if (error instanceof Error && error.message.includes('Token')) {
+        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      }
       setLeaveEvents([])
     } finally {
       setLoading(false)

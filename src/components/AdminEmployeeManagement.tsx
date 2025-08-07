@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import BulkAttendanceUpload from '@/components/BulkAttendanceUpload'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import SpecialLeaveGrantModal from '@/components/SpecialLeaveGrantModal'
+import { ChevronLeft, ChevronRight, Calculator, AlertCircle } from 'lucide-react'
+import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 
 // Overtime management interfaces
 interface OvertimeRecord {
@@ -54,9 +56,11 @@ interface Employee {
   basic_salary?: number
   bonus?: number
   meal_allowance?: number
+  car_allowance?: number
   transportation_allowance?: number
   hourly_wage?: number
   salary_details_updated_at?: string
+  updated_at?: string
   // Add other fields as necessary
 }
 
@@ -68,11 +72,25 @@ export default function AdminEmployeeManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<'info' | 'leave' | 'salary' | 'attendance' | 'management'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'attendance' | 'management' | 'salary'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'resigned' | 'contract'>('all')
+  const [showAddEmployee, setShowAddEmployee] = useState(false)
+  const [newEmployeeData, setNewEmployeeData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    department: '',
+    position: '',
+    phone: '',
+    hire_date: new Date().toISOString().split('T')[0],
+    annual_salary: 0,
+    meal_allowance: 0,
+    car_allowance: 0,
+    role: 'employee' as 'employee' | 'admin'
+  })
   
   // Overtime management states
   const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([])
@@ -100,10 +118,9 @@ export default function AdminEmployeeManagement() {
   const [editingRecord, setEditingRecord] = useState<any>(null)
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false)
 
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
+  // fetchData 함수를 컴포넌트 스코프로 이동
+  const fetchData = async () => {
+    try {
         console.log('🚀 Fetching employees (direct Supabase)...')
         
         // localStorage에서 사용자 정보 가져오기
@@ -213,11 +230,12 @@ export default function AdminEmployeeManagement() {
       } catch (err) {
         console.error('❌ Error:', err)
         setError(err instanceof Error ? err.message : '알 수 없는 오류')
-      } finally {
-        setLoading(false)
-      }
+    } finally {
+      setLoading(false)
     }
+  }
 
+  useEffect(() => {
     fetchData()
   }, [])
 
@@ -754,6 +772,11 @@ export default function AdminEmployeeManagement() {
       )
       setSelectedEmployee(updatedEmployee)
       
+      // 직원 화면 실시간 업데이트를 위한 이벤트 발생
+      const refreshEvent = new CustomEvent('formSubmitSuccess')
+      window.dispatchEvent(refreshEvent)
+      console.log('✅ 관리자 휴가 수정 완료 - 직원 화면 새로고침 이벤트 발생')
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : '휴가 일수 조정 중 오류가 발생했습니다.')
     }
@@ -766,13 +789,51 @@ export default function AdminEmployeeManagement() {
     setError(null)
 
     try {
-      // Supabase로 직접 퇴사 처리
+      // 현재 사용자 정보 가져오기
+      const currentUser = await getCurrentUser()
+      if (!currentUser || currentUser.role !== 'admin') {
+        throw new Error('관리자 권한이 필요합니다.')
+      }
+
+      // 최신 사용자 데이터 가져오기 (휴가 정산용)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('annual_days, used_annual_days, substitute_leave_hours, compensatory_leave_hours')
+        .eq('id', selectedEmployee.id)
+        .single()
+
+      // 휴가 잔여일수 정산 확인
+      const remainingAnnualLeave = userData ? (userData.annual_days - userData.used_annual_days) : 0
+      const remainingHourlyLeave = (userData?.substitute_leave_hours || 0) + (userData?.compensatory_leave_hours || 0)
+      
+      let settlementMessage = ''
+      if (remainingAnnualLeave > 0 || remainingHourlyLeave > 0) {
+        settlementMessage = `\n\n📋 휴가 정산 내역:\n`
+        if (remainingAnnualLeave > 0) {
+          settlementMessage += `- 잔여 연차: ${remainingAnnualLeave}일\n`
+        }
+        if (remainingHourlyLeave > 0) {
+          settlementMessage += `- 잔여 시간차: ${remainingHourlyLeave}시간\n`
+        }
+        settlementMessage += `\n이 휴가는 급여와 함께 정산됩니다.`
+        
+        if (!confirm(`퇴사 처리를 진행하시겠습니까?${settlementMessage}`)) {
+          setSubmitting(false)
+          return
+        }
+      }
+
+      // Supabase로 직접 퇴사 처리 (관리자 정보 포함)
       const { error } = await supabase
         .from('users')
         .update({ 
           resignation_date: formData.resignation_date,
           termination_date: formData.resignation_date,
-          is_active: false
+          is_active: false,
+          resignation_processed_by: currentUser.id, // 관리자 정보 기록
+          resignation_processed_at: new Date().toISOString(), // 처리 시간 기록
+          leave_settlement_days: remainingAnnualLeave, // 정산할 연차
+          leave_settlement_hours: remainingHourlyLeave // 정산할 시간차
         })
         .eq('id', selectedEmployee.id)
 
@@ -781,7 +842,7 @@ export default function AdminEmployeeManagement() {
         throw new Error('퇴사 처리에 실패했습니다.')
       }
       
-      alert('퇴사 처리가 완료되었습니다.')
+      alert(`퇴사 처리가 완료되었습니다.${settlementMessage}`)
       
       // 로컬 상태 업데이트
       const updatedEmployee = { 
@@ -837,6 +898,86 @@ export default function AdminEmployeeManagement() {
     }
   }
 
+  const handleAddEmployee = async () => {
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      // 필수 필드 검증
+      if (!newEmployeeData.name || !newEmployeeData.email || !newEmployeeData.password) {
+        throw new Error('이름, 이메일, 비밀번호는 필수 입력 항목입니다.')
+      }
+
+      // 비밀번호 해싱 (bcrypt 사용)
+      const bcrypt = await import('bcryptjs')
+      const hashedPassword = await bcrypt.hash(newEmployeeData.password, 10)
+
+      // 연차 계산 로직 import 및 적용
+      const { calculateAnnualLeave } = await import('@/lib/calculateAnnualLeave')
+      const calculatedAnnualDays = calculateAnnualLeave(newEmployeeData.hire_date)
+      
+      console.log(`📅 입사일 기준 연차 계산: ${newEmployeeData.hire_date} → ${calculatedAnnualDays}일`)
+
+      // Supabase에 직원 추가
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          name: newEmployeeData.name,
+          email: newEmployeeData.email,
+          password_hash: hashedPassword,
+          department: newEmployeeData.department || '미지정',
+          position: newEmployeeData.position || '사원',
+          phone: newEmployeeData.phone || '',
+          hire_date: newEmployeeData.hire_date,
+          annual_salary: newEmployeeData.annual_salary || 0,
+          meal_allowance: newEmployeeData.meal_allowance || 0,
+          car_allowance: newEmployeeData.car_allowance || 0,
+          role: newEmployeeData.role,
+          annual_days: calculatedAnnualDays, // 입사일 기준으로 계산된 연차
+          used_annual_days: 0,
+          sick_days: 60, // 기본 병가
+          used_sick_days: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Supabase insert error:', error)
+        if (error.code === '23505') {
+          throw new Error('이미 존재하는 이메일입니다.')
+        }
+        throw new Error('직원 추가에 실패했습니다.')
+      }
+
+      alert('신규 직원이 성공적으로 등록되었습니다.')
+      
+      // 직원 목록 새로고침
+      await fetchData()
+      
+      // 폼 초기화 및 모달 닫기
+      setNewEmployeeData({
+        name: '',
+        email: '',
+        password: '',
+        department: '',
+        position: '',
+        phone: '',
+        hire_date: new Date().toISOString().split('T')[0],
+        annual_salary: 0,
+        meal_allowance: 0,
+        car_allowance: 0,
+        role: 'employee'
+      })
+      setShowAddEmployee(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '직원 추가 중 오류가 발생했습니다.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   // 상태별 직원 필터링 (termination_date 기준)
   const getFilteredEmployees = () => {
     switch (statusFilter) {
@@ -886,6 +1027,12 @@ export default function AdminEmployeeManagement() {
             </p>
           </div>
           <div className="flex space-x-2">
+            <button
+              onClick={() => setShowAddEmployee(true)}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+              + 신규 직원 추가
+            </button>
+            <div className="border-l border-gray-300 mx-2"></div>
             <button
               onClick={() => setStatusFilter('all')}
               className={`px-3 py-1 text-sm rounded-md ${statusFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}
@@ -968,14 +1115,14 @@ export default function AdminEmployeeManagement() {
                     기본 정보
                   </button>
                   <button
-                    onClick={() => setActiveTab('leave')}
+                    onClick={() => setActiveTab('attendance')}
                     className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'leave'
+                      activeTab === 'attendance'
                         ? 'border-indigo-500 text-indigo-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
                   >
-                    휴가 관리
+                    근무시간 관리
                   </button>
                   <button
                     onClick={() => setActiveTab('salary')}
@@ -986,16 +1133,6 @@ export default function AdminEmployeeManagement() {
                     }`}
                   >
                     급여 관리
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('attendance')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'attendance'
-                        ? 'border-indigo-500 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    근무시간 관리
                   </button>
                   <button
                     onClick={() => setActiveTab('management')}
@@ -1055,245 +1192,7 @@ export default function AdminEmployeeManagement() {
                 </form>
               )}
 
-              {/* Leave Management Tab */}
-              {activeTab === 'leave' && (
-                <div className="space-y-6">
-                  <h4 className="font-medium text-gray-900 mb-4">휴가 현황 및 조정</h4>
-                  <p className="text-sm text-gray-600 mb-4">각 항목을 클릭하여 직접 수정할 수 있습니다.</p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* 연차 카드 */}
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-lg font-semibold text-blue-900">연차</h5>
-                        <div className="text-2xl font-bold text-blue-600">
-                          {selectedEmployee.annual_leave || 0}일 잔여
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {/* 지급 일수 */}
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('annual_granted', (selectedEmployee as any)?.leave_data?.annual_days || 0)}>
-                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
-                          {editingField === 'annual_granted' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('annual_granted', 'annual_leave', 'granted')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_granted', 'annual_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.annual_days || 0}일</span>
-                          )}
-                        </div>
-                        
-                        {/* 사용 일수 */}
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('annual_used', (selectedEmployee as any)?.leave_data?.used_annual_days || 0)}>
-                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
-                          {editingField === 'annual_used' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('annual_used', 'annual_leave', 'used')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('annual_used', 'annual_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_annual_days || 0}일</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 병가 카드 */}
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-lg font-semibold text-red-900">병가</h5>
-                        <div className="text-2xl font-bold text-red-600">
-                          {selectedEmployee.sick_leave || 0}일 잔여
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {/* 지급 일수 */}
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('sick_granted', (selectedEmployee as any)?.leave_data?.sick_days || 0)}>
-                          <span className="text-sm font-medium text-gray-700">지급 일수</span>
-                          {editingField === 'sick_granted' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('sick_granted', 'sick_leave', 'granted')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_granted', 'sick_leave', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-blue-600">{(selectedEmployee as any)?.leave_data?.sick_days || 0}일</span>
-                          )}
-                        </div>
-                        
-                        {/* 사용 일수 */}
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('sick_used', (selectedEmployee as any)?.leave_data?.used_sick_days || 0)}>
-                          <span className="text-sm font-medium text-gray-700">사용 일수</span>
-                          {editingField === 'sick_used' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('sick_used', 'sick_leave', 'used')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('sick_used', 'sick_leave', 'used')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-red-600">{(selectedEmployee as any)?.leave_data?.used_sick_days || 0}일</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 대체휴가 카드 */}
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-lg font-semibold text-purple-900">대체휴가</h5>
-                        <div className="text-2xl font-bold text-purple-600">
-                          {selectedEmployee.substitute_leave_hours || 0}시간
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('substitute_hours', selectedEmployee.substitute_leave_hours || 0)}>
-                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
-                          {editingField === 'substitute_hours' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('substitute_hours', 'substitute_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-purple-600">{selectedEmployee.substitute_leave_hours || 0}시간</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 보상휴가 카드 */}
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h5 className="text-lg font-semibold text-orange-900">보상휴가</h5>
-                        <div className="text-2xl font-bold text-orange-600">
-                          {selectedEmployee.compensatory_leave_hours || 0}시간
-                        </div>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center p-2 bg-white rounded border hover:bg-gray-50 cursor-pointer"
-                             onClick={() => handleFieldEdit('compensatory_hours', selectedEmployee.compensatory_leave_hours || 0)}>
-                          <span className="text-sm font-medium text-gray-700">보유 시간</span>
-                          {editingField === 'compensatory_hours' ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                step="0.1"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')
-                                  } else if (e.key === 'Escape') {
-                                    handleFieldCancel()
-                                  }
-                                }}
-                                className="w-16 px-2 py-1 text-sm border rounded"
-                                autoFocus
-                              />
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldSave('compensatory_hours', 'compensatory_leave_hours', 'granted')}} className="text-green-600 hover:text-green-800">✓</button>
-                              <button onClick={(e) => {e.stopPropagation(); handleFieldCancel()}} className="text-red-600 hover:text-red-800">✕</button>
-                            </div>
-                          ) : (
-                            <span className="text-lg font-semibold text-orange-600">{selectedEmployee.compensatory_leave_hours || 0}시간</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                    <h5 className="text-sm font-medium text-yellow-800 mb-2">💡 사용 안내</h5>
-                    <ul className="text-sm text-yellow-700 space-y-1">
-                      <li>• 각 항목을 클릭하면 직접 수정할 수 있습니다</li>
-                      <li>• Enter 키로 저장, Esc 키로 취소할 수 있습니다</li>
-                      <li>• 연차/병가는 지급 일수와 사용 일수를 별도로 관리합니다</li>
-                      <li>• 대체휴가/보상휴가는 보유 시간을 직접 설정합니다</li>
-                    </ul>
-                  </div>
-                </div>
-              )}
+              {/* Leave Management Tab Removed - Use AdminLeaveOverview Instead */}
 
               {/* Attendance Management Tab */}
               {activeTab === 'attendance' && (
@@ -1544,18 +1443,92 @@ export default function AdminEmployeeManagement() {
                           value={formData.resignation_date || ''}
                           onChange={handleInputChange}
                           className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                          disabled={!!selectedEmployee?.termination_date}
                         />
                       </div>
                       <button
                         type="button"
                         onClick={handleResignation}
-                        disabled={submitting || !formData.resignation_date}
+                        disabled={submitting || !formData.resignation_date || !!selectedEmployee?.termination_date}
                         className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
                       >
-                        {submitting ? '처리 중...' : '퇴사 처리'}
+                        {submitting ? '처리 중...' : selectedEmployee?.termination_date ? '퇴사 처리됨' : '퇴사 처리'}
                       </button>
                     </div>
                   </div>
+
+                  {/* Reinstatement Processing - 복직 처리 */}
+                  {selectedEmployee?.termination_date && (
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-gray-900 mb-4">복직 처리</h4>
+                      <p className="text-sm text-gray-600 mb-4">
+                        퇴사일: {new Date(selectedEmployee.termination_date).toLocaleDateString('ko-KR')}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!confirm('이 직원을 복직 처리하시겠습니까?')) return
+                          
+                          setSubmitting(true)
+                          try {
+                            const currentUser = await getCurrentUser()
+                            if (!currentUser || currentUser.role !== 'admin') {
+                              throw new Error('관리자 권한이 필요합니다.')
+                            }
+
+                            // 복직 처리
+                            const { error } = await supabase
+                              .from('users')
+                              .update({ 
+                                resignation_date: null,
+                                termination_date: null,
+                                is_active: true,
+                                resignation_processed_by: null,
+                                resignation_processed_at: null,
+                                leave_settlement_days: null,
+                                leave_settlement_hours: null,
+                                reinstatement_processed_by: currentUser.id,
+                                reinstatement_processed_at: new Date().toISOString()
+                              })
+                              .eq('id', selectedEmployee.id)
+
+                            if (error) {
+                              console.error('❌ Reinstatement error:', error)
+                              throw new Error('복직 처리에 실패했습니다.')
+                            }
+                            
+                            alert('복직 처리가 완료되었습니다.')
+                            
+                            // 로컬 상태 업데이트
+                            const updatedEmployee = { 
+                              ...selectedEmployee, 
+                              resignation_date: undefined,
+                              termination_date: undefined,
+                              is_active: true
+                            }
+                            
+                            setEmployees(prevEmployees => 
+                              prevEmployees.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp)
+                            )
+                            setSelectedEmployee(updatedEmployee)
+                            setFormData({
+                              ...formData,
+                              resignation_date: '',
+                              termination_date: ''
+                            })
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : '복직 처리 중 오류가 발생했습니다.')
+                          } finally {
+                            setSubmitting(false)
+                          }
+                        }}
+                        disabled={submitting}
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {submitting ? '처리 중...' : '복직 처리'}
+                      </button>
+                    </div>
+                  )}
 
                   {/* Employee Deletion */}
                   <div className="bg-red-50 p-4 rounded-lg">
@@ -1602,336 +1575,134 @@ export default function AdminEmployeeManagement() {
               {/* Salary Management Tab */}
               {activeTab === 'salary' && (
                 <div className="space-y-6">
-                  {/* 급여 정보 입력/수정 */}
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-4">급여 정보</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-4">급여 정보 관리</h4>
+                    
+                    {/* 기본 급여 정보 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                       <div>
-                        <label htmlFor="annual_salary" className="block text-sm font-medium text-gray-700">연봉 (원)</label>
-                        <input
-                          type="text"
-                          name="annual_salary"
-                          id="annual_salary"
-                          value={formData.annual_salary ? formData.annual_salary.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('annual_salary', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">연봉</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            name="annual_salary"
+                            value={((formData.annual_salary as number) || 0).toLocaleString()}
+                            onChange={(e) => handleSalaryInputChange('annual_salary', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-gray-500">원</span>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-500">
+                          월급여: {Math.floor(((formData.annual_salary as number) || 0) / 12).toLocaleString()}원
+                        </p>
                       </div>
+                      
                       <div>
-                        <label htmlFor="monthly_salary" className="block text-sm font-medium text-gray-700">월급여 (원)</label>
-                        <input
-                          type="text"
-                          name="monthly_salary"
-                          id="monthly_salary"
-                          value={formData.monthly_salary ? formData.monthly_salary.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('monthly_salary', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">식대</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            name="meal_allowance"
+                            value={((formData.meal_allowance as number) || 0).toLocaleString()}
+                            onChange={(e) => handleSalaryInputChange('meal_allowance', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-gray-500">원/월</span>
+                        </div>
                       </div>
+                      
                       <div>
-                        <label htmlFor="basic_salary" className="block text-sm font-medium text-gray-700">기본급 (원)</label>
-                        <input
-                          type="text"
-                          name="basic_salary"
-                          id="basic_salary"
-                          value={formData.basic_salary ? formData.basic_salary.toLocaleString() : ''}
-                          readOnly
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm bg-gray-100"
-                          placeholder="자동 계산됨"
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">차량유지비</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            name="car_allowance"
+                            value={((formData.car_allowance as number) || 0).toLocaleString()}
+                            onChange={(e) => handleSalaryInputChange('car_allowance', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-gray-500">원/월</span>
+                        </div>
                       </div>
+                      
                       <div>
-                        <label htmlFor="bonus" className="block text-sm font-medium text-gray-700">상여 (원)</label>
-                        <input
-                          type="text"
-                          name="bonus"
-                          id="bonus"
-                          value={formData.bonus ? formData.bonus.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('bonus', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="meal_allowance" className="block text-sm font-medium text-gray-700">식대 (원)</label>
-                        <input
-                          type="text"
-                          name="meal_allowance"
-                          id="meal_allowance"
-                          value={formData.meal_allowance ? formData.meal_allowance.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('meal_allowance', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="transportation_allowance" className="block text-sm font-medium text-gray-700">자가운전 수당 (원)</label>
-                        <input
-                          type="text"
-                          name="transportation_allowance"
-                          id="transportation_allowance"
-                          value={formData.transportation_allowance ? formData.transportation_allowance.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('transportation_allowance', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="hourly_wage" className="block text-sm font-medium text-gray-700">통상 시급 (원)</label>
-                        <input
-                          type="text"
-                          name="hourly_wage"
-                          id="hourly_wage"
-                          value={formData.hourly_wage ? formData.hourly_wage.toLocaleString() : ''}
-                          onChange={(e) => handleSalaryInputChange('hourly_wage', e.target.value)}
-                          className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
-                          placeholder="0"
-                        />
-                        {formData.hourly_wage && formData.hourly_wage < 9860 && (
-                          <p className="mt-1 text-sm text-red-600">⚠️ 2024년 최저시급(9,860원) 미달</p>
-                        )}
+                        <label className="block text-sm font-medium text-gray-700 mb-2">상여금</label>
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            name="bonus"
+                            value={((formData.bonus as number) || 0).toLocaleString()}
+                            onChange={(e) => handleSalaryInputChange('bonus', e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="0"
+                          />
+                          <span className="text-sm text-gray-500">원</span>
+                        </div>
                       </div>
                     </div>
                     
-                    {/* 급여 계산 정보 표시 */}
-                    {formData.hourly_wage && (
-                      <div className="mt-4 p-3 bg-white rounded border">
-                        <h5 className="text-sm font-medium text-gray-900 mb-2">수당 계산 미리보기</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
-                          <div>초과근무수당 (1시간): {Math.round(formData.hourly_wage * 1.5).toLocaleString()}원</div>
-                          <div>야간근로수당 (1시간): {Math.round(formData.hourly_wage * 1.5).toLocaleString()}원</div>
+                    {/* 계산된 급여 정보 */}
+                    <div className="border-t pt-4">
+                      <h5 className="text-sm font-medium text-gray-900 mb-3">급여 계산 정보</h5>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-gray-500">월 기본급</p>
+                          <p className="font-semibold text-lg">
+                            {Math.floor(((formData.annual_salary as number) || 0) / 12).toLocaleString()}원
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-gray-500">통상시급</p>
+                          <p className="font-semibold text-lg">
+                            {Math.floor(((formData.annual_salary as number) || 0) / 12 / 209).toLocaleString()}원
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-gray-500">월 총액</p>
+                          <p className="font-semibold text-lg text-green-600">
+                            {(Math.floor(((formData.annual_salary as number) || 0) / 12) + 
+                              ((formData.meal_allowance as number) || 0) + 
+                              ((formData.car_allowance as number) || 0)).toLocaleString()}원
+                          </p>
+                        </div>
+                        <div className="bg-white p-3 rounded border">
+                          <p className="text-gray-500">연간 총액</p>
+                          <p className="font-semibold text-lg text-blue-600">
+                            {(((formData.annual_salary as number) || 0) + 
+                              (((formData.meal_allowance as number) || 0) * 12) + 
+                              (((formData.car_allowance as number) || 0) * 12) + 
+                              ((formData.bonus as number) || 0)).toLocaleString()}원
+                          </p>
                         </div>
                       </div>
-                    )}
-
-                    <div className="mt-4">
+                    </div>
+                    
+                    {/* 저장 버튼 */}
+                    <div className="mt-6 flex justify-end">
                       <button
                         type="button"
-                        onClick={() => handleSubmit()}
+                        onClick={handleSubmit}
                         disabled={submitting}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
                       >
                         {submitting ? '저장 중...' : '급여 정보 저장'}
                       </button>
                     </div>
-
-                    {/* 급여 정보 수정 이력 */}
-                    {selectedEmployee?.salary_details_updated_at && (
-                      <div className="mt-4 text-sm text-gray-500">
-                        최종 수정: {new Date(selectedEmployee.salary_details_updated_at).toLocaleString('ko-KR')}
-                      </div>
-                    )}
                   </div>
-
-                  {/* 초과근무 관리 섹션 */}
-                  {selectedEmployee && (
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <div className="flex justify-between items-center mb-4">
-                        <h4 className="font-medium text-gray-900">초과근무 관리</h4>
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <label htmlFor="overtime-month" className="text-sm font-medium text-gray-700">
-                              조회 월:
-                            </label>
-                            <input
-                              type="month"
-                              id="overtime-month"
-                              value={selectedMonth}
-                              onChange={(e) => {
-                                setSelectedMonth(e.target.value)
-                                // Re-fetch overtime records when month changes
-                                setTimeout(fetchOvertimeRecords, 100)
-                              }}
-                              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            />
-                          </div>
-                          <button
-                            onClick={() => setShowOvertimeForm(!showOvertimeForm)}
-                            className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700"
-                          >
-                            {showOvertimeForm ? '취소' : '초과근무 추가'}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 초과근무 추가 폼 */}
-                      {showOvertimeForm && (
-                        <div className="mb-6 bg-white rounded-lg p-4 border">
-                          <h5 className="text-md font-medium text-gray-900 mb-4">초과근무 기록 추가</h5>
-                          <form onSubmit={handleOvertimeSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                근무일
-                              </label>
-                              <input
-                                type="date"
-                                value={overtimeFormData.work_date}
-                                onChange={(e) => setOvertimeFormData({...overtimeFormData, work_date: e.target.value})}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                required
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                초과근무시간
-                              </label>
-                              <input
-                                type="number"
-                                step="0.5"
-                                min="0"
-                                value={overtimeFormData.overtime_hours}
-                                onChange={(e) => setOvertimeFormData({...overtimeFormData, overtime_hours: parseFloat(e.target.value) || 0})}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                placeholder="0.0"
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                야간근무시간
-                              </label>
-                              <input
-                                type="number"
-                                step="0.5"
-                                min="0"
-                                value={overtimeFormData.night_hours}
-                                onChange={(e) => setOvertimeFormData({...overtimeFormData, night_hours: parseFloat(e.target.value) || 0})}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                placeholder="0.0"
-                              />
-                            </div>
-
-                            <div className="md:col-span-2">
-                              <label className="block text-sm font-medium text-gray-700 mb-1">
-                                비고
-                              </label>
-                              <input
-                                type="text"
-                                value={overtimeFormData.notes}
-                                onChange={(e) => setOvertimeFormData({...overtimeFormData, notes: e.target.value})}
-                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                placeholder="추가 메모"
-                              />
-                            </div>
-
-                            <div className="flex items-end">
-                              <button
-                                type="submit"
-                                disabled={overtimeSubmitting}
-                                className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:bg-green-300"
-                              >
-                                {overtimeSubmitting ? '저장 중...' : '저장'}
-                              </button>
-                            </div>
-                          </form>
-                        </div>
-                      )}
-
-                      {/* 초과근무 기록 목록 */}
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-300">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">근무일</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">초과/야간시간</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">수당</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">관리</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {overtimeRecords.length > 0 ? (
-                              overtimeRecords.map((record) => (
-                                <tr key={record.id} className="hover:bg-gray-50">
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                    {formatDate(record.work_date)}
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                    <div>초과: {record.overtime_hours}시간</div>
-                                    <div>야간: {record.night_hours}시간</div>
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                    <div className="font-medium">총: {formatCurrency(record.total_pay)}원</div>
-                                    <div className="text-xs text-gray-500">
-                                      초과: {formatCurrency(record.overtime_pay)}원 / 야간: {formatCurrency(record.night_pay)}원
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(record.status)}`}>
-                                      {getStatusText(record.status)}
-                                    </span>
-                                  </td>
-                                  <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
-                                    {record.status === 'pending' ? (
-                                      <div className="flex space-x-2">
-                                        <button
-                                          onClick={() => handleOvertimeApproval(record.id, 'approved')}
-                                          className="bg-green-100 text-green-800 hover:bg-green-200 px-3 py-1 rounded-md text-xs font-medium transition-colors"
-                                        >
-                                          승인
-                                        </button>
-                                        <button
-                                          onClick={() => handleOvertimeApproval(record.id, 'rejected')}
-                                          className="bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded-md text-xs font-medium transition-colors"
-                                        >
-                                          거절
-                                        </button>
-                                      </div>
-                                    ) : (
-                                      <span className="text-gray-500 text-xs">
-                                        {record.approved_at ? formatDate(record.approved_at) : '-'}
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))
-                            ) : (
-                              <tr>
-                                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
-                                  {selectedMonth} 초과근무 기록이 없습니다.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* 수당 계산 정보 */}
-                      <div className="mt-4 bg-blue-50 rounded-lg p-4">
-                        <h5 className="text-sm font-medium text-gray-900 mb-2">수당 계산 방식</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                          <div>
-                            <strong>초과근무수당:</strong> 통상시급 × 초과근무시간 × 1.5배
-                          </div>
-                          <div>
-                            <strong>야간근로수당:</strong> 통상시급 × 야간근무시간 × 1.5배
-                          </div>
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500">
-                          * 시급이 설정되지 않은 직원은 초과근무 기록을 생성할 수 없습니다.
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 급여 계산 가이드 */}
+                  
+                  {/* 급여 변경 이력 */}
                   <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-2">급여 계산 가이드</h4>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div>• <strong>연봉:</strong> 연간 총 급여 (세전)</div>
-                      <div>• <strong>월급여:</strong> 월별 기본 급여</div>
-                      <div>• <strong>기본급:</strong> 고정 기본급</div>
-                      <div>• <strong>상여:</strong> 연간 상여금</div>
-                      <div>• <strong>식대:</strong> 월별 식대 지원</div>
-                      <div>• <strong>자가운전 수당:</strong> 월별 교통비 지원</div>
-                      <div>• <strong>통상 시급:</strong> 초과근무 및 야간근로 수당 계산 기준</div>
+                    <h5 className="text-sm font-medium text-gray-900 mb-2">급여 변경 이력</h5>
+                    <div className="text-sm text-gray-600">
+                      <p>최종 수정일: {formData.updated_at ? new Date(formData.updated_at).toLocaleString('ko-KR') : '-'}</p>
                     </div>
                   </div>
                 </div>
               )}
+
             </div>
           ) : (
             <div className="text-center py-12">
@@ -2200,6 +1971,196 @@ export default function AdminEmployeeManagement() {
                 닫기
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Special Leave Grant Modal - Removed */}
+      {/* All leave management functions have been moved to AdminLeaveOverview component */}
+
+      {/* 신규 직원 추가 모달 */}
+      {showAddEmployee && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+          <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-medium text-gray-900">신규 직원 등록</h3>
+              <button
+                onClick={() => {
+                  setShowAddEmployee(false)
+                  setError(null)
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              await handleAddEmployee()
+            }} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    이름 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newEmployeeData.name}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, name: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    이메일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={newEmployeeData.email}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, email: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    비밀번호 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={newEmployeeData.password}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, password: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    required
+                    minLength={6}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">전화번호</label>
+                  <input
+                    type="tel"
+                    value={newEmployeeData.phone}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, phone: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">부서</label>
+                  <input
+                    type="text"
+                    value={newEmployeeData.department}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, department: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    placeholder="개발팀"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">직책</label>
+                  <input
+                    type="text"
+                    value={newEmployeeData.position}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, position: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    placeholder="사원"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">입사일</label>
+                  <input
+                    type="date"
+                    value={newEmployeeData.hire_date}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, hire_date: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">권한</label>
+                  <select
+                    value={newEmployeeData.role}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, role: e.target.value as 'employee' | 'admin'})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  >
+                    <option value="employee">직원</option>
+                    <option value="admin">관리자</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">급여 정보</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">연봉</label>
+                    <input
+                      type="number"
+                      value={newEmployeeData.annual_salary}
+                      onChange={(e) => setNewEmployeeData({...newEmployeeData, annual_salary: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">식대</label>
+                    <input
+                      type="number"
+                      value={newEmployeeData.meal_allowance}
+                      onChange={(e) => setNewEmployeeData({...newEmployeeData, meal_allowance: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">차량유지비</label>
+                    <input
+                      type="number"
+                      value={newEmployeeData.car_allowance}
+                      onChange={(e) => setNewEmployeeData({...newEmployeeData, car_allowance: parseInt(e.target.value) || 0})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddEmployee(false)
+                    setError(null)
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {submitting ? '등록 중...' : '직원 등록'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

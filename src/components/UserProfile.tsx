@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { updateUserProfile, type User, authenticatedFetch } from '@/lib/auth'
+import { useState, useEffect, useCallback } from 'react'
+import { updateUserProfile, changePassword, type User } from '@/lib/auth'
 
 interface UserProfileProps {
   user: User
@@ -27,8 +27,24 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
   const [passwordError, setPasswordError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
 
-  // 근무년차 계산 함수
-  const calculateYearsOfService = (hireDate: string) => {
+  // 메모리 정리를 위한 useEffect
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null
+    
+    if (successMessage) {
+      timeoutId = setTimeout(() => setSuccessMessage(''), 2000)
+    }
+    
+    // cleanup 함수
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
+    }
+  }, [successMessage])
+
+  // 근무년차 계산 함수 (메모이제이션)
+  const calculateYearsOfService = useCallback((hireDate: string) => {
     if (!hireDate) return '미정'
     
     const hire = new Date(hireDate)
@@ -42,10 +58,46 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
     } else {
       return `${years + 1}년차`
     }
+  }, [])
+
+  // 입력값 검증 함수
+  const validateInputs = () => {
+    // 전화번호 검증 (010-0000-0000 형식)
+    if (formData.phone && !/^010-\d{4}-\d{4}$/.test(formData.phone)) {
+      return '전화번호는 010-0000-0000 형식으로 입력해주세요.'
+    }
+
+    // 생년월일 검증 (18-100세)
+    if (formData.dob) {
+      const birthYear = new Date(formData.dob).getFullYear()
+      const currentYear = new Date().getFullYear()
+      const age = currentYear - birthYear
+      if (age < 18 || age > 100) {
+        return '올바른 생년월일을 입력해주세요. (18-100세)'
+      }
+    }
+
+    // 주소 길이 제한 (200자)
+    if (formData.address && formData.address.length > 200) {
+      return '주소는 200자 이내로 입력해주세요.'
+    }
+
+    return null
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 중복 클릭 방지
+    if (loading) return
+    
+    // 입력값 검증
+    const validationError = validateInputs()
+    if (validationError) {
+      setError(validationError)
+      return
+    }
+
     setLoading(true)
     setError('')
 
@@ -56,12 +108,19 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
         onProfileUpdate(result.user)
         setIsEditing(false)
         setSuccessMessage('프로필이 성공적으로 업데이트되었습니다.')
-        setTimeout(() => setSuccessMessage(''), 3000)
+        // useEffect에서 자동으로 처리됨
       } else {
         setError(result.error || '프로필 업데이트에 실패했습니다.')
       }
-    } catch {
-      setError('프로필 업데이트 중 오류가 발생했습니다.')
+    } catch (error: any) {
+      // 구체적인 에러 메시지
+      if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
+        setError('인터넷 연결을 확인해주세요.')
+      } else if (error?.message?.includes('timeout')) {
+        setError('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.')
+      } else {
+        setError('프로필 업데이트 중 오류가 발생했습니다.')
+      }
     } finally {
       setLoading(false)
     }
@@ -69,42 +128,80 @@ export default function UserProfile({ user, onProfileUpdate }: UserProfileProps)
 
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // 중복 클릭 방지
+    if (passwordLoading) return
+    
     setPasswordLoading(true)
     setPasswordError('')
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setPasswordError('새 비밀번호가 일치하지 않습니다.')
+    // 현재 비밀번호 입력 확인
+    if (!passwordData.currentPassword.trim()) {
+      setPasswordError('현재 비밀번호를 입력해주세요.')
       setPasswordLoading(false)
       return
     }
 
-    if (passwordData.newPassword.length < 4) {
-      setPasswordError('새 비밀번호는 최소 4자 이상이어야 합니다.')
+    // 새 비밀번호 입력 확인
+    if (!passwordData.newPassword.trim()) {
+      setPasswordError('새 비밀번호를 입력해주세요.')
+      setPasswordLoading(false)
+      return
+    }
+
+    // 비밀번호 확인 입력 확인
+    if (!passwordData.confirmPassword.trim()) {
+      setPasswordError('비밀번호 확인을 입력해주세요.')
+      setPasswordLoading(false)
+      return
+    }
+
+    // 새 비밀번호 일치 확인 (가장 중요!)
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('⚠️ 새 비밀번호와 비밀번호 확인이 일치하지 않습니다.')
+      setPasswordLoading(false)
+      return
+    }
+
+    // 비밀번호 길이 확인 (6자로 완화)
+    if (passwordData.newPassword.length < 6) {
+      setPasswordError('새 비밀번호는 최소 6자 이상이어야 합니다.')
+      setPasswordLoading(false)
+      return
+    }
+
+    // 현재 비밀번호와 동일한지 확인
+    if (passwordData.currentPassword === passwordData.newPassword) {
+      setPasswordError('새 비밀번호는 현재 비밀번호와 달라야 합니다.')
       setPasswordLoading(false)
       return
     }
 
     try {
-      const response = await authenticatedFetch('/api/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          currentPassword: passwordData.currentPassword,
-          newPassword: passwordData.newPassword
-        }),
-      })
-
-      const result = await response.json()
+      // Supabase 직접 연동으로 비밀번호 변경
+      const result = await changePassword(
+        user.id,
+        passwordData.currentPassword,
+        passwordData.newPassword
+      )
 
       if (result.success) {
         setShowPasswordChange(false)
         setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' })
         setSuccessMessage('비밀번호가 성공적으로 변경되었습니다.')
-        setTimeout(() => setSuccessMessage(''), 3000)
+        // useEffect에서 자동으로 처리됨
       } else {
         setPasswordError(result.error || '비밀번호 변경에 실패했습니다.')
       }
-    } catch {
-      setPasswordError('비밀번호 변경 중 오류가 발생했습니다.')
+    } catch (error: any) {
+      // 구체적인 에러 메시지
+      if (error?.message?.includes('network') || error?.message?.includes('fetch')) {
+        setPasswordError('인터넷 연결을 확인해주세요.')
+      } else if (error?.message?.includes('timeout')) {
+        setPasswordError('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.')
+      } else {
+        setPasswordError('비밀번호 변경 중 오류가 발생했습니다.')
+      }
     } finally {
       setPasswordLoading(false)
     }

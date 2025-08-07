@@ -2,31 +2,29 @@
 
 import { useState, useEffect } from 'react'
 import { Clock, Info, X, HelpCircle } from 'lucide-react'
-import { authenticatedFetch } from '@/lib/auth'
+import { useSupabase } from '@/components/SupabaseProvider'
+import { getCurrentUser } from '@/lib/auth'
 import WorkPolicyExplanationModal from './WorkPolicyExplanationModal'
 
-interface FlexibleWorkPolicy {
+interface FlexWorkSettings {
   id: string
-  policy_name: string
-  flexible_work_settings: {
-    period_name: string
-    start_date: string
-    end_date: string
-    standard_work_hours: number
-    core_time_required: boolean
-    core_start_time?: string
-    core_end_time?: string
-    weekly_standard_hours: number
-    overtime_threshold: number
-  }[]
+  start_date: string
+  end_date: string
+  standard_work_hours?: number
+  weekly_standard_hours: number
+  overtime_threshold: number
+  period_name?: string
+  is_active: boolean
+  created_at: string
 }
 
 interface WorkPolicyStatus {
   flexibleWorkActive: boolean
-  activeFlexibleWorkPolicy: FlexibleWorkPolicy | null
+  activeFlexibleWorkPolicy: FlexWorkSettings | null
 }
 
 export default function FlexibleWorkNotification() {
+  const { supabase } = useSupabase()
   const [policyStatus, setPolicyStatus] = useState<WorkPolicyStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [dismissed, setDismissed] = useState(false)
@@ -38,16 +36,49 @@ export default function FlexibleWorkNotification() {
 
   const fetchWorkPolicyStatus = async () => {
     try {
-      const response = await authenticatedFetch('/api/user/work-policy-status')
-      const result = await response.json()
+      // 현재 사용자 인증 확인
+      const currentUser = await getCurrentUser()
+      if (!currentUser) {
+        console.error('사용자 인증 실패')
+        setLoading(false)
+        return
+      }
+
+      // 현재 활성화된 탄력근무제 설정 조회
+      const today = new Date().toISOString().split('T')[0]
+      const { data: flexSettings, error } = await supabase
+        .from('flexible_work_settings')
+        .select('*')
+        .eq('is_active', true)
+        .lte('start_date', today)
+        .gte('end_date', today)
+        .order('created_at', { ascending: false })
+        .limit(1)
       
-      if (result.success) {
-        setPolicyStatus(result.data)
+      if (error) {
+        console.error('탄력근무제 설정 조회 오류:', error)
+        setPolicyStatus({
+          flexibleWorkActive: false,
+          activeFlexibleWorkPolicy: null
+        })
       } else {
-        console.error('근무정책 상태 조회 실패:', result.error)
+        const activePolicy = flexSettings?.[0] || null
+        setPolicyStatus({
+          flexibleWorkActive: !!activePolicy,
+          activeFlexibleWorkPolicy: activePolicy
+        })
+        
+        console.log('탄력근무제 상태 조회 성공:', { 
+          active: !!activePolicy, 
+          policy: activePolicy?.description || 'N/A' 
+        })
       }
     } catch (error) {
-      console.error('근무정책 상태 조회 오류:', error)
+      console.error('탄력근무제 상태 조회 예외:', error)
+      setPolicyStatus({
+        flexibleWorkActive: false,
+        activeFlexibleWorkPolicy: null
+      })
     } finally {
       setLoading(false)
     }
@@ -66,9 +97,8 @@ export default function FlexibleWorkNotification() {
   }
 
   const policy = policyStatus.activeFlexibleWorkPolicy
-  const settings = policy?.flexible_work_settings?.[0]
 
-  if (!policy || !settings) {
+  if (!policy) {
     return null
   }
 
@@ -94,29 +124,26 @@ export default function FlexibleWorkNotification() {
                 </button>
               </div>
               <p className="text-sm text-blue-800 mb-2">
-                <strong>{policy.policy_name}</strong> - {settings.period_name}
+                <strong>탄력근무제</strong> - {policy.period_name || '3개월 탄력근무제'}
               </p>
               <div className="text-sm text-blue-700 space-y-1">
                 <p>
-                  📅 <strong>기간:</strong> {formatDate(settings.start_date)} ~ {formatDate(settings.end_date)}
+                  📅 <strong>기간:</strong> {formatDate(policy.start_date)} ~ {formatDate(policy.end_date)}
                 </p>
                 <p>
-                  ⏰ <strong>정산 주기:</strong> {Math.round((new Date(settings.end_date).getTime() - new Date(settings.start_date).getTime()) / (1000 * 60 * 60 * 24 * 7))}주간
-                  {settings.core_time_required && (
-                    <span className="ml-2">
-                      | <strong>핵심시간:</strong> {settings.core_start_time}~{settings.core_end_time}
-                    </span>
-                  )}
+                  ⏰ <strong>정산 주기:</strong> {Math.round((new Date(policy.end_date).getTime() - new Date(policy.start_date).getTime()) / (1000 * 60 * 60 * 24 * 7))}주간
+                  | <strong>주당 기준:</strong> {policy.weekly_standard_hours}시간
                 </p>
                 <div className="text-xs space-y-2 mt-3">
                   <p className="text-blue-600 bg-blue-100 px-2 py-1 rounded">
-                    💡 정산기간 평균 주 40시간 이하 유지하며, 특정 주/일은 기준 초과 가능 (주 52시간, 일 12시간 한도)
+                    💡 정산기간 평균 주 {policy.weekly_standard_hours}시간 이하 유지하며, 특정 주/일은 기준 초과 가능 (주 52시간, 일 12시간 한도)
                   </p>
                   <div className="bg-yellow-50 border border-yellow-200 px-2 py-2 rounded">
                     <p className="text-yellow-800 font-medium mb-1">⚠️ 수당 지급 기준</p>
                     <div className="text-yellow-700 space-y-1">
-                      <p>• <strong>초과근무:</strong> 계획 시간 내 + 평균 40h 이하일 때 미지급</p>
+                      <p>• <strong>초과근무:</strong> 계획 시간 내 + 평균 {policy.weekly_standard_hours}h 이하일 때 미지급</p>
                       <p>• <strong>야간근무:</strong> 항상 지급 (22:00~06:00, +50%)</p>
+                      <p>• <strong>일 기준:</strong> {policy.standard_work_hours || 8}시간, 초과분은 {policy.overtime_threshold || 12}시간부터 연장근무</p>
                     </div>
                   </div>
                 </div>

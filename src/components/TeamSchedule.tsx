@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { getDepartmentCalendars, CALENDAR_NAMES } from '@/lib/calendarMapping'
+import { 
+  fetchMultipleCalendarEvents, 
+  createCalendarEvent, 
+  updateCalendarEvent, 
+  deleteCalendarEvent,
+  parseEventDate,
+  initializeGoogleAPI 
+} from '@/lib/googleCalendar'
 
 interface CalendarEvent {
   id: string
@@ -14,6 +22,8 @@ interface CalendarEvent {
   calendarId?: string
   calendarName: string
   color?: string
+  summary?: string
+  htmlLink?: string
 }
 
 interface CalendarConfig {
@@ -85,6 +95,9 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
 
     setCalendarLoading(true)
     try {
+      // Google API 초기화
+      await initializeGoogleAPI()
+      
       const allEvents: CalendarEvent[] = []
       // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
       const startOfWeek = new Date(currentDate)
@@ -99,47 +112,41 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
       const timeMax = endOfWeek.toISOString()
       console.log('🔄 [DEBUG] 시간 범위:', { timeMin, timeMax })
 
-      // Google Calendar에서 이벤트 가져오기
+      // Google Calendar 직접 연동으로 이벤트 가져오기
+      const calendarIds = calendarConfigs.map(config => config.calendar_id)
+      const eventsData = await fetchMultipleCalendarEvents(calendarIds, timeMin, timeMax)
+      
+      // 각 캘린더별 이벤트 처리
       for (const config of calendarConfigs) {
-        console.log(`🔄 [DEBUG] 캘린더 이벤트 조회 시도: ${config.calendar_alias} (${config.calendar_id})`)
-        try {
-          const response = await fetch('/api/calendar/events', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              calendarId: config.calendar_id,
-              timeMin,
-              timeMax,
-              maxResults: 250
-            }),
-          })
-
-          console.log(`🔄 [DEBUG] 캘린더 API 응답 상태: ${response.status}`)
-          
-          if (response.ok) {
-            const data = await response.json()
-            console.log(`🔄 [DEBUG] 가져온 이벤트 수: ${data.events?.length || 0}`)
-            if (data.events) {
-              const eventsWithCalendarInfo = data.events.map((event: CalendarEvent) => ({
-                ...event,
-                calendarName: config.calendar_alias,
-                calendarId: config.calendar_id
-              }))
-              allEvents.push(...eventsWithCalendarInfo)
-            }
-          } else {
-            const errorText = await response.text()
-            console.error(`🔄 [ERROR] 캘린더 API 오류: ${response.status} - ${errorText}`)
+        const events = eventsData[config.calendar_id] || []
+        console.log(`🔄 [DEBUG] ${config.calendar_alias}: ${events.length}개 이벤트`)
+        
+        const formattedEvents = events.map((event: any) => {
+          const { start, end, isAllDay } = parseEventDate(event)
+          return {
+            id: event.id || '',
+            title: event.summary || '',
+            start: isAllDay ? event.start?.date || '' : event.start?.dateTime || '',
+            end: isAllDay ? event.end?.date || '' : event.end?.dateTime || '',
+            description: event.description,
+            location: event.location,
+            calendarId: config.calendar_id,
+            calendarName: config.calendar_alias || '',
+            htmlLink: event.htmlLink
           }
-        } catch (error) {
-          console.error(`캘린더 ${config.calendar_alias} 이벤트 조회 오류:`, error)
-        }
+        })
+        
+        allEvents.push(...formattedEvents)
       }
 
       console.log(`🔄 [DEBUG] 이번 주 이벤트 수:`, allEvents.length)
       setCalendarEvents(allEvents)
     } catch (error) {
       console.error('캘린더 이벤트 조회 오류:', error)
+      // 권한 오류인 경우 사용자에게 알림
+      if (error instanceof Error && error.message.includes('Token')) {
+        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      }
       setCalendarEvents([])
     } finally {
       setCalendarLoading(false)
@@ -240,52 +247,45 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
       return
     }
 
-    const apiRoute = editingEvent ? '/api/calendar/update-event' : '/api/calendar/create-event-direct'
-    
-    let eventData
-    if (formData.is_all_day) {
-      // 종일 이벤트
-      const endDate = new Date(formData.date)
-      endDate.setDate(endDate.getDate() + 1) // Google Calendar 규칙: 종료일은 다음 날
-      
-      eventData = {
-        summary: formData.title,
-        description: formData.description,
-        location: formData.location,
-        start: { date: formData.date },
-        end: { date: endDate.toISOString().split('T')[0] }
-      }
-    } else {
-      // 시간 지정 이벤트
-      const startDateTime = new Date(`${formData.date}T${formData.time || '09:00'}:00`)
-      const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 지속
-
-      eventData = {
-        summary: formData.title,
-        description: formData.description,
-        location: formData.location,
-        start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
-        end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
-      }
-    }
-
-    const body = editingEvent 
-      ? { eventId: editingEvent.id, calendarId: editingEvent.calendarId, eventData }
-      : { calendarId: formData.targetCalendar, eventData }
-
     try {
-      const response = await fetch(apiRoute, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      // Google API 초기화
+      await initializeGoogleAPI()
+      
+      let eventData
+      if (formData.is_all_day) {
+        // 종일 이벤트
+        const endDate = new Date(formData.date)
+        endDate.setDate(endDate.getDate() + 1) // Google Calendar 규칙: 종료일은 다음 날
+        
+        eventData = {
+          summary: formData.title,
+          description: formData.description,
+          location: formData.location,
+          start: { date: formData.date },
+          end: { date: endDate.toISOString().split('T')[0] }
+        }
+      } else {
+        // 시간 지정 이벤트
+        const startDateTime = new Date(`${formData.date}T${formData.time || '09:00'}:00`)
+        const endDateTime = new Date(startDateTime.getTime() + 60 * 60 * 1000) // 1시간 지속
 
-      if (!response.ok) {
-        const errorResult = await response.json()
-        throw new Error(errorResult.error || 'API 요청 실패')
+        eventData = {
+          summary: formData.title,
+          description: formData.description,
+          location: formData.location,
+          start: { dateTime: startDateTime.toISOString(), timeZone: 'Asia/Seoul' },
+          end: { dateTime: endDateTime.toISOString(), timeZone: 'Asia/Seoul' }
+        }
       }
 
-      alert(editingEvent ? '일정이 성공적으로 수정되었습니다!' : '일정이 성공적으로 등록되었습니다!')
+      // Google Calendar 직접 연동으로 이벤트 생성/수정
+      if (editingEvent) {
+        await updateCalendarEvent(editingEvent.calendarId || formData.targetCalendar, editingEvent.id, eventData)
+        alert('일정이 성공적으로 수정되었습니다!')
+      } else {
+        await createCalendarEvent(formData.targetCalendar, eventData)
+        alert('일정이 성공적으로 등록되었습니다!')
+      }
 
       setShowAddForm(false)
       setShowEditForm(false)
@@ -302,7 +302,11 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
       fetchCalendarEvents() // 목록 새로고침
     } catch (error) {
       console.error(editingEvent ? '일정 수정 오류:' : '일정 등록 오류:', error)
-      alert(editingEvent ? '일정 수정 중 오류가 발생했습니다.' : '일정 등록 중 오류가 발생했습니다.')
+      if (error instanceof Error && error.message.includes('Token')) {
+        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      } else {
+        alert(editingEvent ? '일정 수정 중 오류가 발생했습니다.' : '일정 등록 중 오류가 발생했습니다.')
+      }
     }
   }
 
@@ -328,17 +332,21 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
     }
 
     try {
-      await fetch('/api/calendar/delete-event', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventId: event.id, calendarId: event.calendarId })
-      })
-
+      // Google API 초기화
+      await initializeGoogleAPI()
+      
+      // Google Calendar 직접 연동으로 이벤트 삭제
+      await deleteCalendarEvent(event.calendarId || '', event.id)
+      
       alert('일정이 성공적으로 삭제되었습니다!')
       fetchCalendarEvents() // 목록 새로고침
     } catch (error) {
       console.error('일정 삭제 오류:', error)
-      alert('일정 삭제 중 오류가 발생했습니다.')
+      if (error instanceof Error && error.message.includes('Token')) {
+        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      } else {
+        alert('일정 삭제 중 오류가 발생했습니다.')
+      }
     }
   }
 

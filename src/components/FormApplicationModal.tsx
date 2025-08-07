@@ -5,6 +5,10 @@ import type { User } from '@/lib/auth'
 import { getCurrentUser } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
 import { useSupabase } from '@/components/SupabaseProvider'
+import { AlertCircle } from 'lucide-react'
+import { getSickLeaveRecommendation } from '@/lib/sick-leave-helper'
+import { getLegalLeaveDays, getLeaveSubTypes, LEGAL_LEAVE_DAYS } from '@/lib/legal-leave-days'
+import { isWeekendOrHoliday, initializeHolidayCache } from '@/lib/holidays'
 
 interface FormField {
   name: string
@@ -44,6 +48,8 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   const [loading, setLoading] = useState(false)
   const [modalTitle, setModalTitle] = useState('서식 신청')
   const [submitting, setSubmitting] = useState(false)
+  const [submitStatus, setSubmitStatus] = useState<{ type: 'success' | 'error' | 'warning' | null; message: string }>({ type: null, message: '' })
+  const [emailStatus, setEmailStatus] = useState<'pending' | 'sending' | 'success' | 'failed' | null>(null)
   const [error, setError] = useState('')
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [leaveData, setLeaveData] = useState<any>(null)
@@ -119,6 +125,8 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     if (isOpen) {
       loadTemplates()
       loadLeaveData()
+      // 공휴일 캐시 초기화 (주말/공휴일 계산을 위해)
+      initializeHolidayCache()
     } else {
       // 모달이 닫힐 때 상태 초기화
       setSelectedTemplate(null)
@@ -171,31 +179,40 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
   }, [selectedTemplate, defaultValues])
 
   // 자동 계산 함수들
-  const calculateDays = (startDate: string, endDate: string): number => {
+  const calculateDays = (startDate: string, endDate: string, excludeWeekends: boolean = true): number => {
     if (!startDate || !endDate) return 0
     const start = new Date(startDate)
     const end = new Date(endDate)
     if (end < start) return 0
     
-    // 날짜 차이 계산 (inclusive) - 시작일과 종료일 모두 포함
-    const timeDiff = end.getTime() - start.getTime()
-    const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
-    return daysDiff + 1 // 시작일도 포함하므로 +1
+    // 주말/공휴일 제외 여부에 따라 다른 계산 방식 적용
+    if (!excludeWeekends) {
+      // 경조사 등 주말 포함 계산이 필요한 경우 (기존 방식)
+      const timeDiff = end.getTime() - start.getTime()
+      const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+      return daysDiff + 1 // 시작일도 포함하므로 +1
+    }
+    
+    // 주말/공휴일 제외하고 실제 근무일만 계산 (개선된 방식)
+    let workDays = 0
+    const currentDate = new Date(start)
+    
+    while (currentDate <= end) {
+      // isWeekendOrHoliday 함수를 사용하여 주말/공휴일 체크
+      const dateString = currentDate.toISOString().split('T')[0]
+      if (!isWeekendOrHoliday(currentDate)) {
+        workDays++
+      }
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+    
+    return workDays
   }
 
-  // 경조사 휴가 일수 계산
+  // 경조사 휴가 일수 계산 (법정 휴가일 데이터 연동)
   const getCondolenceLeave = (type: string): number => {
-    switch (type) {
-      case '본인 결혼': return 5
-      case '자녀 결혼': return 2
-      case '부모 사망':
-      case '배우자 사망': return 5
-      case '배우자 부모 사망': return 3
-      case '자녀 사망':
-      case '형제·자매 사망': return 3
-      case '기타 가족/친족 사망': return 0 // 회사와 협의
-      default: return 0
-    }
+    const days = getLegalLeaveDays('경조사', type)
+    return typeof days === 'number' ? days : 0
   }
 
   const calculateHours = (startTime: string, endTime: string): string => {
@@ -274,7 +291,9 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
 
     // 휴가/휴직 일수 자동 계산 (시작일과 종료일이 모두 있는 경우)
     if ((selectedTemplate.name === '휴가 신청서' || selectedTemplate.name === '휴직계') && formData.시작일 && formData.종료일) {
-      const days = calculateDays(formData.시작일, formData.종료일)
+      // 휴가 신청서는 주말/공휴일 제외, 휴직계는 포함
+      const excludeWeekends = selectedTemplate.name === '휴가 신청서'
+      const days = calculateDays(formData.시작일, formData.종료일, excludeWeekends)
       if (formData.휴가일수 !== days.toString() && formData.휴직일수 !== days.toString()) {
         if (selectedTemplate.name === '휴가 신청서') {
           // 반차인 경우 0.5일로 고정
@@ -289,17 +308,17 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
       }
     }
 
-    // 출산휴가 일수 자동 계산
+    // 출산휴가 일수 자동 계산 (출산휴가는 주말 포함)
     if (selectedTemplate.name === '출산휴가 및 육아휴직 신청서') {
       if (formData.출산휴가시작일 && formData.출산휴가종료일) {
-        const days = calculateDays(formData.출산휴가시작일, formData.출산휴가종료일)
+        const days = calculateDays(formData.출산휴가시작일, formData.출산휴가종료일, false) // 주말 포함
         if (formData.휴가일수 !== days.toString()) {
           newFormData.휴가일수 = days.toString()
           hasChanges = true
         }
       }
       if (formData.육아휴직시작일 && formData.육아휴직종료일) {  
-        const days = calculateDays(formData.육아휴직시작일, formData.육아휴직종료일)
+        const days = calculateDays(formData.육아휴직시작일, formData.육아휴직종료일, false) // 주말 포함
         if (formData.육아휴직일수 !== days.toString()) {
           newFormData.육아휴직일수 = days.toString()
           hasChanges = true
@@ -457,7 +476,7 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
             {field.name === '휴가일수' && selectedTemplate?.name === '휴가 신청서' && 
               (formData.휴가형태 === '시간차' ? '시작시간과 종료시간을 선택하면 자동으로 계산됩니다' : 
                formData.휴가형태 === '반차' ? '반차는 0.5일로 자동 설정됩니다' :
-               '시작일과 종료일을 선택하면 자동으로 계산됩니다')
+               '시작일과 종료일을 선택하면 자동으로 계산됩니다 (주말/공휴일 제외)')
             }
             {field.name === '휴직일수' && '시작일과 종료일을 선택하면 자동으로 계산됩니다'}
             {field.name === '재직일' && '신청일을 선택하면 입사일 기준으로 자동 계산됩니다'}
@@ -953,6 +972,110 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
     }
   }
 
+  // 관리자 이메일 주소 조회 함수
+  const getAdminEmails = async (): Promise<string[]> => {
+    try {
+      const { data: admins, error } = await supabase
+        .from('users')
+        .select('email')
+        .eq('role', 'admin')
+        .not('email', 'is', null)
+      
+      if (error) {
+        console.error('관리자 이메일 조회 오류:', error)
+        return ['lewis@motionsense.co.kr'] // 폴백 이메일
+      }
+      
+      const adminEmails = admins?.map(admin => admin.email) || []
+      return adminEmails.length > 0 ? adminEmails : ['lewis@motionsense.co.kr']
+    } catch (error) {
+      console.error('관리자 이메일 조회 예외:', error)
+      return ['lewis@motionsense.co.kr'] // 폴백 이메일
+    }
+  }
+
+  // 재시도 메커니즘을 포함한 이메일 발송 함수
+  const sendEmailNotificationWithRetry = async (
+    formType: string, 
+    userData: any, 
+    formData: any,
+    maxRetries: number = 2
+  ): Promise<{ success: boolean; error?: string }> => {
+    let lastError: string = ''
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`📧 이메일 발송 시도 ${attempt}/${maxRetries}:`, { formType, userData: userData.name })
+        
+        // 관리자 이메일 주소 동적 조회
+        const adminEmails = await getAdminEmails()
+        console.log('📋 관리자 이메일 목록:', adminEmails)
+        
+        // PDF HTML 생성
+        let pdfContent = ''
+        try {
+          pdfContent = generateFormHTML(formType, formData, userData)
+        } catch (pdfError) {
+          console.warn('PDF 생성 실패, 텍스트만 전송:', pdfError)
+          pdfContent = `
+            <div style="font-family: Arial, sans-serif; padding: 20px;">
+              <h2>${formType}</h2>
+              <p><strong>신청자:</strong> ${userData.name} (${userData.department} ${userData.position})</p>
+              <p><strong>신청 시간:</strong> ${new Date().toLocaleString('ko-KR')}</p>
+              <p><strong>참고:</strong> PDF 생성에 실패하여 기본 정보만 표시됩니다.</p>
+              <hr>
+              <h3>신청 내용:</h3>
+              <pre>${JSON.stringify(formData, null, 2)}</pre>
+            </div>
+          `
+        }
+        
+        // 이메일 API 호출
+        const emailResponse = await fetch('/api/notifications/form-submission', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            formType,
+            applicantName: userData.name,
+            applicantDepartment: userData.department,
+            applicantPosition: userData.position,
+            formData,
+            pdfContent,
+            adminEmails // 하드코딩 대신 동적 조회된 이메일들
+          })
+        })
+        
+        if (!emailResponse.ok) {
+          const errorText = await emailResponse.text()
+          lastError = `HTTP ${emailResponse.status}: ${errorText}`
+          console.error(`이메일 발송 실패 (시도 ${attempt}):`, lastError)
+          
+          if (attempt < maxRetries) {
+            console.log(`⏳ ${attempt * 2}초 후 재시도...`)
+            await new Promise(resolve => setTimeout(resolve, attempt * 2000)) // 2초, 4초 대기
+            continue
+          }
+        } else {
+          console.log('✅ 관리자 이메일 알림 발송 완료')
+          return { success: true }
+        }
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : '네트워크 오류'
+        console.error(`이메일 발송 예외 (시도 ${attempt}):`, error)
+        
+        if (attempt < maxRetries) {
+          console.log(`⏳ ${attempt * 2}초 후 재시도...`)
+          await new Promise(resolve => setTimeout(resolve, attempt * 2000))
+          continue
+        }
+      }
+    }
+    
+    return { success: false, error: lastError }
+  }
+
   // 폼 제출
   // 대체휴가 및 보상휴가 사용 규칙 검증
   const validateHourlyLeave = (): string | null => {
@@ -1107,14 +1230,60 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
 
       // 대체휴가 우선 사용 독려 메시지 비활성화
       
-      // 2. PDF 생성 및 출력
-      await generatePDF()
+      // 2. 관리자 이메일 알림 발송 (PDF 포함)
+      const userData = {
+        name: user.name,
+        department: user.department,
+        position: user.position,
+        phone: user.phone,
+        hire_date: user.hire_date
+      }
       
-      alert(`✅ ${selectedTemplate.name} 신청이 완료되었습니다!`)
-      onSuccess()
-      handleClose()
+      setEmailStatus('sending')
+      setSubmitStatus({ type: null, message: '📧 이메일 알림 발송 중...' })
+      
+      const emailResult = await sendEmailNotificationWithRetry(selectedTemplate.name, userData, formData)
+      
+      if (emailResult.success) {
+        setEmailStatus('success')
+        setSubmitStatus({ type: 'success', message: '✅ 관리자에게 알림 메일이 성공적으로 발송되었습니다.' })
+      } else {
+        setEmailStatus('failed')
+        setSubmitStatus({ 
+          type: 'warning', 
+          message: `⚠️ 이메일 발송에 실패했습니다. (${emailResult.error})\n서식 신청은 정상 처리되었으나, 관리자에게 직접 연락해주세요.` 
+        })
+      }
+      
+      // 3. PDF 생성 및 출력
+      setSubmitStatus({ type: 'success', message: '📄 PDF 생성 중...' })
+      try {
+        await generatePDF()
+        setSubmitStatus({ type: 'success', message: '✅ PDF 생성 완료!' })
+      } catch (pdfError) {
+        console.error('PDF 생성 오류:', pdfError)
+        setSubmitStatus({ type: 'warning', message: '⚠️ PDF 생성에 실패했지만 서식 신청은 완료되었습니다.' })
+      }
+      
+      // 성공 메시지 표시
+      setTimeout(() => {
+        setSubmitStatus({ 
+          type: 'success', 
+          message: `✅ ${selectedTemplate.name} 신청이 성공적으로 완료되었습니다!${emailResult.success ? ' 관리자 알림도 발송되었습니다.' : ''}` 
+        })
+        
+        setTimeout(() => {
+          onSuccess()
+          handleClose()
+          // 상태 초기화
+          setSubmitStatus({ type: null, message: '' })
+          setEmailStatus(null)
+        }, 2000)
+      }, 1000)
     } catch (err) {
-      setError('신청 처리 중 오류가 발생했습니다.')
+      const errorMessage = err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.'
+      setError(`신청 처리 중 오류가 발생했습니다: ${errorMessage}`)
+      setSubmitStatus({ type: 'error', message: `❌ 오류: ${errorMessage}` })
       console.error('Error submitting form:', err)
     } finally {
       setSubmitting(false)
@@ -1153,6 +1322,48 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
               {error}
+            </div>
+          )}
+
+          {/* 제출 상태 메시지 */}
+          {submitStatus.type && (
+            <div className={`mb-4 px-4 py-3 rounded-lg border ${
+              submitStatus.type === 'success' 
+                ? 'bg-green-50 border-green-200 text-green-700'
+                : submitStatus.type === 'error'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : submitStatus.type === 'warning'
+                ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
+                : 'bg-blue-50 border-blue-200 text-blue-700'
+            }`}>
+              <div className="flex items-center space-x-2">
+                {submitting && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                )}
+                <div className="whitespace-pre-line">{submitStatus.message}</div>
+              </div>
+            </div>
+          )}
+
+          {/* 이메일 발송 상태 인디케이터 */}
+          {emailStatus && emailStatus !== 'pending' && (
+            <div className={`mb-4 px-3 py-2 rounded-md text-sm ${
+              emailStatus === 'sending'
+                ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                : emailStatus === 'success'
+                ? 'bg-green-100 text-green-800 border border-green-200'
+                : 'bg-red-100 text-red-800 border border-red-200'
+            }`}>
+              <div className="flex items-center space-x-2">
+                {emailStatus === 'sending' && (
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></div>
+                )}
+                <span>
+                  {emailStatus === 'sending' && '📧 이메일 발송 중...'}
+                  {emailStatus === 'success' && '✅ 이메일 발송 완료'}
+                  {emailStatus === 'failed' && '❌ 이메일 발송 실패'}
+                </span>
+              </div>
             </div>
           )}
 
@@ -1199,6 +1410,9 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
               {selectedTemplate.name === '휴가 신청서' && leaveData && (
                 <div className="mb-4 bg-blue-50 border border-blue-200 rounded-md p-4">
                   <h5 className="text-sm font-medium text-blue-900 mb-2">📊 현재 잔여 휴가</h5>
+                  <p className="text-xs text-blue-700 mb-2">
+                    ※ 휴가 일수는 주말과 공휴일을 제외한 실제 근무일 기준으로 자동 계산됩니다
+                  </p>
                   <div className="text-sm">
                     {/* 대체휴가 신청시 대체휴가 잔여량만 표시 */}
                     {defaultValues?._leaveCategory === 'substitute' && (
@@ -1285,39 +1499,99 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                   <h5 className="text-sm font-medium text-orange-900 mb-2">🎗️ 경조사 휴가 정책 안내</h5>
                   <div className="text-sm text-orange-800 space-y-1">
                     <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p><strong>본인 결혼:</strong> 5일</p>
-                        <p><strong>자녀 결혼:</strong> 2일</p>
-                        <p><strong>부모·배우자 사망:</strong> 5일</p>
-                      </div>
-                      <div>
-                        <p><strong>배우자 부모 사망:</strong> 3일</p>
-                        <p><strong>자녀·형제자매 사망:</strong> 3일</p>
-                        <p><strong>기타 가족/친족:</strong> 회사 협의</p>
-                      </div>
+                      {LEGAL_LEAVE_DAYS.filter(l => l.category === '경조사').map((leave, idx) => (
+                        <div key={idx} className="border-b border-orange-200 pb-1">
+                          <p>
+                            <strong>{leave.subType}:</strong> {leave.legalDays}일
+                            {leave.requiresDocument && <span className="text-xs ml-1">(증빙필요)</span>}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                     <p className="mt-2 text-xs bg-orange-100 p-2 rounded">
                       <strong>※ 참고:</strong> 경조사 휴가 기간에 휴일이나 휴무일이 포함된 경우에도 휴가일수에 포함하여 계산됩니다.
                     </p>
                     {formData.경조사구분 && (
-                      <p className="mt-2 font-medium text-orange-900">
-                        선택한 경조사 ({formData.경조사구분}): {getCondolenceLeave(formData.경조사구분) || '회사 협의'}일
+                      <p className="mt-2 font-medium text-orange-900 bg-orange-100 p-2 rounded">
+                        선택한 경조사 ({formData.경조사구분}): {
+                          getLegalLeaveDays('경조사', formData.경조사구분 || '') || '회사 협의'
+                        }일
                       </p>
                     )}
                   </div>
                 </div>
               )}
 
+              {/* 공가 신청 시 정책 안내 표시 */}
+              {selectedTemplate.name === '휴가 신청서' && formData.휴가형태 === '공가' && (
+                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-md p-4">
+                  <h5 className="text-sm font-medium text-blue-900 mb-2">🏛️ 공가 정책 안내</h5>
+                  <div className="text-sm text-blue-800 space-y-1">
+                    <div className="space-y-1">
+                      {LEGAL_LEAVE_DAYS.filter(l => l.category === '공가').map((leave, idx) => (
+                        <div key={idx} className="border-b border-blue-200 pb-1">
+                          <p>
+                            <strong>{leave.subType}:</strong> {typeof leave.legalDays === 'string' ? leave.legalDays : `${leave.legalDays}일`}
+                            {leave.requiresDocument && <span className="text-xs ml-1">(증빙필요)</span>}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs bg-blue-100 p-2 rounded">
+                      <strong>※ 참고:</strong> 공가는 공무 수행에 필요한 기간만큼 부여되며, 관련 증빙서류를 제출해야 합니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* 병가 신청 시 정책 안내 표시 */}
               {selectedTemplate.name === '휴가 신청서' && formData.휴가형태 === '병가' && (
-                <div className="mb-4 bg-red-50 border border-red-200 rounded-md p-4">
-                  <h5 className="text-sm font-medium text-red-900 mb-2">🏥 병가 정책 안내</h5>
-                  <div className="text-sm text-red-800 space-y-2">
-                    <p>업무 외 질병이나 부상으로 병가를 신청할 경우, <strong>연간 최대 60일</strong>까지 허가할 수 있습니다.</p>
-                    <p>사용 가능한 <strong>연차휴가를 우선 사용</strong>하며, 연차휴가를 초과하는 일수에 대해서는 <strong>무급으로 처리</strong>됩니다.</p>
-                    <p className="bg-red-100 p-2 rounded text-xs">
-                      <strong>⚠️ 중요:</strong> 1주 이상 계속 병가를 신청할 경우에는 <strong>의사 진단서를 첨부</strong>해야 합니다.
-                    </p>
+                <div className="mb-4">
+                  {/* 병가 신청 시 연차 사용 권장 메시지 */}
+                  {leaveData && leaveData.leave_types && (
+                    (() => {
+                      const recommendation = getSickLeaveRecommendation(
+                        leaveData.leave_types.annual_days || 0,
+                        leaveData.leave_types.used_annual_days || 0,
+                        leaveData.leave_types.sick_days || 60,
+                        leaveData.leave_types.used_sick_days || 0
+                      )
+                      
+                      if (recommendation.recommendationType === 'use_annual') {
+                        return (
+                          <div className="mb-4 bg-yellow-50 border border-yellow-300 rounded-md p-4">
+                            <div className="flex items-start">
+                              <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 mr-2" />
+                              <div className="flex-1">
+                                <h5 className="text-sm font-medium text-yellow-900 mb-2">💡 연차 사용 권장</h5>
+                                <div className="text-sm text-yellow-800 space-y-1">
+                                  <p>{recommendation.message}</p>
+                                  <div className="mt-2 bg-yellow-100 p-2 rounded">
+                                    <p className="text-xs">
+                                      • 잔여 연차: <strong>{recommendation.remainingAnnualDays}일</strong><br/>
+                                      • 잔여 병가: <strong>{60 - (leaveData.leave_types.used_sick_days || 0)}일</strong> (무급)<br/>
+                                      • <strong>권장:</strong> {recommendation.message}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()
+                  )}
+                  
+                  <div className="bg-red-50 border border-red-200 rounded-md p-4">
+                    <h5 className="text-sm font-medium text-red-900 mb-2">🏥 병가 정책 안내</h5>
+                    <div className="text-sm text-red-800 space-y-2">
+                      <p>업무 외 질병이나 부상으로 병가를 신청할 경우, <strong>연간 최대 60일</strong>까지 허가할 수 있습니다.</p>
+                      <p>사용 가능한 <strong>연차휴가를 우선 사용</strong>하며, 연차휴가를 초과하는 일수에 대해서는 <strong>무급으로 처리</strong>됩니다.</p>
+                      <p className="bg-red-100 p-2 rounded text-xs">
+                        <strong>⚠️ 중요:</strong> 1주 이상 계속 병가를 신청할 경우에는 <strong>의사 진단서를 첨부</strong>해야 합니다.
+                      </p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1365,9 +1639,27 @@ export default function FormApplicationModal({ user, isOpen, onClose, onSuccess,
                   <button
                     type="submit"
                     disabled={submitting}
-                    className="bg-indigo-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white transition-all duration-200 ${
+                      submitting 
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-indigo-600 hover:bg-indigo-700'
+                    }`}
                   >
-                    {submitting ? '제출 중...' : '신청하기'}
+                    <div className="flex items-center space-x-2">
+                      {submitting && (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      )}
+                      <span>
+                        {submitting 
+                          ? (
+                            emailStatus === 'sending' ? '📧 이메일 발송 중...' :
+                            submitStatus.message ? submitStatus.message.replace(/[✅⚠️❌📧📄]/g, '').trim() :
+                            '신청 처리 중...'
+                          )
+                          : '신청하기'
+                        }
+                      </span>
+                    </div>
                   </button>
                 </div>
               </form>
