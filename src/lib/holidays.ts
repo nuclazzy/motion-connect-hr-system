@@ -7,9 +7,69 @@
 const SUPABASE_URL = 'https://uxfjjquhbksvlqzrjfpj.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4ZmpqcXVoYmtzdmxxenJqZnBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1Njk3NTYsImV4cCI6MjA2ODE0NTc1Nn0.6AcbiyzXHczbCF2Mv3lt5Qck7FQ_Gf4i6eMqiLAmDWA'
 
+// 하드코딩된 한국 공휴일 데이터 (2024-2026)
+const KOREAN_HOLIDAYS: { [key: string]: string } = {
+  // 2024년
+  '2024-01-01': '신정',
+  '2024-02-09': '설날 연휴',
+  '2024-02-10': '설날',
+  '2024-02-11': '설날 연휴',
+  '2024-02-12': '대체휴일',
+  '2024-03-01': '삼일절',
+  '2024-04-10': '국회의원선거',
+  '2024-05-05': '어린이날',
+  '2024-05-06': '대체휴일',
+  '2024-05-15': '부처님 오신 날',
+  '2024-06-06': '현충일',
+  '2024-08-15': '광복절',
+  '2024-09-16': '추석 연휴',
+  '2024-09-17': '추석',
+  '2024-09-18': '추석 연휴',
+  '2024-10-03': '개천절',
+  '2024-10-09': '한글날',
+  '2024-12-25': '성탄절',
+  // 2025년
+  '2025-01-01': '신정',
+  '2025-01-28': '설날 연휴',
+  '2025-01-29': '설날',
+  '2025-01-30': '설날 연휴',
+  '2025-03-01': '삼일절',
+  '2025-03-03': '대체휴일',
+  '2025-05-05': '어린이날',
+  '2025-05-06': '대체휴일',
+  '2025-06-06': '현충일',
+  '2025-08-15': '광복절',
+  '2025-10-03': '개천절',
+  '2025-10-05': '추석 연휴',
+  '2025-10-06': '추석',
+  '2025-10-07': '추석 연휴',
+  '2025-10-08': '대체휴일',
+  '2025-10-09': '한글날',
+  '2025-12-25': '성탄절',
+  // 2026년
+  '2026-01-01': '신정',
+  '2026-02-16': '설날 연휴',
+  '2026-02-17': '설날',
+  '2026-02-18': '설날 연휴',
+  '2026-03-01': '삼일절',
+  '2026-03-02': '대체휴일',
+  '2026-05-05': '어린이날',
+  '2026-05-25': '부처님 오신 날',
+  '2026-06-06': '현충일',
+  '2026-08-15': '광복절',
+  '2026-08-17': '대체휴일',
+  '2026-09-24': '추석 연휴',
+  '2026-09-25': '추석',
+  '2026-09-26': '추석 연휴',
+  '2026-10-03': '개천절',
+  '2026-10-05': '대체휴일',
+  '2026-10-09': '한글날',
+  '2026-12-25': '성탄절'
+}
+
 // 공휴일 데이터 캐시
-let holidayCache: { [key: string]: string } = {}
-let lastCacheUpdate: number = 0
+let holidayCache: { [key: string]: string } = { ...KOREAN_HOLIDAYS }
+let lastCacheUpdate: number = Date.now()
 const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24시간
 
 
@@ -26,12 +86,25 @@ export const initializeHolidayCache = async (year?: number) => {
 }
 
 /**
- * 공공데이터포털 API를 통해 공휴일 정보 가져오기 (Supabase Edge Function 사용)
+ * 공공데이터포털 API를 통해 공휴일 정보 가져오기 (CORS 문제로 인해 하드코딩 데이터 사용)
  */
 export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string]: string }> => {
   try {
-    console.log(`📅 Fetching holidays for ${year} from 공공데이터포털 API...`)
+    console.log(`📅 Using hardcoded holidays for ${year} (CORS issue with Edge Function)`)
     
+    // 하드코딩된 데이터에서 해당 연도 공휴일 필터링
+    const yearHolidays: { [key: string]: string } = {}
+    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
+      if (date.startsWith(`${year}-`)) {
+        yearHolidays[date] = KOREAN_HOLIDAYS[date]
+      }
+    })
+    
+    console.log(`📅 Found ${Object.keys(yearHolidays).length} holidays for ${year}`)
+    return yearHolidays
+    
+    // Edge Function CORS 문제가 해결되면 아래 코드 활성화
+    /*
     const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/swift-service?year=${year}`
     console.log(`📅 Calling Edge Function: ${edgeFunctionUrl}`)
     
@@ -56,10 +129,18 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
       const errorText = await response.text()
       throw new Error(`Edge Function failed with status ${response.status}: ${errorText}`)
     }
+    */
     
   } catch (error) {
-    console.error('공공데이터포털 API 공휴일 조회 오류:', error)
-    throw error // 오류를 상위로 전달
+    console.error('공휴일 조회 오류:', error)
+    // 에러 발생 시 하드코딩된 데이터 반환
+    const yearHolidays: { [key: string]: string } = {}
+    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
+      if (date.startsWith(`${year}-`)) {
+        yearHolidays[date] = KOREAN_HOLIDAYS[date]
+      }
+    })
+    return yearHolidays
   }
 }
 
@@ -100,7 +181,15 @@ export const updateHolidayCache = async (year: number) => {
     console.log(`📅 Successfully cached ${Object.keys(holidays).length} holidays for ${year}`)
   } catch (error) {
     console.error(`❌ Failed to update holiday cache for ${year}:`, error)
-    throw error // 오류를 상위로 전달
+    // 에러 발생 시 하드코딩된 데이터 사용
+    const yearHolidays: { [key: string]: string } = {}
+    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
+      if (date.startsWith(`${year}-`)) {
+        yearHolidays[date] = KOREAN_HOLIDAYS[date]
+      }
+    })
+    holidayCache = { ...holidayCache, ...yearHolidays }
+    console.log(`📅 Using fallback hardcoded data for ${year}`)
   }
 }
 
@@ -109,7 +198,11 @@ export const updateHolidayCache = async (year: number) => {
  */
 export const isHoliday = async (dateString: string): Promise<string | undefined> => {
   const year = parseInt(dateString.split('-')[0])
-  await updateHolidayCache(year)
+  try {
+    await updateHolidayCache(year)
+  } catch (error) {
+    console.log(`📅 Using cached data for holiday check`)
+  }
   return holidayCache[dateString]
 }
 

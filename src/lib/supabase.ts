@@ -14,6 +14,12 @@ export const supabase = (() => {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
+      },
+      global: {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
       }
     })
   }
