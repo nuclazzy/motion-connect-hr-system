@@ -5,30 +5,9 @@ import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import BulkAttendanceUpload from '@/components/BulkAttendanceUpload'
 import SpecialLeaveGrantModal from '@/components/SpecialLeaveGrantModal'
-import { ChevronLeft, ChevronRight, Calculator, AlertCircle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 
-// Overtime management interfaces
-interface OvertimeRecord {
-  id: string
-  user_id: string
-  work_date: string
-  overtime_hours: number
-  night_hours: number
-  overtime_pay: number
-  night_pay: number
-  total_pay: number
-  notes?: string
-  status: 'pending' | 'approved' | 'rejected'
-  approved_by?: string
-  approved_at?: string
-  created_at: string
-  users: {
-    name: string
-    department: string
-    position: string
-  }
-}
 
 // Assuming a more complete User type
 interface Employee {
@@ -72,7 +51,7 @@ export default function AdminEmployeeManagement() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState<'info' | 'attendance' | 'management' | 'salary'>('info')
+  const [activeTab, setActiveTab] = useState<'info' | 'attendance' | 'management'>('info')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [editingField, setEditingField] = useState<string | null>(null)
   const [editValue, setEditValue] = useState<string>('')
@@ -82,30 +61,20 @@ export default function AdminEmployeeManagement() {
     name: '',
     email: '',
     password: '',
+    employee_id: '',
     department: '',
     position: '',
     phone: '',
+    dob: '',
+    address: '',
+    work_type: 'regular',
+    contract_end_date: '',
     hire_date: new Date().toISOString().split('T')[0],
     annual_salary: 0,
     meal_allowance: 0,
     car_allowance: 0,
     role: 'employee' as 'employee' | 'admin'
   })
-  
-  // Overtime management states
-  const [overtimeRecords, setOvertimeRecords] = useState<OvertimeRecord[]>([])
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const now = new Date()
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  })
-  const [showOvertimeForm, setShowOvertimeForm] = useState(false)
-  const [overtimeFormData, setOvertimeFormData] = useState({
-    work_date: '',
-    overtime_hours: 0,
-    night_hours: 0,
-    notes: ''
-  })
-  const [overtimeSubmitting, setOvertimeSubmitting] = useState(false)
   
   // Attendance management states
   const [attendanceMonth, setAttendanceMonth] = useState(() => {
@@ -253,19 +222,11 @@ export default function AdminEmployeeManagement() {
   useEffect(() => {
     if (selectedEmployee) {
       setFormData(selectedEmployee)
-      // Fetch overtime records when employee is selected
-      fetchOvertimeRecords()
     } else {
       setFormData({})
     }
   }, [selectedEmployee])
 
-  // useEffect to fetch overtime records when selectedMonth changes
-  useEffect(() => {
-    if (selectedEmployee && activeTab === 'salary') {
-      fetchOvertimeRecords()
-    }
-  }, [selectedMonth, selectedEmployee, activeTab])
 
   // useEffect to fetch attendance data when attendanceMonth changes
   useEffect(() => {
@@ -289,19 +250,6 @@ export default function AdminEmployeeManagement() {
     setFormData(prev => ({ ...prev, [name]: finalValue }))
   }
 
-  // 급여 전용 입력 핸들러 (콤마 포매팅 지원)
-  const handleSalaryInputChange = (fieldName: string, value: string) => {
-    // 숫자만 추출
-    const numericValue = value.replace(/[^0-9]/g, '')
-    const intValue = numericValue ? parseInt(numericValue) : 0
-    
-    console.log(`💰 ${fieldName} 입력:`, value, '->', intValue)
-    
-    setFormData(prev => ({
-      ...prev,
-      [fieldName]: intValue
-    }))
-  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -393,194 +341,6 @@ export default function AdminEmployeeManagement() {
     setEditValue('')
   }
 
-  // Overtime management functions
-  const fetchOvertimeRecords = async () => {
-    if (!selectedEmployee) return
-    
-    try {
-      console.log('🔍 초과근무 기록 조회 (직접 Supabase):', selectedMonth, selectedEmployee.id)
-      
-      // 선택된 월의 시작일과 종료일 계산
-      const [year, month] = selectedMonth.split('-').map(Number)
-      const startDate = new Date(year, month - 1, 1)
-      const endDate = new Date(year, month, 0)
-      
-      const startDateStr = startDate.toISOString().split('T')[0]
-      const endDateStr = endDate.toISOString().split('T')[0]
-      
-      // daily_work_summary에서 초과근무 데이터 조회
-      const { data: workSummary, error } = await supabase
-        .from('daily_work_summary')
-        .select(`
-          *,
-          users!inner(name, department, position)
-        `)
-        .eq('user_id', selectedEmployee.id)
-        .gte('work_date', startDateStr)
-        .lte('work_date', endDateStr)
-        .gt('overtime_hours', 0)
-        .order('work_date', { ascending: false })
-      
-      if (error) {
-        console.error('❌ 초과근무 기록 조회 오류:', error)
-        setOvertimeRecords([])
-        return
-      }
-      
-      // 데이터 변환 (기존 OvertimeRecord 인터페이스에 맞게)
-      const overtimeData = workSummary?.map((record: any) => ({
-        id: record.id,
-        user_id: record.user_id,
-        work_date: record.work_date,
-        overtime_hours: record.overtime_hours || 0,
-        night_hours: record.night_hours || 0,
-        overtime_pay: (record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5, // 1.5배 가산
-        night_pay: (record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5, // 0.5배 가산
-        total_pay: ((record.overtime_hours || 0) * (selectedEmployee.hourly_wage || 0) * 1.5) + ((record.night_hours || 0) * (selectedEmployee.hourly_wage || 0) * 0.5),
-        notes: record.notes || '',
-        status: 'approved' as const, // daily_work_summary에 있는 것은 이미 승인된 것으로 간주
-        approved_by: undefined,
-        approved_at: record.calculated_at,
-        created_at: record.created_at,
-        users: {
-          name: record.users.name,
-          department: record.users.department,
-          position: record.users.position
-        }
-      })) || []
-      
-      console.log('✅ 초과근무 기록 조회 완료:', overtimeData.length, '건')
-      setOvertimeRecords(overtimeData)
-      
-    } catch (err) {
-      console.error('❌ 초과근무 기록 조회 오류:', err)
-      setOvertimeRecords([])
-    }
-  }
-
-  const handleOvertimeSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!selectedEmployee || !overtimeFormData.work_date) {
-      alert('근무일을 선택해주세요.')
-      return
-    }
-
-    if (overtimeFormData.overtime_hours <= 0 && overtimeFormData.night_hours <= 0) {
-      alert('초과근무시간 또는 야간근무시간 중 하나는 입력해주세요.')
-      return
-    }
-
-    setOvertimeSubmitting(true)
-    try {
-      const currentUser = await getCurrentUser()
-      if (!currentUser || currentUser.role !== 'admin') {
-        alert('관리자 권한이 필요합니다.')
-        return
-      }
-
-      // daily_work_summary에서 해당 날짜 기록 조회 또는 생성
-      const { data: existingRecordsArray, error: fetchError } = await supabase
-        .from('daily_work_summary')
-        .select('*')
-        .eq('user_id', selectedEmployee.id)
-        .eq('work_date', overtimeFormData.work_date)
-      
-      const existingRecord = existingRecordsArray && existingRecordsArray.length > 0 ? existingRecordsArray[0] : null
-
-      let updateData = {
-        overtime_hours: overtimeFormData.overtime_hours,
-        night_hours: overtimeFormData.night_hours,
-        notes: overtimeFormData.notes,
-        calculated_at: new Date().toISOString()
-      }
-
-      if (existingRecord) {
-        // 기존 기록 업데이트
-        const { error: updateError } = await supabase
-          .from('daily_work_summary')
-          .update(updateData)
-          .eq('id', existingRecord.id)
-
-        if (updateError) {
-          console.error('❌ 초과근무 기록 업데이트 오류:', updateError)
-          throw new Error('초과근무 기록 업데이트에 실패했습니다.')
-        }
-      } else {
-        // 새 기록 생성
-        const { error: insertError } = await supabase
-          .from('daily_work_summary')
-          .insert({
-            user_id: selectedEmployee.id,
-            work_date: overtimeFormData.work_date,
-            basic_hours: 0,
-            ...updateData,
-            auto_calculated: false
-          })
-
-        if (insertError) {
-          console.error('❌ 초과근무 기록 생성 오류:', insertError)
-          throw new Error('초과근무 기록 생성에 실패했습니다.')
-        }
-      }
-
-      alert('초과근무 기록이 성공적으로 저장되었습니다.')
-      setOvertimeFormData({
-        work_date: '',
-        overtime_hours: 0,
-        night_hours: 0,
-        notes: ''
-      })
-      setShowOvertimeForm(false)
-      await fetchOvertimeRecords()
-    } catch (err) {
-      console.error('초과근무 기록 생성 오류:', err)
-      alert(err instanceof Error ? err.message : '초과근무 기록 생성 중 오류가 발생했습니다.')
-    } finally {
-      setOvertimeSubmitting(false)
-    }
-  }
-
-  const handleOvertimeApproval = async (recordId: string, status: 'approved' | 'rejected') => {
-    const adminNotes = status === 'rejected' ? prompt('거절 사유를 입력하세요:') : undefined
-    if (status === 'rejected' && !adminNotes) return
-
-    try {
-      const currentUser = await getCurrentUser()
-      if (!currentUser || currentUser.role !== 'admin') {
-        alert('관리자 권한이 필요합니다.')
-        return
-      }
-
-      // daily_work_summary에서 해당 기록 업데이트
-      let updateData: any = {
-        notes: adminNotes || '',
-        calculated_at: new Date().toISOString()
-      }
-
-      if (status === 'rejected') {
-        // 거절 시 초과근무 시간을 0으로 설정
-        updateData.overtime_hours = 0
-        updateData.night_hours = 0
-      }
-
-      const { error } = await supabase
-        .from('daily_work_summary')
-        .update(updateData)
-        .eq('id', recordId)
-
-      if (error) {
-        console.error('❌ 초과근무 승인/거절 오류:', error)
-        throw new Error('처리에 실패했습니다.')
-      }
-
-      alert(status === 'approved' ? '초과근무가 승인되었습니다.' : '초과근무가 거절되었습니다.')
-      await fetchOvertimeRecords()
-    } catch (err) {
-      console.error('초과근무 승인/거절 오류:', err)
-      alert(err instanceof Error ? err.message : '처리 중 오류가 발생했습니다.')
-    }
-  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('ko-KR').format(amount)
@@ -904,8 +664,8 @@ export default function AdminEmployeeManagement() {
 
     try {
       // 필수 필드 검증
-      if (!newEmployeeData.name || !newEmployeeData.email || !newEmployeeData.password) {
-        throw new Error('이름, 이메일, 비밀번호는 필수 입력 항목입니다.')
+      if (!newEmployeeData.name || !newEmployeeData.email || !newEmployeeData.password || !newEmployeeData.employee_id) {
+        throw new Error('이름, 이메일, 비밀번호, 직원번호는 필수 입력 항목입니다.')
       }
 
       // 비밀번호 해싱 (bcrypt 사용)
@@ -925,9 +685,14 @@ export default function AdminEmployeeManagement() {
           name: newEmployeeData.name,
           email: newEmployeeData.email,
           password_hash: hashedPassword,
+          employee_id: newEmployeeData.employee_id,
           department: newEmployeeData.department || '미지정',
           position: newEmployeeData.position || '사원',
           phone: newEmployeeData.phone || '',
+          dob: newEmployeeData.dob || null,
+          address: newEmployeeData.address || '',
+          work_type: newEmployeeData.work_type || 'regular',
+          contract_end_date: (newEmployeeData.work_type === 'contract' || newEmployeeData.work_type === 'intern') && newEmployeeData.contract_end_date ? newEmployeeData.contract_end_date : null,
           hire_date: newEmployeeData.hire_date,
           annual_salary: newEmployeeData.annual_salary || 0,
           meal_allowance: newEmployeeData.meal_allowance || 0,
@@ -961,9 +726,14 @@ export default function AdminEmployeeManagement() {
         name: '',
         email: '',
         password: '',
+        employee_id: '',
         department: '',
         position: '',
         phone: '',
+        dob: '',
+        address: '',
+        work_type: 'regular',
+        contract_end_date: '',
         hire_date: new Date().toISOString().split('T')[0],
         annual_salary: 0,
         meal_allowance: 0,
@@ -1123,16 +893,6 @@ export default function AdminEmployeeManagement() {
                     }`}
                   >
                     근무시간 관리
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('salary')}
-                    className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                      activeTab === 'salary'
-                        ? 'border-indigo-500 text-indigo-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    급여 관리
                   </button>
                   <button
                     onClick={() => setActiveTab('management')}
@@ -1572,136 +1332,6 @@ export default function AdminEmployeeManagement() {
                 </div>
               )}
 
-              {/* Salary Management Tab */}
-              {activeTab === 'salary' && (
-                <div className="space-y-6">
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-4">급여 정보 관리</h4>
-                    
-                    {/* 기본 급여 정보 */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">연봉</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            name="annual_salary"
-                            value={((formData.annual_salary as number) || 0).toLocaleString()}
-                            onChange={(e) => handleSalaryInputChange('annual_salary', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-gray-500">원</span>
-                        </div>
-                        <p className="mt-1 text-xs text-gray-500">
-                          월급여: {Math.floor(((formData.annual_salary as number) || 0) / 12).toLocaleString()}원
-                        </p>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">식대</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            name="meal_allowance"
-                            value={((formData.meal_allowance as number) || 0).toLocaleString()}
-                            onChange={(e) => handleSalaryInputChange('meal_allowance', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-gray-500">원/월</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">차량유지비</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            name="car_allowance"
-                            value={((formData.car_allowance as number) || 0).toLocaleString()}
-                            onChange={(e) => handleSalaryInputChange('car_allowance', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-gray-500">원/월</span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">상여금</label>
-                        <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
-                            name="bonus"
-                            value={((formData.bonus as number) || 0).toLocaleString()}
-                            onChange={(e) => handleSalaryInputChange('bonus', e.target.value)}
-                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                            placeholder="0"
-                          />
-                          <span className="text-sm text-gray-500">원</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* 계산된 급여 정보 */}
-                    <div className="border-t pt-4">
-                      <h5 className="text-sm font-medium text-gray-900 mb-3">급여 계산 정보</h5>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                        <div className="bg-white p-3 rounded border">
-                          <p className="text-gray-500">월 기본급</p>
-                          <p className="font-semibold text-lg">
-                            {Math.floor(((formData.annual_salary as number) || 0) / 12).toLocaleString()}원
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded border">
-                          <p className="text-gray-500">통상시급</p>
-                          <p className="font-semibold text-lg">
-                            {Math.floor(((formData.annual_salary as number) || 0) / 12 / 209).toLocaleString()}원
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded border">
-                          <p className="text-gray-500">월 총액</p>
-                          <p className="font-semibold text-lg text-green-600">
-                            {(Math.floor(((formData.annual_salary as number) || 0) / 12) + 
-                              ((formData.meal_allowance as number) || 0) + 
-                              ((formData.car_allowance as number) || 0)).toLocaleString()}원
-                          </p>
-                        </div>
-                        <div className="bg-white p-3 rounded border">
-                          <p className="text-gray-500">연간 총액</p>
-                          <p className="font-semibold text-lg text-blue-600">
-                            {(((formData.annual_salary as number) || 0) + 
-                              (((formData.meal_allowance as number) || 0) * 12) + 
-                              (((formData.car_allowance as number) || 0) * 12) + 
-                              ((formData.bonus as number) || 0)).toLocaleString()}원
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* 저장 버튼 */}
-                    <div className="mt-6 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
-                      >
-                        {submitting ? '저장 중...' : '급여 정보 저장'}
-                      </button>
-                    </div>
-                  </div>
-                  
-                  {/* 급여 변경 이력 */}
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h5 className="text-sm font-medium text-gray-900 mb-2">급여 변경 이력</h5>
-                    <div className="text-sm text-gray-600">
-                      <p>최종 수정일: {formData.updated_at ? new Date(formData.updated_at).toLocaleString('ko-KR') : '-'}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
             </div>
           ) : (
@@ -2022,6 +1652,22 @@ export default function AdminEmployeeManagement() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
+                    직원번호(사번) <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newEmployeeData.employee_id}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, employee_id: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    placeholder="EMP001"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
                     이메일 <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -2032,9 +1678,6 @@ export default function AdminEmployeeManagement() {
                     required
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     비밀번호 <span className="text-red-500">*</span>
@@ -2048,6 +1691,9 @@ export default function AdminEmployeeManagement() {
                     minLength={6}
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">전화번호</label>
                   <input
@@ -2055,8 +1701,64 @@ export default function AdminEmployeeManagement() {
                     value={newEmployeeData.phone}
                     onChange={(e) => setNewEmployeeData({...newEmployeeData, phone: e.target.value})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    placeholder="010-0000-0000"
                   />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">근무형태</label>
+                  <select
+                    value={newEmployeeData.work_type}
+                    onChange={(e) => {
+                      setNewEmployeeData({
+                        ...newEmployeeData, 
+                        work_type: e.target.value,
+                        contract_end_date: (e.target.value === 'contract' || e.target.value === 'intern') ? newEmployeeData.contract_end_date : ''
+                      })
+                    }}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  >
+                    <option value="regular">정규직</option>
+                    <option value="contract">계약직</option>
+                    <option value="part_time">시간제</option>
+                    <option value="intern">인턴</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">생년월일</label>
+                  <input
+                    type="date"
+                    value={newEmployeeData.dob}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, dob: e.target.value})}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  />
+                </div>
+                {(newEmployeeData.work_type === 'contract' || newEmployeeData.work_type === 'intern') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      {newEmployeeData.work_type === 'contract' ? '계약 만료일' : '인턴십 종료일'}
+                    </label>
+                    <input
+                      type="date"
+                      value={newEmployeeData.contract_end_date}
+                      onChange={(e) => setNewEmployeeData({...newEmployeeData, contract_end_date: e.target.value})}
+                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700">주소</label>
+                <input
+                  type="text"
+                  value={newEmployeeData.address}
+                  onChange={(e) => setNewEmployeeData({...newEmployeeData, address: e.target.value})}
+                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
+                  placeholder="서울특별시 강남구 테헤란로 123"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

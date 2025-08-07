@@ -21,6 +21,20 @@ let tokenClient: google.accounts.oauth2.TokenClient | null = null
  */
 export const initializeGoogleAPI = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    // API Key 확인
+    if (!GOOGLE_API_KEY) {
+      console.warn('⚠️ GOOGLE_API_KEY가 설정되지 않음. Google Calendar 연동 비활성화')
+      reject(new Error('Google API Key not configured'))
+      return
+    }
+
+    // Client ID 확인
+    if (!GOOGLE_CLIENT_ID) {
+      console.warn('⚠️ GOOGLE_CLIENT_ID가 설정되지 않음. Google Calendar 연동 비활성화')
+      reject(new Error('Google Client ID not configured'))
+      return
+    }
+
     // gapi 로드
     const script1 = document.createElement('script')
     script1.src = 'https://apis.google.com/js/api.js'
@@ -40,6 +54,10 @@ export const initializeGoogleAPI = async (): Promise<void> => {
           reject(error)
         }
       })
+    }
+    script1.onerror = () => {
+      console.error('Failed to load Google API script')
+      reject(new Error('Failed to load Google API script'))
     }
     document.body.appendChild(script1)
 
@@ -274,6 +292,15 @@ export const createLeaveEvent = async (
   }
 ): Promise<{ success: boolean; eventId?: string; error?: string }> => {
   try {
+    // Google Calendar 설정 확인
+    if (!GOOGLE_API_KEY || !GOOGLE_CLIENT_ID) {
+      console.warn('⚠️ Google Calendar API 미설정으로 이벤트 생성 건너뛰기')
+      return {
+        success: false,
+        error: 'Google Calendar API 설정이 필요합니다.'
+      }
+    }
+
     const event = {
       summary: `[${leaveData.leaveType}] ${user.name} (${user.department})`,
       description: `휴가 사유: ${leaveData.reason}\n신청 ID: ${leaveData.formRequestId}\n일수: ${leaveData.leaveDays}일`,
