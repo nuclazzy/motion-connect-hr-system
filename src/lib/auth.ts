@@ -4,7 +4,7 @@
 
 import { saveToken, getToken, clearToken, getAuthHeaders as getTokenAuthHeaders, repairTokenStorage } from './auth/token-manager'
 import { supabase } from './supabase'
-import bcrypt from 'bcryptjs'
+import * as bcrypt from 'bcryptjs'
 
 // 클라이언트 사이드 인증 함수들
 
@@ -75,10 +75,16 @@ export async function loginUser(credentials: LoginCredentials): Promise<AuthResu
         // 현재는 간단한 문자열 매칭으로 처리
         console.log('🔐 비밀번호 검증 시도 (임시 방식)')
         
-        // 간단한 비밀번호 매칭 (임시)
-        // 실제로는 bcrypt.compare(credentials.password, userData.password_hash)
-        isPasswordValid = userData.password_hash === credentials.password ||
-                         userData.password_hash.includes(credentials.password)
+        // BCrypt 해시 비교 (브라우저 호환)
+        if (userData.password_hash.startsWith('$2b$') || userData.password_hash.startsWith('$2a$')) {
+          // BCrypt 해시인 경우
+          isPasswordValid = await bcrypt.compare(credentials.password, userData.password_hash)
+          console.log('🔐 BCrypt 검증 결과:', isPasswordValid)
+        } else {
+          // 평문 비밀번호인 경우 (임시 계정)
+          isPasswordValid = userData.password_hash === credentials.password
+          console.log('🔐 평문 검증 결과:', isPasswordValid)
+        }
         
       } catch (err) {
         console.error('Password verification error:', err)
