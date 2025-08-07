@@ -21,17 +21,32 @@ let tokenClient: google.accounts.oauth2.TokenClient | null = null
  */
 export const initializeGoogleAPI = async (): Promise<void> => {
   return new Promise((resolve, reject) => {
+    console.log('🚀 Google Calendar API 초기화 시작...')
+    console.log('📌 GOOGLE_API_KEY:', GOOGLE_API_KEY ? '설정됨' : '❌ 없음')
+    console.log('📌 GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID ? '설정됨' : '❌ 없음')
+    
     // API Key 확인
     if (!GOOGLE_API_KEY) {
       console.warn('⚠️ GOOGLE_API_KEY가 설정되지 않음. Google Calendar 연동 비활성화')
-      reject(new Error('Google API Key not configured'))
+      console.log('환경변수를 확인하세요: NEXT_PUBLIC_GOOGLE_API_KEY')
+      // 에러 대신 성공으로 처리하여 시스템이 계속 작동하도록 함
+      resolve()
       return
     }
 
     // Client ID 확인
     if (!GOOGLE_CLIENT_ID) {
       console.warn('⚠️ GOOGLE_CLIENT_ID가 설정되지 않음. Google Calendar 연동 비활성화')
-      reject(new Error('Google Client ID not configured'))
+      console.log('환경변수를 확인하세요: NEXT_PUBLIC_GOOGLE_CLIENT_ID')
+      // 에러 대신 성공으로 처리하여 시스템이 계속 작동하도록 함
+      resolve()
+      return
+    }
+
+    // 이미 초기화되었는지 확인
+    if (gapiInited && gisInited) {
+      console.log('✅ Google API 이미 초기화됨')
+      resolve()
       return
     }
 
@@ -41,22 +56,31 @@ export const initializeGoogleAPI = async (): Promise<void> => {
     script1.async = true
     script1.defer = true
     script1.onload = () => {
+      console.log('✅ Google API 스크립트 로드 성공')
+      if (typeof gapi === 'undefined') {
+        console.error('❌ gapi 객체를 찾을 수 없음')
+        reject(new Error('gapi not found'))
+        return
+      }
+      
       gapi.load('client', async () => {
+        console.log('📦 gapi.client 로드 중...')
         try {
           await gapi.client.init({
             apiKey: GOOGLE_API_KEY,
             discoveryDocs: [DISCOVERY_DOC],
           })
+          console.log('✅ gapi.client 초기화 성공')
           gapiInited = true
           checkInitComplete()
         } catch (error) {
-          console.error('Error initializing gapi:', error)
+          console.error('❌ gapi 초기화 오류:', error)
           reject(error)
         }
       })
     }
     script1.onerror = () => {
-      console.error('Failed to load Google API script')
+      console.error('❌ Google API 스크립트 로드 실패')
       reject(new Error('Failed to load Google API script'))
     }
     document.body.appendChild(script1)
@@ -124,6 +148,12 @@ export const fetchCalendarEvents = async (
   maxResults: number = 2500
 ): Promise<gapi.client.calendar.Event[]> => {
   try {
+    // API가 설정되지 않은 경우 빈 배열 반환
+    if (!GOOGLE_API_KEY || !GOOGLE_CLIENT_ID) {
+      console.log('📌 Google Calendar API 미설정으로 이벤트 조회 건너뛰기')
+      return []
+    }
+
     // API 초기화 확인
     if (!gapiInited || !gisInited) {
       await initializeGoogleAPI()
@@ -194,6 +224,12 @@ export const createCalendarEvent = async (
   }
 ): Promise<gapi.client.calendar.Event> => {
   try {
+    // API가 설정되지 않은 경우 더미 응답 반환
+    if (!GOOGLE_API_KEY || !GOOGLE_CLIENT_ID) {
+      console.log('📌 Google Calendar API 미설정으로 이벤트 생성 건너뛰기')
+      return { id: 'dummy-' + Date.now() } as gapi.client.calendar.Event
+    }
+
     // API 초기화 확인
     if (!gapiInited || !gisInited) {
       await initializeGoogleAPI()

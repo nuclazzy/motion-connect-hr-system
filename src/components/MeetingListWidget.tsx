@@ -65,8 +65,14 @@ export default function MeetingListWidget({
   const fetchCalendarEventsData = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
+      // Google API 초기화 시도
+      try {
+        await initializeGoogleAPI()
+      } catch (initError) {
+        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
+        setEvents([])
+        return
+      }
       
       const calendarId = getCalendarId()
       

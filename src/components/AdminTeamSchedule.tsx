@@ -58,8 +58,14 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
   const fetchCalendarEvents = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
+      // Google API 초기화 시도
+      try {
+        await initializeGoogleAPI()
+      } catch (initError) {
+        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
+        setCalendarEvents([])
+        return
+      }
       
       const allEvents: CalendarEvent[] = []
       // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정

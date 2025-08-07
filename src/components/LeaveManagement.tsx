@@ -71,8 +71,14 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   const fetchLeaveEvents = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
+      // Google API 초기화 시도 (설정되지 않으면 조용히 실패)
+      try {
+        await initializeGoogleAPI()
+      } catch (initError) {
+        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
+        setLeaveEvents([])
+        return
+      }
       
       // 현재 월의 데이터만 가져오기
       const year = currentDate.getFullYear()
@@ -88,7 +94,7 @@ export default function LeaveManagement({}: LeaveManagementProps) {
 
       // Google Calendar 직접 연동으로 이벤트 가져오기
       const googleEvents = await fetchCalendarEvents(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax, 250)
-      console.log('📅 [DEBUG] 가져온 흔가 이벤트 수:', googleEvents.length)
+      console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', googleEvents.length)
       
       let fetchedEvents: CalendarEvent[] = []
       if (googleEvents && googleEvents.length > 0) {
@@ -109,9 +115,12 @@ export default function LeaveManagement({}: LeaveManagementProps) {
       setLeaveEvents(fetchedEvents)
     } catch (error) {
       console.error('휴가 캘린더 이벤트 조회 오류:', error)
-      // 권한 오류인 경우 사용자에게 알림
-      if (error instanceof Error && error.message.includes('Token')) {
-        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      // Google API가 설정되지 않은 경우는 조용히 처리
+      if (error instanceof Error && !error.message.includes('not configured')) {
+        // 권한 오류인 경우만 사용자에게 알림
+        if (error.message.includes('Token')) {
+          alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+        }
       }
       setLeaveEvents([])
     } finally {

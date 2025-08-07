@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Calendar 연동 테스트</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        h1 { color: #333; }
+        .status { 
+            padding: 15px; 
+            margin: 10px 0; 
+            border-radius: 5px;
+            background: #f5f5f5;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        #events { margin-top: 20px; }
+        .event {
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Google Calendar API 연동 테스트</h1>
+    
+    <div id="status" class="status">
+        <h3>환경변수 상태:</h3>
+        <div id="env-status"></div>
+    </div>
+
+    <div>
+        <button onclick="initializeAPI()">1. API 초기화</button>
+        <button onclick="authenticate()">2. 인증하기</button>
+        <button onclick="fetchEvents()">3. 이벤트 가져오기</button>
+    </div>
+
+    <div id="result" class="status" style="display:none;"></div>
+    <div id="events"></div>
+
+    <script>
+        // 환경변수 (실제 값으로 설정)
+        const GOOGLE_CLIENT_ID = '241177742286-6kqma7m80ppcsl4m51ui9017eb48s8h1.apps.googleusercontent.com';
+        const GOOGLE_API_KEY = 'AIzaSyBvOzRIgIjh8JSfZE2YZtVgNjPYGR3HWoM';
+        const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+        const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+        
+        // 테스트할 캘린더 ID
+        const TEST_CALENDAR_ID = 'c_rb1oser82snsqf9vdkr7jgr9r8@group.calendar.google.com'; // 휴가관리 캘린더
+
+        let gapiInited = false;
+        let gisInited = false;
+        let tokenClient;
+
+        // 페이지 로드 시 환경변수 확인
+        window.onload = function() {
+            const envStatus = document.getElementById('env-status');
+            envStatus.innerHTML = `
+                <p>✅ API_KEY: ${GOOGLE_API_KEY ? '설정됨' : '❌ 없음'}</p>
+                <p>✅ CLIENT_ID: ${GOOGLE_CLIENT_ID ? '설정됨' : '❌ 없음'}</p>
+                <p>📅 테스트 캘린더: 휴가관리 캘린더</p>
+            `;
+        };
+
+        function showResult(message, type = 'info') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'status ' + type;
+            resultDiv.innerHTML = message;
+        }
+
+        async function initializeAPI() {
+            showResult('🔄 Google API 초기화 중...', 'info');
+            
+            // gapi 로드
+            const script1 = document.createElement('script');
+            script1.src = 'https://apis.google.com/js/api.js';
+            script1.async = true;
+            script1.defer = true;
+            script1.onload = () => {
+                gapi.load('client', async () => {
+                    try {
+                        await gapi.client.init({
+                            apiKey: GOOGLE_API_KEY,
+                            discoveryDocs: [DISCOVERY_DOC],
+                        });
+                        gapiInited = true;
+                        showResult('✅ Google API 초기화 성공!', 'success');
+                    } catch (error) {
+                        showResult('❌ API 초기화 실패: ' + error.message, 'error');
+                    }
+                });
+            };
+            document.body.appendChild(script1);
+
+            // gis 로드
+            const script2 = document.createElement('script');
+            script2.src = 'https://accounts.google.com/gsi/client';
+            script2.async = true;
+            script2.defer = true;
+            script2.onload = () => {
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: GOOGLE_CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '', // 나중에 설정
+                });
+                gisInited = true;
+            };
+            document.body.appendChild(script2);
+        }
+
+        function authenticate() {
+            if (!tokenClient) {
+                showResult('❌ 먼저 API를 초기화해주세요!', 'error');
+                return;
+            }
+
+            tokenClient.callback = async (resp) => {
+                if (resp.error !== undefined) {
+                    showResult('❌ 인증 실패: ' + resp.error, 'error');
+                    return;
+                }
+                showResult('✅ 인증 성공! 이제 이벤트를 가져올 수 있습니다.', 'success');
+            };
+
+            if (gapi.client.getToken() === null) {
+                // 토큰 요청 (팝업으로 인증)
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            } else {
+                // 이미 인증됨
+                tokenClient.requestAccessToken({ prompt: '' });
+            }
+        }
+
+        async function fetchEvents() {
+            if (!gapiInited || !gapi.client.getToken()) {
+                showResult('❌ 먼저 API 초기화와 인증을 완료해주세요!', 'error');
+                return;
+            }
+
+            showResult('🔄 캘린더 이벤트를 가져오는 중...', 'info');
+
+            try {
+                // 이번 달 데이터 가져오기
+                const now = new Date();
+                const timeMin = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+                const timeMax = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString();
+
+                const response = await gapi.client.calendar.events.list({
+                    'calendarId': TEST_CALENDAR_ID,
+                    'timeMin': timeMin,
+                    'timeMax': timeMax,
+                    'showDeleted': false,
+                    'singleEvents': true,
+                    'maxResults': 10,
+                    'orderBy': 'startTime'
+                });
+
+                const events = response.result.items;
+                
+                if (events && events.length > 0) {
+                    showResult(`✅ ${events.length}개의 이벤트를 찾았습니다!`, 'success');
+                    
+                    let eventsHtml = '<h3>📅 휴가 일정:</h3>';
+                    events.forEach(event => {
+                        const start = event.start.date || event.start.dateTime;
+                        eventsHtml += `
+                            <div class="event">
+                                <strong>${event.summary}</strong><br>
+                                날짜: ${start}<br>
+                                ${event.description ? '설명: ' + event.description : ''}
+                            </div>
+                        `;
+                    });
+                    document.getElementById('events').innerHTML = eventsHtml;
+                } else {
+                    showResult('📭 이번 달에는 등록된 휴가가 없습니다.', 'info');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showResult('❌ 이벤트 가져오기 실패: ' + error.message, 'error');
+            }
+        }
+    </script>
+</body>
+</html>
