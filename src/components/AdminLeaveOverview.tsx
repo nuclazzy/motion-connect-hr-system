@@ -3,16 +3,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { getAuthHeaders } from '@/lib/auth'
-import { createLeaveEvent } from '@/lib/googleCalendar'
+import { createCalendarEventFromServer } from '@/lib/googleCalendarClient'
 import { Calendar, Users, AlertCircle, Clock, TrendingUp, FileText, Edit2, Check, X, Plus, History } from 'lucide-react'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 import { 
-  fetchCalendarEvents, 
-  deleteCalendarEvent,
-  initializeGoogleAPI,
+  fetchCalendarEventsFromServer, 
+  deleteCalendarEventFromServer,
   parseEventDate 
-} from '@/lib/googleCalendar'
+} from '@/lib/googleCalendarClient'
 import SpecialLeaveGrantModal from './SpecialLeaveGrantModal'
 
 interface CalendarEvent {
@@ -511,21 +510,14 @@ export default function AdminLeaveOverview() {
             endDateObj.setDate(endDateObj.getDate() + 1)
             const adjustedEndDate = endDateObj.toISOString().split('T')[0]
 
-            await createLeaveEvent(
-              {
-                leaveType: leaveType,
-                leaveDays: leaveDays,
-                startDate: startDate,
-                endDate: adjustedEndDate,
-                reason: request.request_data?.['사유'] || request.request_data?.['휴가사유'] || '',
-                formRequestId: request.id
-              },
-              {
-                id: request.user_id,
-                name: request.user.name,
-                department: request.user.department
-              }
-            )
+            const eventData = {
+              summary: `${leaveType} - ${request.user.name}`,
+              description: `${request.request_data?.['사유'] || request.request_data?.['휴가사유'] || ''}\n신청자: ${request.user.name} (${request.user.department})`,
+              start: { date: startDate },
+              end: { date: adjustedEndDate }
+            }
+
+            await createCalendarEventFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, eventData)
           }
         } catch (calendarError) {
           console.error('캘린더 이벤트 생성 오류:', calendarError)
@@ -549,8 +541,8 @@ export default function AdminLeaveOverview() {
     }
 
     try {
-      // Google Calendar에서 이벤트 삭제 (직접 연동)
-      await deleteCalendarEvent(CALENDAR_IDS.LEAVE_MANAGEMENT, event.id)
+      // Google Calendar에서 이벤트 삭제 (Service Account)
+      await deleteCalendarEventFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, event.id)
       
       alert('캘린더에서 휴가가 삭제되었습니다.')
       fetchLeaveEvents() // 캘린더 새로고침
@@ -560,21 +552,25 @@ export default function AdminLeaveOverview() {
     }
   }
 
-  // Google Calendar에서 직접 휴가 이벤트 조회
+  // Google Calendar에서 직접 휴가 이벤트 조회 (Service Account)
   const fetchLeaveEvents = useCallback(async () => {
     setCalendarLoading(true)
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
       // 현재 월의 데이터만 가져오기
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth()
       const timeMin = new Date(year, month, 1).toISOString()
       const timeMax = new Date(year, month + 1, 0, 23, 59, 59).toISOString()
 
-      // Google Calendar 직접 연동으로 이벤트 가져오기
-      const googleEvents = await fetchCalendarEvents(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax, 250)
+      console.log('📅 [DEBUG] AdminLeaveOverview 휴가 캘린더 이벤트 조회 시작:', { 
+        calendarId: CALENDAR_IDS.LEAVE_MANAGEMENT, 
+        timeMin, 
+        timeMax 
+      })
+
+      // Service Account를 통해 이벤트 가져오기
+      const googleEvents = await fetchCalendarEventsFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax)
+      console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', googleEvents.length)
       
       let fetchedEvents: CalendarEvent[] = []
       if (googleEvents && googleEvents.length > 0) {
@@ -595,6 +591,13 @@ export default function AdminLeaveOverview() {
       setLeaveEvents(fetchedEvents)
     } catch (error) {
       console.error('휴가 캘린더 이벤트 조회 오류:', error)
+      // Google API가 설정되지 않은 경우는 조용히 처리
+      if (error instanceof Error && !error.message.includes('not configured')) {
+        // 권한 오류인 경우만 사용자에게 알림
+        if (error.message.includes('Token')) {
+          alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+        }
+      }
       setLeaveEvents([])
     } finally {
       setCalendarLoading(false)

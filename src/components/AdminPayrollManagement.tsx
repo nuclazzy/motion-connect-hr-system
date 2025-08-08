@@ -192,11 +192,9 @@ export default function AdminPayrollManagement() {
         .select(`
           user_id,
           total_overtime_hours,
-          total_night_hours,
-          users!inner(work_type)
+          total_night_hours
         `)
         .eq('work_month', monthStart)
-        .eq('users.work_type', '정규직')
 
       if (monthlyError && monthlyError.code !== 'PGRST116') {
         console.error('월별 통계 조회 오류:', monthlyError)
@@ -211,12 +209,10 @@ export default function AdminPayrollManagement() {
           .select(`
             user_id,
             overtime_hours,
-            night_hours,
-            users!inner(work_type)
+            night_hours
           `)
           .gte('work_date', monthStart)
           .lte('work_date', monthEnd)
-          .eq('users.work_type', '정규직')
 
         if (dailyError) {
           console.error('일별 통계 조회 오류:', dailyError)

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { createCalendarEvent } from '@/lib/googleCalendar'
+import { createCalendarEventFromServer } from '@/lib/googleCalendarClient'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 
 interface SpecialLeaveGrantModalProps {
@@ -82,7 +82,7 @@ export default function SpecialLeaveGrantModal({
 
     setLoading(true)
     try {
-      // 1. Google Calendar에 이벤트 생성
+      // 1. Google Calendar에 이벤트 생성 (Service Account)
       const eventData = {
         summary: `${formData.employeeName} - ${formData.leaveTitle}`,
         description: formData.reason || `관리자가 부여한 특별휴가\n휴가일수: ${formData.leaveDays}일`,
@@ -100,7 +100,7 @@ export default function SpecialLeaveGrantModal({
         }
       }
 
-      const createdEvent = await createCalendarEvent(CALENDAR_IDS.LEAVE_MANAGEMENT, eventData)
+      const createdEvent = await createCalendarEventFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, eventData)
       
       if (createdEvent?.id) {
         // 2. 특별휴가 기록 저장 (선택사항)

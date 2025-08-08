@@ -4,10 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { type User } from '@/lib/auth'
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 import { 
-  fetchCalendarEvents,
-  parseEventDate,
-  initializeGoogleAPI 
-} from '@/lib/googleCalendar'
+  fetchCalendarEventsFromServer,
+  parseEventDate
+} from '@/lib/googleCalendarClient'
 
 // 한국 공휴일 데이터 (2024-2025년)
 const koreanHolidays = {
@@ -71,15 +70,6 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   const fetchLeaveEvents = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화 시도 (설정되지 않으면 조용히 실패)
-      try {
-        await initializeGoogleAPI()
-      } catch (initError) {
-        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
-        setLeaveEvents([])
-        return
-      }
-      
       // 현재 월의 데이터만 가져오기
       const year = currentDate.getFullYear()
       const month = currentDate.getMonth()
@@ -92,8 +82,8 @@ export default function LeaveManagement({}: LeaveManagementProps) {
         timeMax 
       })
 
-      // Google Calendar 직접 연동으로 이벤트 가져오기
-      const googleEvents = await fetchCalendarEvents(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax, 250)
+      // Service Account를 통해 이벤트 가져오기
+      const googleEvents = await fetchCalendarEventsFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, timeMin, timeMax)
       console.log('📅 [DEBUG] 가져온 휴가 이벤트 수:', googleEvents.length)
       
       let fetchedEvents: CalendarEvent[] = []
