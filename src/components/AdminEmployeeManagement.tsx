@@ -1246,7 +1246,7 @@ export default function AdminEmployeeManagement() {
                                             hasLeave ? 'bg-yellow-100 text-yellow-800' :
                                             record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
                                             record.work_status === '조정근무' ? 'bg-blue-100 text-blue-800' :
-                                            record.work_status === '단축근무' ? 'bg-blue-100 text-blue-800' :
+                                            record.work_status === '단축근무' ? 'bg-amber-100 text-amber-800' :
                                             record.work_status === '조기퇴근' ? 'bg-indigo-100 text-indigo-800' :
                                             record.work_status === '지각' ? 'bg-orange-100 text-orange-800' :
                                             record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
@@ -1262,7 +1262,8 @@ export default function AdminEmployeeManagement() {
                                             {hasLeave ? (
                                               isFullDayLeave ? '휴가' : '반차'
                                             ) : (
-                                              // 영어 상태를 한글로 변환 (기존 데이터 호환성)
+                                              // 상태 표시 (기존 데이터 호환성 유지)
+                                              record.work_status === '단축근무' ? '표준근로시간 미달' :
                                               record.work_status === 'in_progress' ? '퇴근누락' :
                                               record.work_status === 'completed' ? '정상근무' :
                                               record.work_status || '미확인'
