@@ -475,7 +475,7 @@ export default function AdminEmployeeManagement() {
         
         updateData[leaveType] = currentValue + amount
       } else {
-        // 연차/병가 업데이트
+        // 연차/병가 업데이트 - 실제 데이터베이스 컬럼명 사용
         const baseType = leaveType === 'annual_leave' ? 'annual' : 'sick'
         const targetField = adjustmentType === 'granted' ? `${baseType}_days` : `used_${baseType}_days`
         
