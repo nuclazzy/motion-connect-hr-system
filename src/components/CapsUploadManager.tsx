@@ -583,6 +583,7 @@ export default function CapsUploadManager() {
             let basicHours = 0
             let overtimeHours = 0
             let hadDinner = false
+            let workStatus = ''
             
             if (checkIn && checkOut) {
               const startTime = new Date(checkIn.record_timestamp)
@@ -602,6 +603,24 @@ export default function CapsUploadManager() {
               // 기본근무 8시간, 초과분은 연장근무
               basicHours = Math.min(workHours, 8)
               overtimeHours = Math.max(0, workHours - 8)
+              
+              // 근무 상태 판별
+              if (basicHours < 4) {
+                workStatus = '조기퇴근'
+              } else if (basicHours < 8) {
+                workStatus = '조정근무'  // "단축근무"보다 부드러운 표현
+              } else {
+                workStatus = '정상근무'
+              }
+            } else if (checkIn && !checkOut) {
+              // 출근만 있고 퇴근 없음
+              workStatus = '퇴근누락'
+            } else if (!checkIn && checkOut) {
+              // 퇴근만 있고 출근 없음
+              workStatus = '출근누락'
+            } else {
+              // 둘 다 없음
+              workStatus = '기록없음'
             }
             
             // daily_work_summary 업데이트
@@ -617,11 +636,7 @@ export default function CapsUploadManager() {
                 night_hours: 0, // TODO: 야간근무 계산
                 substitute_hours: 0,
                 compensatory_hours: 0,
-                work_status: checkOut ? (
-                  basicHours < 7 ? '단축근무' :
-                  basicHours >= 8 ? '정상근무' :
-                  '근무'
-                ) : '근무중',
+                work_status: workStatus,
                 had_dinner: hadDinner,
                 auto_calculated: true,
                 calculated_at: new Date().toISOString()
