@@ -1277,15 +1277,19 @@ export default function AdminEmployeeManagement() {
                                             record.work_status?.includes('누락') ? 'bg-purple-100 text-purple-800' :
                                             'bg-gray-100 text-gray-800'
                                           }`}>
-                                            {hasLeave ? (
-                                              isFullDayLeave ? '휴가' : '반차'
-                                            ) : (
-                                              // 상태 표시 (기존 데이터 호환성 유지)
-                                              record.work_status === '단축근무' ? '표준근로시간 미달' :
-                                              record.work_status === 'in_progress' ? '퇴근누락' :
-                                              record.work_status === 'completed' ? '정상근무' :
-                                              record.work_status || '미확인'
-                                            )}
+                                            {hasLeave && isFullDayLeave ? '휴가' :
+                                             hasLeave && isHalfDayLeave ? '반차' :
+                                             // 휴가가 아닌 경우 work_status 표시
+                                             record.work_status === '정상근무' ? '정상근무' :
+                                             record.work_status === '조정근무' ? '조정근무' :
+                                             record.work_status === '단축근무' ? '표준근로시간 미달' :
+                                             record.work_status === '조기퇴근' ? '조기퇴근' :
+                                             record.work_status === '출근누락' ? '출근누락' :
+                                             record.work_status === '퇴근누락' ? '퇴근누락' :
+                                             record.work_status === '기록없음' ? '기록없음' :
+                                             record.work_status === 'in_progress' ? '퇴근누락' :
+                                             record.work_status === 'completed' ? '정상근무' :
+                                             record.work_status || '미확인'}
                                           </span>
                                         {record.had_dinner && (
                                           <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
