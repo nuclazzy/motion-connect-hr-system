@@ -10,6 +10,7 @@ import { detectDinnerEligibility, formatDinnerDetectionResult } from '@/lib/dinn
 interface User {
   id: string
   name: string
+  employee_number?: string
   department: string
   position: string
 }
@@ -147,7 +148,7 @@ export default function AttendanceRecorder() {
       // 사용자 정보 조회
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('id, name, department, position')
+        .select('id, name, employee_number, department, position')
         .eq('id', currentUser.id)
         .single()
 
@@ -213,6 +214,7 @@ export default function AttendanceRecorder() {
         user: {
           id: user.id,
           name: user.name,
+          employee_number: user.employee_number,
           department: user.department,
           position: user.position
         },
@@ -413,6 +415,7 @@ export default function AttendanceRecorder() {
         .from('attendance_records')
         .insert({
           user_id: currentUser.id,
+          employee_number: status?.user?.employee_number, // 사원번호 추가
           record_date: recordDate,
           record_time: recordTime,
           record_timestamp: recordTimestamp.toISOString(),
@@ -425,7 +428,7 @@ export default function AttendanceRecorder() {
           had_dinner: recordType === '퇴근' ? hadDinner : false,
           is_manual: !useCurrentTime,
           // CAPS 호환 메타데이터 추가
-          notes: `웹앱 기록 - 사용자: ${user.name}, 시간: ${useCurrentTime ? '현재시간' : '수동선택'}`
+          notes: `웹앱 기록 - 사용자: ${user.name}${status?.user?.employee_number ? ` (${status.user.employee_number})` : ''}, 시간: ${useCurrentTime ? '현재시간' : '수동선택'}`
         })
         .select()
         .single()

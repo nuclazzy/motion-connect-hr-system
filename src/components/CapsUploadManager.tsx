@@ -32,6 +32,7 @@ interface CapsRecord {
 
 interface ProcessedRecord {
   user_id: string
+  employee_number?: string
   record_date: string
   record_time: string
   record_timestamp: string
@@ -122,10 +123,10 @@ export default function CapsUploadManager() {
         return
       }
 
-      // 모든 사용자 정보 미리 조회 (성능 최적화)
+      // 모든 사용자 정보 미리 조회 (employee_number 포함)
       const { data: users, error: usersError } = await supabase
         .from('users')
-        .select('id, name')
+        .select('id, name, employee_number')
 
       if (usersError) {
         console.error('사용자 조회 오류:', usersError)
@@ -133,10 +134,17 @@ export default function CapsUploadManager() {
         return
       }
 
-      // 이름 → user_id 매핑 생성
-      const userMap = new Map<string, string>()
+      // 사원번호 우선 → 이름 → user_id 매핑 생성
+      const userByEmployeeNumberMap = new Map<string, { id: string, name: string }>()
+      const userByNameMap = new Map<string, string>()
+      
       users?.forEach(user => {
-        userMap.set(user.name, user.id)
+        // 사원번호가 있으면 사원번호 매핑에 추가
+        if (user.employee_number) {
+          userByEmployeeNumberMap.set(user.employee_number, { id: user.id, name: user.name })
+        }
+        // 이름 매핑에도 추가 (백업용)
+        userByNameMap.set(user.name, user.id)
       })
 
       // CSV 데이터 파싱 및 변환
@@ -199,12 +207,25 @@ export default function CapsUploadManager() {
             continue
           }
 
-          // 사용자 매핑 확인 (이름 우선)
-          const userId = userMap.get(record.이름)
+          // 사용자 매핑 확인 (사원번호 우선, 이름 백업)
+          let userId: string | undefined
+          let matchMethod = ''
+          
+          // 1순위: 사원번호 매핑
+          if (record.사원번호 && userByEmployeeNumberMap.has(record.사원번호)) {
+            const userInfo = userByEmployeeNumberMap.get(record.사원번호)!
+            userId = userInfo.id
+            matchMethod = `사원번호 ${record.사원번호}`
+          }
+          // 2순위: 이름 매핑 (백업)
+          else if (record.이름 && userByNameMap.has(record.이름)) {
+            userId = userByNameMap.get(record.이름)!
+            matchMethod = `이름 ${record.이름}`
+          }
           
           if (!userId) {
             invalidUserCount++
-            errors.push(`${i + 1}행: 사용자 "${record.이름}"을 찾을 수 없습니다.`)
+            errors.push(`${i + 1}행: 사용자를 찾을 수 없습니다 - 사원번호: "${record.사원번호}", 이름: "${record.이름}"`)
             continue
           }
 
@@ -319,13 +340,14 @@ export default function CapsUploadManager() {
           // 처리된 기록 추가
           processedRecords.push({
             user_id: userId,
+            employee_number: record.사원번호 || undefined,  // 사원번호 추가
             record_date: recordDate,
             record_time: recordTime,
             record_timestamp: recordTimestamp.toISOString(),
             record_type: recordType,
             source: 'CAPS',
             device_id: record.단말기ID,
-            reason: `CAPS 지문인식 (${record.인증})${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
+            reason: `CAPS 지문인식 (${record.인증}) - ${matchMethod}${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
             is_manual: false,
             had_dinner: recordType === '퇴근' ? hasDinner : false  // 퇴근 시에만 저녁식사 정보 적용
           })
@@ -372,6 +394,7 @@ export default function CapsUploadManager() {
               const { data: upsertResult, error: upsertError } = await supabase
                 .rpc('safe_upsert_caps_attendance', {
                   p_user_id: record.user_id,
+                  p_employee_number: record.employee_number,
                   p_record_date: record.record_date,
                   p_record_time: record.record_time,
                   p_record_timestamp: record.record_timestamp,
@@ -642,6 +665,7 @@ export default function CapsUploadManager() {
         <ul className="text-sm text-blue-700 space-y-1">
           <li>• CAPS 관리 프로그램에서 "데이터 내보내기" → CSV 형식으로 저장</li>
           <li>• 파일명 예시: "7월4주차.xls - Sheet1.csv"</li>
+          <li>• <strong>사용자 인식:</strong> 사원번호 우선, 이름 백업으로 매핑</li>
           <li>• 중복 데이터는 자동으로 스킵되므로 안전하게 재업로드 가능</li>
           <li>• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
           <li>• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>

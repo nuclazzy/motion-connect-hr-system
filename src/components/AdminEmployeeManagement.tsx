@@ -14,34 +14,32 @@ interface Employee {
   id: string
   name: string
   email: string
-  employee_id: string
+  employee_number?: string // 사원번호 추가
+  password_hash?: string
+  role: string
   department: string
   position: string
-  work_type: string
-  hire_date: string
-  dob: string
   phone: string
-  address: string
-  is_active: boolean
-  resignation_date?: string
-  termination_date?: string
-  contract_end_date?: string
-  annual_leave: number
-  sick_leave: number
-  substitute_leave_hours: number
-  compensatory_leave_hours: number
-  // 급여 관련 필드
-  annual_salary?: number
-  monthly_salary?: number
-  basic_salary?: number
-  bonus?: number
-  meal_allowance?: number
-  car_allowance?: number
-  transportation_allowance?: number
-  hourly_wage?: number
-  salary_details_updated_at?: string
-  updated_at?: string
-  // Add other fields as necessary
+  start_date: string
+  hire_date?: string
+  salary: number
+  hourly_rate: number
+  annual_leave_days: number
+  used_leave_days: number
+  remaining_leave_days: number
+  hourly_leave_hours: number
+  used_hourly_leave: number
+  remaining_hourly_leave: number
+  substitute_leave_hours?: number // 대체휴가 시간
+  compensatory_leave_hours?: number // 보상휴가 시간
+  termination_date?: string // 퇴사일
+  resignation_date?: string // 퇴사 신청일
+  is_active?: boolean // 활성 상태
+  work_type?: string // 근무 형태
+  annual_leave?: number // 연차 잔여일수
+  sick_leave?: number // 병가 잔여일수
+  created_at: string
+  updated_at: string
 }
 
 export default function AdminEmployeeManagement() {
@@ -60,9 +58,9 @@ export default function AdminEmployeeManagement() {
   const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [newEmployeeData, setNewEmployeeData] = useState({
     name: '',
+    employee_number: '',
     email: '',
     password: '',
-    employee_id: '',
     department: '',
     position: '',
     phone: '',
@@ -104,11 +102,11 @@ export default function AdminEmployeeManagement() {
           throw new Error('관리자 권한이 필요합니다.')
         }
 
-        // Supabase에서 직접 users 테이블 조회 (기본 컬럼 먼저 시도)
+        // Supabase에서 직접 users 테이블 조회 (employee_number 포함)
         let { data: users, error } = await supabase
           .from('users')
           .select(`
-            id, name, email, department, position, hire_date,
+            id, name, email, employee_number, department, position, hire_date,
             annual_days, used_annual_days, sick_days, used_sick_days,
             substitute_leave_hours, compensatory_leave_hours
           `)
@@ -120,7 +118,7 @@ export default function AdminEmployeeManagement() {
           const { data: usersWithStatus, error: statusError } = await supabase
             .from('users')
             .select(`
-              id, name, email, department, position, hire_date,
+              id, name, email, employee_number, department, position, hire_date,
               annual_days, used_annual_days, sick_days, used_sick_days,
               substitute_leave_hours, compensatory_leave_hours,
               work_type, termination_date, contract_end_date,
@@ -665,8 +663,8 @@ export default function AdminEmployeeManagement() {
 
     try {
       // 필수 필드 검증
-      if (!newEmployeeData.name || !newEmployeeData.email || !newEmployeeData.password || !newEmployeeData.employee_id) {
-        throw new Error('이름, 이메일, 비밀번호, 직원번호는 필수 입력 항목입니다.')
+      if (!newEmployeeData.name || !newEmployeeData.employee_number || !newEmployeeData.email || !newEmployeeData.password) {
+        throw new Error('이름, 직원번호, 이메일, 비밀번호는 필수 입력 항목입니다.')
       }
 
       // 비밀번호 해싱 (bcrypt 사용)
@@ -684,9 +682,9 @@ export default function AdminEmployeeManagement() {
         .from('users')
         .insert({
           name: newEmployeeData.name,
+          employee_number: newEmployeeData.employee_number,
           email: newEmployeeData.email,
           password_hash: hashedPassword,
-          employee_id: newEmployeeData.employee_id,
           department: newEmployeeData.department || '미지정',
           position: newEmployeeData.position || '사원',
           phone: newEmployeeData.phone || '',
@@ -725,9 +723,9 @@ export default function AdminEmployeeManagement() {
       // 폼 초기화 및 모달 닫기
       setNewEmployeeData({
         name: '',
+        employee_number: '',
         email: '',
         password: '',
-        employee_id: '',
         department: '',
         position: '',
         phone: '',
@@ -846,6 +844,9 @@ export default function AdminEmployeeManagement() {
                     <div>
                       <p className="font-medium text-indigo-600">{emp.name} ({emp.position})</p>
                       <p className="text-sm text-gray-500">{emp.department}</p>
+                      {emp.employee_number && (
+                        <p className="text-xs text-gray-400">사번: {emp.employee_number}</p>
+                      )}
                     </div>
                     <div className="flex flex-col items-end">
                       <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
@@ -917,8 +918,8 @@ export default function AdminEmployeeManagement() {
                       <input type="text" name="name" id="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
                     </div>
                     <div>
-                      <label htmlFor="employee_id" className="block text-sm font-medium text-gray-700">직원번호(사번)</label>
-                      <input type="text" name="employee_id" id="employee_id" value={formData.employee_id || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" placeholder="EMP001" />
+                      <label htmlFor="employee_number" className="block text-sm font-medium text-gray-700">직원번호(사번)</label>
+                      <input type="text" name="employee_number" id="employee_number" value={formData.employee_number || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" placeholder="EMP001" />
                     </div>
                     <div>
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700">이메일</label>
@@ -1653,8 +1654,8 @@ export default function AdminEmployeeManagement() {
                   </label>
                   <input
                     type="text"
-                    value={newEmployeeData.employee_id}
-                    onChange={(e) => setNewEmployeeData({...newEmployeeData, employee_id: e.target.value})}
+                    value={newEmployeeData.employee_number}
+                    onChange={(e) => setNewEmployeeData({...newEmployeeData, employee_number: e.target.value})}
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm"
                     placeholder="EMP001"
                     required
