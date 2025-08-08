@@ -14,6 +14,7 @@ interface Employee {
   id: string
   name: string
   email: string
+  employee_id: string
   department: string
   position: string
   work_type: string
@@ -914,6 +915,10 @@ export default function AdminEmployeeManagement() {
                     <div>
                       <label htmlFor="name" className="block text-sm font-medium text-gray-700">이름</label>
                       <input type="text" name="name" id="name" value={formData.name || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div>
+                      <label htmlFor="employee_id" className="block text-sm font-medium text-gray-700">직원번호(사번)</label>
+                      <input type="text" name="employee_id" id="employee_id" value={formData.employee_id || ''} onChange={handleInputChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" placeholder="EMP001" />
                     </div>
                     <div>
                       <label htmlFor="email" className="block text-sm font-medium text-gray-700">이메일</label>

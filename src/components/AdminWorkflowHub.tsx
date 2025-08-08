@@ -20,7 +20,7 @@ import AdminLeaveOverview from './AdminLeaveOverview'
 import AdminFormManagement from './AdminFormManagement'
 import AdminAttendanceManagement from './AdminAttendanceManagement'
 import AdminPayrollManagement from './AdminPayrollManagement'
-import AdminSettingsUnified from './AdminSettingsUnified'
+import WorkScheduleManagement from './WorkScheduleManagement'
 
 interface WorkflowTab {
   id: string
@@ -95,7 +95,7 @@ export default function AdminWorkflowHub() {
       name: '시스템 설정',
       icon: <Settings className="h-5 w-5" />,
       description: '근무 정책, 알림 설정, 시스템 구성 관리',
-      component: <AdminSettingsUnified />,
+      component: <WorkScheduleManagement />,
       category: 'settings',
       priority: 6
     }

@@ -8,7 +8,14 @@ import {
   Info,
   Moon,
   Sun,
-  AlertCircle
+  AlertCircle,
+  Mail,
+  Plus,
+  Trash2,
+  Save,
+  Bell,
+  History,
+  Check
 } from 'lucide-react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
@@ -17,6 +24,21 @@ interface FlexibleWorkSettings {
   start_date: string
   end_date: string
   period_name: string
+}
+
+interface BasicSettings {
+  monthly_standard_hours: number
+  lunch_break_minutes: number
+  overtime_threshold_minutes: number
+  dinner_allowance: number
+}
+
+interface NotificationSettings {
+  id?: string
+  email: string
+  notification_types: string[]
+  is_active: boolean
+  created_at?: string
 }
 
 interface OvertimeSettings {
@@ -46,8 +68,16 @@ interface LeaveSettings {
 export default function WorkScheduleManagement() {
   const { supabase } = useSupabase()
   const [loading, setLoading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'flexible' | 'overtime' | 'leave'>('flexible')
+  const [activeTab, setActiveTab] = useState<'basic' | 'flexible' | 'overtime' | 'leave' | 'notifications'>('basic')
   const [currentUser, setCurrentUser] = useState<any>(null)
+  
+  // 기본 설정 (AdminSystemSettings에서 이전)
+  const [basicSettings, setBasicSettings] = useState<BasicSettings>({
+    monthly_standard_hours: 209,
+    lunch_break_minutes: 60,
+    overtime_threshold_minutes: 30,
+    dinner_allowance: 8000
+  })
   
   // 탄력근무제 설정
   const [flexibleSettings, setFlexibleSettings] = useState<FlexibleWorkSettings>({
@@ -81,6 +111,20 @@ export default function WorkScheduleManagement() {
     max_substitute_hours: 240,
     max_compensatory_hours: 240
   })
+  
+  // 알림 설정 (AdminNotificationSettings에서 이전)
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings[]>([])
+  const [newEmail, setNewEmail] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
+  
+  const notificationTypes = [
+    { id: 'leave_application', label: '휴가 신청' },
+    { id: 'form_submission', label: '서식 제출' },
+    { id: 'urgent_request', label: '긴급 요청' },
+    { id: 'system_alert', label: '시스템 알림' }
+  ]
 
   // 현재 설정 로드
   useEffect(() => {
@@ -98,17 +142,41 @@ export default function WorkScheduleManagement() {
           .from('system_settings')
           .select('setting_key, setting_value')
           .in('setting_key', [
+            // 기본 설정
+            'monthly_standard_hours', 'lunch_break_minutes', 'overtime_threshold_minutes', 'dinner_allowance',
+            // 탄력근무제 설정
             'flexible_work_start_date', 'flexible_work_end_date', 'flexible_work_period_name',
+            // 야간/초과근무 설정
             'overtime_night_start', 'overtime_night_end', 'overtime_night_rate',
             'overtime_threshold', 'overtime_rate', 'break_4h', 'break_8h', 'dinner_threshold',
+            // 대체/보상휴가 설정
             'saturday_substitute_enabled', 'saturday_base_rate', 'saturday_overtime_rate',
             'sunday_compensatory_enabled', 'sunday_base_rate', 'sunday_overtime_rate',
             'holiday_base_rate', 'holiday_overtime_rate', 'max_substitute_hours', 'max_compensatory_hours'
           ])
+          
+        // 알림 설정 로드
+        const { data: notifications, error: notifError } = await supabase
+          .from('admin_notification_settings')
+          .select('*')
+          .order('created_at', { ascending: false })
 
         if (!error && settings) {
           settings.forEach(setting => {
             switch(setting.setting_key) {
+              // 기본 설정 (AdminSystemSettings에서 이전)
+              case 'monthly_standard_hours':
+                setBasicSettings(prev => ({ ...prev, monthly_standard_hours: parseInt(setting.setting_value) }))
+                break
+              case 'lunch_break_minutes':
+                setBasicSettings(prev => ({ ...prev, lunch_break_minutes: parseInt(setting.setting_value) }))
+                break
+              case 'overtime_threshold_minutes':
+                setBasicSettings(prev => ({ ...prev, overtime_threshold_minutes: parseInt(setting.setting_value) }))
+                break
+              case 'dinner_allowance':
+                setBasicSettings(prev => ({ ...prev, dinner_allowance: parseInt(setting.setting_value) }))
+                break
               // 탄력근무제 설정
               case 'flexible_work_start_date':
                 setFlexibleSettings(prev => ({ ...prev, start_date: setting.setting_value }))
@@ -177,6 +245,11 @@ export default function WorkScheduleManagement() {
                 break
             }
           })
+        }
+        
+        // 알림 설정 적용
+        if (!notifError && notifications) {
+          setNotificationSettings(notifications)
         }
       } catch (error) {
         console.error('설정 로드 오류:', error)
@@ -333,6 +406,161 @@ export default function WorkScheduleManagement() {
     }
   }
 
+  // 기본 설정 업데이트 (AdminSystemSettings에서 이전)
+  const updateBasicSettings = async () => {
+    if (!currentUser || currentUser.role !== 'admin') {
+      alert('관리자 권한이 필요합니다.')
+      return
+    }
+
+    try {
+      setLoading(true)
+
+      const updates = [
+        { setting_key: 'monthly_standard_hours', setting_value: basicSettings.monthly_standard_hours.toString(), setting_type: 'integer', description: '월 기준 근무시간' },
+        { setting_key: 'lunch_break_minutes', setting_value: basicSettings.lunch_break_minutes.toString(), setting_type: 'integer', description: '점심시간(분)' },
+        { setting_key: 'overtime_threshold_minutes', setting_value: basicSettings.overtime_threshold_minutes.toString(), setting_type: 'integer', description: '초과근무 인정 최소시간(분)' },
+        { setting_key: 'dinner_allowance', setting_value: basicSettings.dinner_allowance.toString(), setting_type: 'integer', description: '저녁식사 수당' }
+      ]
+
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('system_settings')
+          .upsert({
+            ...update,
+            updated_at: new Date().toISOString()
+          })
+
+        if (error) {
+          console.error('기본 설정 업데이트 오류:', error)
+          alert('기본 설정 업데이트 중 오류가 발생했습니다.')
+          return
+        }
+      }
+
+      setSuccess('기본 설정이 업데이트되었습니다.')
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (error) {
+      console.error('기본 설정 업데이트 오류:', error)
+      alert('기본 설정 업데이트 중 오류가 발생했습니다.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 알림 설정 관리 (AdminNotificationSettings에서 이전)
+  const addEmailSetting = async () => {
+    if (!newEmail.trim()) {
+      setError('이메일 주소를 입력해주세요.')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(newEmail)) {
+      setError('올바른 이메일 형식을 입력해주세요.')
+      return
+    }
+
+    try {
+      setSaving(true)
+      const { error } = await supabase
+        .from('admin_notification_settings')
+        .insert({
+          email: newEmail.trim(),
+          notification_types: ['leave_application', 'form_submission'],
+          is_active: true
+        })
+
+      if (error) {
+        console.error('이메일 추가 오류:', error)
+        setError('이메일 추가에 실패했습니다.')
+        return
+      }
+
+      setNewEmail('')
+      setSuccess('이메일이 성공적으로 추가되었습니다.')
+      setTimeout(() => setSuccess(''), 3000)
+      
+      // 알림 설정 새로고침
+      const { data: notifications } = await supabase
+        .from('admin_notification_settings')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (notifications) setNotificationSettings(notifications)
+      
+    } catch (err) {
+      console.error('이메일 추가 실패:', err)
+      setError('이메일 추가 중 오류가 발생했습니다.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeEmailSetting = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('admin_notification_settings')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        console.error('이메일 삭제 오류:', error)
+        setError('이메일 삭제에 실패했습니다.')
+        return
+      }
+
+      setSuccess('이메일이 삭제되었습니다.')
+      setTimeout(() => setSuccess(''), 3000)
+      
+      // 알림 설정 새로고침
+      const { data: notifications } = await supabase
+        .from('admin_notification_settings')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (notifications) setNotificationSettings(notifications)
+      
+    } catch (err) {
+      console.error('이메일 삭제 실패:', err)
+      setError('이메일 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  const toggleNotificationType = async (emailId: string, notificationType: string, isEnabled: boolean) => {
+    const emailSetting = notificationSettings.find(s => s.id === emailId)
+    if (!emailSetting) return
+
+    const updatedTypes = isEnabled 
+      ? emailSetting.notification_types.filter(type => type !== notificationType)
+      : [...emailSetting.notification_types, notificationType]
+
+    try {
+      const { error } = await supabase
+        .from('admin_notification_settings')
+        .update({ 
+          notification_types: updatedTypes,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', emailId)
+
+      if (error) {
+        console.error('알림 타입 업데이트 오류:', error)
+        setError('알림 설정 업데이트에 실패했습니다.')
+        return
+      }
+
+      // 알림 설정 새로고침
+      const { data: notifications } = await supabase
+        .from('admin_notification_settings')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (notifications) setNotificationSettings(notifications)
+      
+    } catch (err) {
+      console.error('알림 타입 업데이트 실패:', err)
+      setError('알림 설정 업데이트 중 오류가 발생했습니다.')
+    }
+  }
+
   const formatRate = (rate: number): string => {
     return rate === 1 ? '100%' : `${Math.round(rate * 100)}%`
   }
@@ -365,6 +593,16 @@ export default function WorkScheduleManagement() {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8 px-6">
             <button
+              onClick={() => setActiveTab('basic')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'basic'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              기본 설정
+            </button>
+            <button
               onClick={() => setActiveTab('flexible')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${
                 activeTab === 'flexible'
@@ -394,10 +632,130 @@ export default function WorkScheduleManagement() {
             >
               대체/보상휴가
             </button>
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'notifications'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              알림 설정
+            </button>
           </nav>
         </div>
 
         <div className="p-6">
+          {/* 기본 설정 탭 (AdminSystemSettings에서 이전) */}
+          {activeTab === 'basic' && (
+            <div className="space-y-6">
+              {/* 기본 설정 안내 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <Settings className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-medium text-blue-800">📊 기본 설정이란?</h4>
+                    <div className="mt-2 text-sm text-blue-700">
+                      <p>전체 시스템에서 사용되는 근무시간 계산의 기본값들을 설정합니다.</p>
+                      <ul className="mt-2 ml-4 space-y-1">
+                        <li>• 월 근무시간: 통상임금 계산의 기준</li>
+                        <li>• 점심시간: 근무시간에서 자동 차감</li>
+                        <li>• 초과근무 최소시간: 이 시간 미만은 초과근무 미인정</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 기본 설정 폼 */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">시스템 기본 설정</h3>
+                
+                <div className="grid grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      월 기준 근무시간
+                    </label>
+                    <input
+                      type="number"
+                      value={basicSettings.monthly_standard_hours}
+                      onChange={(e) => setBasicSettings(prev => ({ ...prev, monthly_standard_hours: parseInt(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="209"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">통상임금 계산의 기준이 되는 시간</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      점심시간 (분)
+                    </label>
+                    <input
+                      type="number"
+                      value={basicSettings.lunch_break_minutes}
+                      onChange={(e) => setBasicSettings(prev => ({ ...prev, lunch_break_minutes: parseInt(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="60"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">근무시간에서 차감되는 휴게시간</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      초과근무 인정 최소 시간 (분)
+                    </label>
+                    <input
+                      type="number"
+                      value={basicSettings.overtime_threshold_minutes}
+                      onChange={(e) => setBasicSettings(prev => ({ ...prev, overtime_threshold_minutes: parseInt(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="30"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">이 시간 미만의 초과근무는 무시됩니다</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      저녁식사 수당 (원)
+                    </label>
+                    <input
+                      type="number"
+                      value={basicSettings.dinner_allowance}
+                      onChange={(e) => setBasicSettings(prev => ({ ...prev, dinner_allowance: parseInt(e.target.value) }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="8000"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">야간근무 시 지급되는 식사비</p>
+                  </div>
+                </div>
+
+                {/* 성공/오류 메시지 */}
+                {success && (
+                  <div className="mt-4 flex items-center text-green-600">
+                    <Check className="h-4 w-4 mr-1" />
+                    <span className="text-sm">{success}</span>
+                  </div>
+                )}
+                {error && (
+                  <div className="mt-4 flex items-center text-red-600">
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    <span className="text-sm">{error}</span>
+                  </div>
+                )}
+
+                <div className="mt-6">
+                  <button
+                    onClick={updateBasicSettings}
+                    disabled={loading}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {loading ? '저장 중...' : '기본 설정 저장'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 탄력근무제 탭 */}
           {activeTab === 'flexible' && (
             <div className="space-y-6">
@@ -856,6 +1214,119 @@ export default function WorkScheduleManagement() {
                       {loading ? '저장 중...' : '대체/보상휴가 설정 저장'}
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 알림 설정 탭 (AdminNotificationSettings에서 이전) */}
+          {activeTab === 'notifications' && (
+            <div className="space-y-6">
+              {/* 알림 설정 안내 */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-start">
+                  <Mail className="h-5 w-5 text-green-500 mr-2 mt-0.5" />
+                  <div>
+                    <h4 className="text-sm font-medium text-green-800">📬 알림 설정이란?</h4>
+                    <div className="mt-2 text-sm text-green-700">
+                      <p>근무 관련 알림을 받을 관리자 이메일을 추가하고 알림 유형을 설정할 수 있습니다.</p>
+                      <ul className="mt-2 ml-4 space-y-1">
+                        <li>• 휴가 신청: 직원이 휴가를 신청했을 때</li>
+                        <li>• 서식 제출: 각종 서식 작성 완료 때</li>
+                        <li>• 긴급 요청: 중요한 승인 요청 시</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 이메일 추가 */}
+              <div className="bg-white border border-gray-200 rounded-lg p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">알림 이메일 관리</h3>
+                
+                <div className="flex space-x-4 mb-6">
+                  <div className="flex-1">
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder="알림을 받을 이메일 주소를 입력하세요"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                  </div>
+                  <button
+                    onClick={addEmailSetting}
+                    disabled={saving || !newEmail.trim()}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {saving ? '추가 중...' : '이메일 추가'}
+                  </button>
+                </div>
+
+                {/* 성공/오류 메시지 */}
+                {success && (
+                  <div className="mb-4 flex items-center text-green-600">
+                    <Check className="h-4 w-4 mr-1" />
+                    <span className="text-sm">{success}</span>
+                  </div>
+                )}
+                {error && (
+                  <div className="mb-4 flex items-center text-red-600">
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    <span className="text-sm">{error}</span>
+                  </div>
+                )}
+
+                {/* 알림 이메일 목록 */}
+                <div className="space-y-4">
+                  {notificationSettings.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Mail className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                      <p>등록된 알림 이메일이 없습니다.</p>
+                    </div>
+                  ) : (
+                    notificationSettings.map((setting) => (
+                      <div key={setting.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center">
+                            <Mail className="h-4 w-4 text-green-500 mr-2" />
+                            <span className="font-medium text-gray-900">{setting.email}</span>
+                            <span className={`ml-2 px-2 py-1 rounded-full text-xs ${
+                              setting.is_active 
+                                ? 'bg-green-100 text-green-800' 
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {setting.is_active ? '활성' : '비활성'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setting.id && removeEmailSetting(setting.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-2">
+                          {notificationTypes.map((type) => {
+                            const isEnabled = setting.notification_types.includes(type.id)
+                            return (
+                              <label key={type.id} className="flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={isEnabled}
+                                  onChange={() => setting.id && toggleNotificationType(setting.id, type.id, isEnabled)}
+                                  className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                />
+                                <span className="ml-2 text-sm text-gray-700">{type.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
