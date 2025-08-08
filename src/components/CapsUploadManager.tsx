@@ -182,23 +182,27 @@ export default function CapsUploadManager() {
 
           // 구분을 출퇴근으로 변환
           // 우선순위: 모드 컬럼 → 구분 컬럼 확인
-          // 모드: 출근/퇴근 (웹앱, CAPS 공통)
-          // 구분: 해제=출근, 세트=퇴근, 출입=무시 (CAPS 전용)
+          // 모드: 출근/퇴근/해제/세트 (CAPS 모드 기준)
+          // 구분: 해제=출근, 세트=퇴근, 출입=무시, 일반=모드 따름 (CAPS 전용)
           let recordType: '출근' | '퇴근' | null = null
           
-          // 1단계: 모드 컬럼 우선 확인 (웹앱 + CAPS 공통)
-          if (record.모드 === '출근') {
+          // 1단계: 모드 컬럼 우선 확인 (CAPS 핵심 정보)
+          if (record.모드 === '출근' || record.모드 === '해제') {
             recordType = '출근'
-          } else if (record.모드 === '퇴근') {
+          } else if (record.모드 === '퇴근' || record.모드 === '세트') {
             recordType = '퇴근'
           }
-          // 2단계: 구분 컬럼 확인 (CAPS 전용, 모드가 없을 때)
+          // 2단계: 구분 컬럼 확인 (모드가 명확하지 않을 때만)
           else if (record.구분 === '출근' || record.구분 === '해제') {
             recordType = '출근'
           } else if (record.구분 === '퇴근' || record.구분 === '세트') {
             recordType = '퇴근'
           } else if (record.구분 === '출입') {
             // 출입은 무시
+            continue
+          } else if (record.구분 === '일반') {
+            // 일반 구분은 무시 (애매한 기록)
+            console.log(`⚠️ 일반 구분 스킵: ${record.구분} / 모드: ${record.모드} (${i + 1}행)`)
             continue
           } else {
             // 기타 알 수 없는 구분도 무시
@@ -388,14 +392,16 @@ export default function CapsUploadManager() {
           // 배치 내 병렬 처리 (직접 INSERT/UPSERT 방식)
           const batchPromises = batch.map(async (record) => {
             try {
-              // 1. 중복 체크
-              const { data: existingRecord, error: checkError } = await supabase
+              // 1. 중복 체크 (한글 인코딩 이슈 해결)
+              const { data: existingRecords, error: checkError } = await supabase
                 .from('attendance_records')
                 .select('id')
                 .eq('user_id', record.user_id)
                 .eq('record_timestamp', record.record_timestamp)
                 .eq('record_type', record.record_type)
-                .maybeSingle()
+                .limit(1)
+                
+              const existingRecord = existingRecords && existingRecords.length > 0 ? existingRecords[0] : null
 
               if (checkError) {
                 console.error('❌ 중복 체크 오류:', checkError)
@@ -407,7 +413,7 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (AttendanceRecorder와 동일한 구조 사용)
+              // 2. 새 기록 삽입 (PostgreSQL 트리거 호환성 보장)
               const insertData: any = {
                 user_id: record.user_id,
                 employee_number: record.employee_number,
@@ -422,7 +428,10 @@ export default function CapsUploadManager() {
                 source: record.source || 'CAPS',
                 had_dinner: record.had_dinner || false,
                 is_manual: record.is_manual || false,
-                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`
+                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
+                // PostgreSQL 트리거가 요구하는 필드들 (임시 해결책)
+                check_in_time: record.record_type === '출근' ? record.record_timestamp : null,
+                check_out_time: record.record_type === '퇴근' ? record.record_timestamp : null
               }
 
               console.log('🔍 INSERT 시도할 데이터:', insertData)
