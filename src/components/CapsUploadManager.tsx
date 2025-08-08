@@ -419,7 +419,7 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (attendance_records 테이블 정확한 스키마)
+              // 2. 새 기록 삽입 (트리거 호환성을 위해 check_in_time/check_out_time 포함)
               const insertData: any = {
                 user_id: record.user_id,
                 employee_number: record.employee_number,
@@ -434,8 +434,10 @@ export default function CapsUploadManager() {
                 source: record.source || 'CAPS',
                 had_dinner: record.had_dinner || false,
                 is_manual: record.is_manual || false,
-                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`
-                // check_in_time, check_out_time은 daily_work_summary 테이블에만 존재
+                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
+                // PostgreSQL 트리거 호환성을 위한 필드 (임시)
+                check_in_time: record.record_type === '출근' ? record.record_timestamp : null,
+                check_out_time: record.record_type === '퇴근' ? record.record_timestamp : null
               }
 
               console.log('🔍 INSERT 시도할 데이터:', insertData)
