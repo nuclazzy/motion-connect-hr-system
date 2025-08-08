@@ -1245,15 +1245,21 @@ export default function AdminEmployeeManagement() {
                                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                             hasLeave ? 'bg-yellow-100 text-yellow-800' :
                                             record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
+                                            record.work_status === '단축근무' ? 'bg-blue-100 text-blue-800' :
                                             record.work_status === '지각' ? 'bg-orange-100 text-orange-800' :
-                                          record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
-                                          record.work_status === '결근' ? 'bg-red-100 text-red-800' :
-                                          record.work_status?.includes('누락') ? 'bg-gray-100 text-gray-800' :
+                                            record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
+                                            record.work_status === '결근' ? 'bg-red-100 text-red-800' :
+                                            record.work_status === 'in_progress' ? 'bg-purple-100 text-purple-800' :
+                                            record.work_status === 'completed' ? 'bg-green-100 text-green-800' :
+                                            record.work_status?.includes('누락') ? 'bg-gray-100 text-gray-800' :
                                             'bg-gray-100 text-gray-800'
                                           }`}>
                                             {hasLeave ? (
                                               isFullDayLeave ? '휴가' : '반차'
                                             ) : (
+                                              // 영어 상태를 한글로 변환
+                                              record.work_status === 'in_progress' ? '근무중' :
+                                              record.work_status === 'completed' ? '정상근무' :
                                               record.work_status || '미확인'
                                             )}
                                           </span>

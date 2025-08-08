@@ -617,7 +617,11 @@ export default function CapsUploadManager() {
                 night_hours: 0, // TODO: 야간근무 계산
                 substitute_hours: 0,
                 compensatory_hours: 0,
-                work_status: checkOut ? 'completed' : 'in_progress',
+                work_status: checkOut ? (
+                  basicHours < 7 ? '단축근무' :
+                  basicHours >= 8 ? '정상근무' :
+                  '근무'
+                ) : '근무중',
                 had_dinner: hadDinner,
                 auto_calculated: true,
                 calculated_at: new Date().toISOString()
