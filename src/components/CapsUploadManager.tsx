@@ -539,6 +539,160 @@ export default function CapsUploadManager() {
         upsertErrors
       })
 
+      // 업로드된 데이터의 일자별 통계 재계산
+      console.log('📊 일별/월별 통계 재계산 시작...')
+      
+      // 처리된 날짜와 사용자 목록 수집
+      const processedDates = new Set<string>()
+      const processedMonths = new Set<string>()
+      const processedUserIds = new Set<string>()
+      
+      processedRecords.forEach(record => {
+        processedDates.add(record.record_date)
+        const [year, month] = record.record_date.split('-')
+        processedMonths.add(`${year}-${month}`)
+        if (record.user_id) {
+          processedUserIds.add(record.user_id)
+        }
+      })
+      
+      // 일별 근무시간 재계산
+      for (const date of processedDates) {
+        for (const userId of processedUserIds) {
+          // 해당일의 출퇴근 기록 조회
+          const { data: dayRecords, error: dayError } = await supabase
+            .from('attendance_records')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('record_date', date)
+            .order('record_timestamp')
+          
+          if (dayError) {
+            console.error(`❌ ${date} 기록 조회 오류:`, dayError)
+            continue
+          }
+          
+          if (!dayRecords || dayRecords.length === 0) continue
+          
+          // 출근/퇴근 시간 찾기
+          const checkIn = dayRecords.find(r => r.record_type === '출근')
+          const checkOut = dayRecords.find(r => r.record_type === '퇴근')
+          
+          if (checkIn) {
+            // 근무시간 계산
+            let basicHours = 0
+            let overtimeHours = 0
+            let hadDinner = false
+            
+            if (checkIn && checkOut) {
+              const startTime = new Date(checkIn.record_timestamp)
+              const endTime = new Date(checkOut.record_timestamp)
+              const diffMs = endTime.getTime() - startTime.getTime()
+              const totalHours = diffMs / (1000 * 60 * 60)
+              
+              // 휴게시간 차감 (점심 1시간)
+              let workHours = totalHours - 1
+              
+              // 저녁식사 시간 차감 (18시 이후 근무 시)
+              if (endTime.getHours() >= 19 || (endTime.getHours() === 18 && endTime.getMinutes() >= 30)) {
+                workHours -= 0.5
+                hadDinner = true
+              }
+              
+              // 기본근무 8시간, 초과분은 연장근무
+              basicHours = Math.min(workHours, 8)
+              overtimeHours = Math.max(0, workHours - 8)
+            }
+            
+            // daily_work_summary 업데이트
+            const { error: summaryError } = await supabase
+              .from('daily_work_summary')
+              .upsert({
+                user_id: userId,
+                work_date: date,
+                check_in_time: checkIn?.record_timestamp || null,
+                check_out_time: checkOut?.record_timestamp || null,
+                basic_hours: Math.round(basicHours * 10) / 10,
+                overtime_hours: Math.round(overtimeHours * 10) / 10,
+                night_hours: 0, // TODO: 야간근무 계산
+                substitute_hours: 0,
+                compensatory_hours: 0,
+                work_status: checkOut ? 'completed' : 'in_progress',
+                had_dinner: hadDinner,
+                auto_calculated: true,
+                calculated_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,work_date'
+              })
+            
+            if (summaryError) {
+              console.error(`❌ ${date} daily_work_summary 업데이트 오류:`, summaryError)
+            } else {
+              console.log(`✅ ${date} daily_work_summary 업데이트 완료`)
+            }
+          }
+        }
+      }
+      
+      // 월별 통계 재계산
+      for (const yearMonth of processedMonths) {
+        const [year, month] = yearMonth.split('-').map(Number)
+        const workMonth = `${year}-${String(month).padStart(2, '0')}-01`
+        
+        for (const userId of processedUserIds) {
+          // 해당 월의 일별 요약 조회
+          const { data: monthSummaries, error: monthError } = await supabase
+            .from('daily_work_summary')
+            .select('*')
+            .eq('user_id', userId)
+            .gte('work_date', `${year}-${String(month).padStart(2, '0')}-01`)
+            .lte('work_date', `${year}-${String(month).padStart(2, '0')}-31`)
+          
+          if (monthError) {
+            console.error(`❌ ${yearMonth} 월별 요약 조회 오류:`, monthError)
+            continue
+          }
+          
+          if (!monthSummaries || monthSummaries.length === 0) continue
+          
+          // 통계 계산
+          const stats = {
+            total_work_days: monthSummaries.length,
+            total_basic_hours: monthSummaries.reduce((sum, d) => sum + (d.basic_hours || 0), 0),
+            total_overtime_hours: monthSummaries.reduce((sum, d) => sum + (d.overtime_hours || 0), 0),
+            total_night_hours: monthSummaries.reduce((sum, d) => sum + (d.night_hours || 0), 0),
+            dinner_count: monthSummaries.filter(d => d.had_dinner).length,
+            late_count: 0, // TODO: 지각 계산
+            early_leave_count: 0, // TODO: 조퇴 계산
+            absent_count: 0 // TODO: 결근 계산
+          }
+          
+          const avgDailyHours = stats.total_work_days > 0 
+            ? (stats.total_basic_hours + stats.total_overtime_hours) / stats.total_work_days 
+            : 0
+          
+          // monthly_work_stats 업데이트
+          const { error: statsError } = await supabase
+            .from('monthly_work_stats')
+            .upsert({
+              user_id: userId,
+              work_month: workMonth,
+              ...stats,
+              average_daily_hours: Math.round(avgDailyHours * 10) / 10
+            }, {
+              onConflict: 'user_id,work_month'
+            })
+          
+          if (statsError) {
+            console.error(`❌ ${yearMonth} monthly_work_stats 업데이트 오류:`, statsError)
+          } else {
+            console.log(`✅ ${yearMonth} monthly_work_stats 업데이트 완료`)
+          }
+        }
+      }
+      
+      console.log('✅ 일별/월별 통계 재계산 완료')
+      
       // 업로드 후 데이터 검증 (7월 데이터 확인)
       if (file.name.includes('7월')) {
         const { data: julyData, error: checkError } = await supabase
@@ -548,10 +702,36 @@ export default function CapsUploadManager() {
           .lte('record_date', '2025-07-31')
           .limit(5)
         
-        console.log('📊 7월 데이터 확인:', {
+        console.log('📊 7월 attendance_records 확인:', {
           count: julyData?.length || 0,
           sample: julyData?.slice(0, 2),
           error: checkError
+        })
+        
+        // daily_work_summary도 확인
+        const { data: julySummary, error: summaryError } = await supabase
+          .from('daily_work_summary')
+          .select('*')
+          .gte('work_date', '2025-07-01')
+          .lte('work_date', '2025-07-31')
+          .limit(5)
+        
+        console.log('📊 7월 daily_work_summary 확인:', {
+          count: julySummary?.length || 0,
+          sample: julySummary?.slice(0, 2),
+          error: summaryError
+        })
+        
+        // monthly_work_stats도 확인
+        const { data: julyStats, error: statsError } = await supabase
+          .from('monthly_work_stats')
+          .select('*')
+          .eq('work_month', '2025-07-01')
+        
+        console.log('📊 7월 monthly_work_stats 확인:', {
+          count: julyStats?.length || 0,
+          data: julyStats,
+          error: statsError
         })
       }
 
