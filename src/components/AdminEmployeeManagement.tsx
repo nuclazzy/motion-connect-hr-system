@@ -428,7 +428,13 @@ export default function AdminEmployeeManagement() {
         employee: selectedEmployee.name,
         month: attendanceMonth,
         leaveCount: leaveRecords?.length || 0,
-        leaves: leaveRecords
+        leaves: leaveRecords?.map(l => ({
+          date: `${l.start_date} ~ ${l.end_date || l.start_date}`,
+          reason: l.reason,
+          leave_type: l.leave_type,
+          half_day: l.half_day,
+          period: l.period
+        }))
       })
       
       if (statsError || dailyError || recordsError) {
@@ -444,13 +450,21 @@ export default function AdminEmployeeManagement() {
         const startDate = new Date(leave.start_date)
         const endDate = leave.end_date ? new Date(leave.end_date) : startDate
         
+        // reason 또는 leave_type에서 반차 정보 추출
+        const reasonText = (leave.reason || '').toLowerCase() + ' ' + (leave.leave_type || '').toLowerCase()
+        const isMorningHalfDay = reasonText.includes('오전 반차') || reasonText.includes('오전반차')
+        const isAfternoonHalfDay = reasonText.includes('오후 반차') || reasonText.includes('오후반차')
+        const isHalfDay = isMorningHalfDay || isAfternoonHalfDay
+        
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
           const dateStr = d.toISOString().split('T')[0]
           leaveByDate[dateStr] = {
             type: leave.leave_type,
-            half_day: leave.half_day,
-            period: leave.period,
-            reason: leave.reason
+            half_day: isHalfDay,
+            period: isMorningHalfDay ? 'morning' : (isAfternoonHalfDay ? 'afternoon' : null),
+            reason: leave.reason,
+            original_half_day: leave.half_day, // 기존 필드 보존
+            original_period: leave.period // 기존 필드 보존
           }
         }
       })
