@@ -455,11 +455,84 @@ export default function AdminEmployeeManagement() {
         }
       })
       
-      // 일별 데이터에 휴가 정보 병합
-      const mergedDailyRecords = dailyRecords?.map(record => ({
-        ...record,
-        leave_info: leaveByDate[record.work_date] || null
-      })) || []
+      // 일별 데이터에 휴가 정보 병합 및 근무시간 재계산
+      const mergedDailyRecords = dailyRecords?.map(record => {
+        const leaveInfo = leaveByDate[record.work_date] || null
+        let adjustedBasicHours = record.basic_hours || 0
+        let adjustedOvertimeHours = record.overtime_hours || 0
+        
+        // 반차가 있는 경우 근무시간 재계산
+        if (leaveInfo?.half_day) {
+          const checkInTime = record.check_in_time ? new Date(record.check_in_time) : null
+          const checkOutTime = record.check_out_time ? new Date(record.check_out_time) : null
+          
+          if (leaveInfo.period === 'morning') {
+            // 오전 반차: 9:00~13:00는 근무로 간주 (4시간)
+            // 실제 근무시간이 있으면 그것도 추가
+            let actualWorkHours = 0
+            if (checkInTime && checkOutTime) {
+              const totalWorkMs = checkOutTime.getTime() - checkInTime.getTime()
+              const totalWorkHours = totalWorkMs / (1000 * 60 * 60)
+              
+              // 실제 근무가 4시간 이하면 그대로, 초과하면 점심시간 1시간 차감
+              if (totalWorkHours <= 4) {
+                actualWorkHours = totalWorkHours
+              } else {
+                actualWorkHours = totalWorkHours - 1
+              }
+            }
+            
+            // 오전 반차 4시간 + 실제 근무시간 (단, 기본 근무는 최대 8시간)
+            const totalHours = 4 + Math.max(0, actualWorkHours)
+            adjustedBasicHours = Math.min(8, totalHours)
+            adjustedOvertimeHours = Math.max(0, totalHours - 8)
+            
+          } else if (leaveInfo.period === 'afternoon') {
+            // 오후 반차: 14:00~18:00는 근무로 간주 (4시간)
+            // 실제 근무시간이 있으면 그것도 추가
+            let actualWorkHours = 0
+            if (checkInTime && checkOutTime) {
+              const totalWorkMs = checkOutTime.getTime() - checkInTime.getTime()
+              const totalWorkHours = totalWorkMs / (1000 * 60 * 60)
+              
+              // 실제 근무가 4시간 이하면 그대로, 초과하면 점심시간 1시간 차감
+              if (totalWorkHours <= 4) {
+                actualWorkHours = totalWorkHours
+              } else {
+                actualWorkHours = totalWorkHours - 1
+              }
+            }
+            
+            // 실제 근무시간 + 오후 반차 4시간 (단, 기본 근무는 최대 8시간)
+            const totalHours = Math.max(0, actualWorkHours) + 4
+            adjustedBasicHours = Math.min(8, totalHours)
+            adjustedOvertimeHours = Math.max(0, totalHours - 8)
+          }
+          
+          console.log(`📊 ${record.work_date} 반차 근무시간 계산:`, {
+            period: leaveInfo.period,
+            original: record.basic_hours,
+            adjusted: adjustedBasicHours,
+            checkIn: record.check_in_time,
+            checkOut: record.check_out_time
+          })
+        }
+        
+        // 연차인 경우 8시간으로 간주
+        if (leaveInfo && !leaveInfo.half_day && leaveInfo.type === 'annual') {
+          adjustedBasicHours = 8
+          adjustedOvertimeHours = 0
+        }
+        
+        return {
+          ...record,
+          leave_info: leaveInfo,
+          basic_hours: adjustedBasicHours,
+          overtime_hours: adjustedOvertimeHours,
+          original_basic_hours: record.basic_hours,
+          original_overtime_hours: record.overtime_hours
+        }
+      }) || []
       
       // 데이터 변환
       const attendanceData = {
@@ -1224,6 +1297,8 @@ export default function AdminEmployeeManagement() {
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                                           {isFullDayLeave ? (
                                             <span className="text-yellow-600">휴가</span>
+                                          ) : isHalfDayLeave && record.leave_info?.period === 'morning' ? (
+                                            <span className="text-blue-600">09:00 (반차)</span>
                                           ) : record.check_in_time ? 
                                             new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
                                               hour: '2-digit',
@@ -1235,6 +1310,8 @@ export default function AdminEmployeeManagement() {
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                                           {isFullDayLeave ? (
                                             <span className="text-yellow-600">휴가</span>
+                                          ) : isHalfDayLeave && record.leave_info?.period === 'afternoon' ? (
+                                            <span className="text-blue-600">18:00 (반차)</span>
                                           ) : record.check_out_time ? 
                                             new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
                                               hour: '2-digit',
@@ -1245,9 +1322,12 @@ export default function AdminEmployeeManagement() {
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                                           {isFullDayLeave ? (
-                                            <span className="text-yellow-600">휴가</span>
+                                            <span className="text-yellow-600">8시간 (연차)</span>
                                           ) : isHalfDayLeave ? (
-                                            <span>{(record.basic_hours || 0) / 2}시간 (반차)</span>
+                                            <span className="text-blue-600">
+                                              {record.basic_hours || 0}시간 
+                                              ({record.leave_info?.period === 'morning' ? '오전' : '오후'}반차)
+                                            </span>
                                           ) : (
                                             <span>{record.basic_hours || 0}시간</span>
                                           )}
