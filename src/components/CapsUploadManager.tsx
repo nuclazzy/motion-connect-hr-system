@@ -392,28 +392,30 @@ export default function CapsUploadManager() {
           // 배치 내 병렬 처리 (직접 INSERT/UPSERT 방식)
           const batchPromises = batch.map(async (record) => {
             try {
-              // 1. 중복 체크 (한글 인코딩 이슈 해결)
-              const { data: existingRecords, error: checkError } = await supabase
+              // 1. 중복 체크 (날짜와 시간 기반으로 먼저 조회)
+              const { data: dayRecords, error: checkError } = await supabase
                 .from('attendance_records')
-                .select('id')
+                .select('id, record_type, record_timestamp')
                 .eq('user_id', record.user_id)
-                .eq('record_timestamp', record.record_timestamp)
-                .eq('record_type', record.record_type)
-                .limit(1)
+                .eq('record_date', record.record_date)
                 
-              const existingRecord = existingRecords && existingRecords.length > 0 ? existingRecords[0] : null
-
               if (checkError) {
                 console.error('❌ 중복 체크 오류:', checkError)
                 return { success: false, error: checkError }
               }
+
+              // JavaScript에서 중복 체크 (한글 인코딩 이슈 회피)
+              const existingRecord = dayRecords?.find(r => 
+                r.record_timestamp === record.record_timestamp && 
+                r.record_type === record.record_type
+              )
 
               if (existingRecord) {
                 console.log(`⚠️ 중복 기록 스킵: ${record.record_date} ${record.record_time} ${record.record_type}`)
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (PostgreSQL 트리거 호환성 보장)
+              // 2. 새 기록 삽입 (attendance_records 테이블 정확한 스키마)
               const insertData: any = {
                 user_id: record.user_id,
                 employee_number: record.employee_number,
@@ -428,10 +430,8 @@ export default function CapsUploadManager() {
                 source: record.source || 'CAPS',
                 had_dinner: record.had_dinner || false,
                 is_manual: record.is_manual || false,
-                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
-                // PostgreSQL 트리거가 요구하는 필드들 (임시 해결책)
-                check_in_time: record.record_type === '출근' ? record.record_timestamp : null,
-                check_out_time: record.record_type === '퇴근' ? record.record_timestamp : null
+                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`
+                // check_in_time, check_out_time은 daily_work_summary 테이블에만 존재
               }
 
               console.log('🔍 INSERT 시도할 데이터:', insertData)
