@@ -381,10 +381,11 @@ export default function AdminEmployeeManagement() {
       // 선택된 월의 시작일과 종료일 계산
       const [year, month] = attendanceMonth.split('-').map(Number)
       const startDate = new Date(year, month - 1, 1)
+      // 다음 달 1일의 하루 전 = 이번 달 마지막 날
       const endDate = new Date(year, month, 0)
       
-      const startDateStr = startDate.toISOString().split('T')[0]
-      const endDateStr = endDate.toISOString().split('T')[0]
+      const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`
+      const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
       
       // 월별 통계 조회
       const { data: monthlyStatsArray, error: statsError } = await supabase
@@ -413,12 +414,45 @@ export default function AdminEmployeeManagement() {
         .lte('record_date', endDateStr)
         .order('record_date', { ascending: true })
       
+      // 휴가 신청 기록 조회
+      const { data: leaveRecords, error: leaveError } = await supabase
+        .from('leave_applications')
+        .select('*')
+        .eq('user_id', selectedEmployee.id)
+        .eq('status', 'approved') // 승인된 휴가만
+        .gte('start_date', startDateStr)
+        .lte('start_date', endDateStr)
+        .order('start_date', { ascending: true })
+      
       if (statsError || dailyError || recordsError) {
         const error = statsError || dailyError || recordsError
         console.error('❌ 근무시간 데이터 조회 오류:', error)
         setError('근무시간 데이터를 불러올 수 없습니다.')
         return
       }
+      
+      // 휴가 데이터를 날짜별로 매핑
+      const leaveByDate: Record<string, any> = {}
+      leaveRecords?.forEach(leave => {
+        const startDate = new Date(leave.start_date)
+        const endDate = leave.end_date ? new Date(leave.end_date) : startDate
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0]
+          leaveByDate[dateStr] = {
+            type: leave.leave_type,
+            half_day: leave.half_day,
+            period: leave.period,
+            reason: leave.reason
+          }
+        }
+      })
+      
+      // 일별 데이터에 휴가 정보 병합
+      const mergedDailyRecords = dailyRecords?.map(record => ({
+        ...record,
+        leave_info: leaveByDate[record.work_date] || null
+      })) || []
       
       // 데이터 변환
       const attendanceData = {
@@ -430,10 +464,12 @@ export default function AdminEmployeeManagement() {
           dinner_count: dailyRecords?.filter(record => record.had_dinner).length || 0,
           late_count: 0, // TODO: 지각 수 계산 로직 추가
           early_leave_count: 0, // TODO: 조퇴 수 계산 로직 추가
-          absent_count: 0 // TODO: 결근 수 계산 로직 추가
+          absent_count: 0, // TODO: 결근 수 계산 로직 추가
+          leave_count: Object.keys(leaveByDate).length // 휴가 사용 일수
         },
-        daily_records: dailyRecords || [],
-        attendance_records: attendanceRecords || []
+        daily_records: mergedDailyRecords,
+        attendance_records: attendanceRecords || [],
+        leave_records: leaveRecords || []
       }
       
       console.log('✅ 근무시간 데이터 조회 완료:', attendanceData)
@@ -984,6 +1020,53 @@ export default function AdminEmployeeManagement() {
               {/* Attendance Management Tab */}
               {activeTab === 'attendance' && (
                 <div className="space-y-6">
+                  {/* Leave Information Summary */}
+                  <div className="bg-green-50 p-4 rounded-lg mb-4">
+                    <h4 className="font-medium text-gray-900 mb-3">휴가 정보</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <span className="text-sm text-gray-600">연차 잔여일수:</span>
+                        <span className="ml-2 font-semibold text-green-700">
+                          {selectedEmployee.remaining_leave_days || 0}일
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">사용한 연차:</span>
+                        <span className="ml-2 font-semibold text-gray-700">
+                          {selectedEmployee.used_leave_days || 0}일
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">총 연차일수:</span>
+                        <span className="ml-2 font-semibold text-gray-700">
+                          {selectedEmployee.annual_leave_days || 0}일
+                        </span>
+                      </div>
+                      {selectedEmployee.hourly_leave_hours > 0 && (
+                        <>
+                          <div>
+                            <span className="text-sm text-gray-600">시간차 잔여:</span>
+                            <span className="ml-2 font-semibold text-blue-700">
+                              {selectedEmployee.remaining_hourly_leave || 0}시간
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-sm text-gray-600">사용한 시간차:</span>
+                            <span className="ml-2 font-semibold text-gray-700">
+                              {selectedEmployee.used_hourly_leave || 0}시간
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-sm text-gray-600">총 시간차:</span>
+                            <span className="ml-2 font-semibold text-gray-700">
+                              {selectedEmployee.hourly_leave_hours || 0}시간
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Month Selector and Summary */}
                   <div className="bg-blue-50 p-4 rounded-lg">
                     <div className="flex justify-between items-center mb-4">
@@ -1096,50 +1179,84 @@ export default function AdminEmployeeManagement() {
                               </thead>
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {attendanceData.daily_records && attendanceData.daily_records.length > 0 ? (
-                                  attendanceData.daily_records.map((record: any) => (
-                                    <tr key={record.work_date} className="hover:bg-gray-50">
-                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {new Date(record.work_date).toLocaleDateString('ko-KR', {
-                                          month: 'long',
-                                          day: 'numeric',
-                                          weekday: 'short'
-                                        })}
-                                      </td>
-                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                        {record.check_in_time ? 
-                                          new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: false
-                                          }) : '--'
-                                        }
-                                      </td>
-                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                        {record.check_out_time ? 
-                                          new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                            hour12: false
-                                          }) : '--'
-                                        }
-                                      </td>
-                                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
-                                        {record.basic_hours || 0}시간
-                                      </td>
-                                      <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
-                                        {record.overtime_hours || 0}시간
-                                      </td>
-                                      <td className="px-4 py-4 whitespace-nowrap">
-                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                          record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
-                                          record.work_status === '지각' ? 'bg-yellow-100 text-yellow-800' :
+                                  attendanceData.daily_records.map((record: any) => {
+                                    const hasLeave = record.leave_info !== null
+                                    const isFullDayLeave = hasLeave && !record.leave_info?.half_day
+                                    const isHalfDayLeave = hasLeave && record.leave_info?.half_day
+                                    
+                                    return (
+                                      <tr key={record.work_date} className={`hover:bg-gray-50 ${hasLeave ? 'bg-yellow-50' : ''}`}>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                          <div>
+                                            {new Date(record.work_date).toLocaleDateString('ko-KR', {
+                                              month: 'long',
+                                              day: 'numeric',
+                                              weekday: 'short'
+                                            })}
+                                            {hasLeave && (
+                                              <div className="text-xs text-yellow-600 mt-1">
+                                                {record.leave_info.type === 'annual' ? '연차' : 
+                                                 record.leave_info.type === 'sick' ? '병가' :
+                                                 record.leave_info.type === 'special' ? '특별휴가' : '기타'}
+                                                {isHalfDayLeave && ` (${record.leave_info.period === 'morning' ? '오전' : '오후'}반차)`}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                          {isFullDayLeave ? (
+                                            <span className="text-yellow-600">휴가</span>
+                                          ) : record.check_in_time ? 
+                                            new Date(record.check_in_time).toLocaleTimeString('ko-KR', {
+                                              hour: '2-digit',
+                                              minute: '2-digit',
+                                              hour12: false
+                                            }) : '--'
+                                          }
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                          {isFullDayLeave ? (
+                                            <span className="text-yellow-600">휴가</span>
+                                          ) : record.check_out_time ? 
+                                            new Date(record.check_out_time).toLocaleTimeString('ko-KR', {
+                                              hour: '2-digit',
+                                              minute: '2-digit',
+                                              hour12: false
+                                            }) : '--'
+                                          }
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
+                                          {isFullDayLeave ? (
+                                            <span className="text-yellow-600">휴가</span>
+                                          ) : isHalfDayLeave ? (
+                                            <span>{(record.basic_hours || 0) / 2}시간 (반차)</span>
+                                          ) : (
+                                            <span>{record.basic_hours || 0}시간</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+                                          {isFullDayLeave ? (
+                                            <span className="text-yellow-600">-</span>
+                                          ) : (
+                                            <span>{record.overtime_hours || 0}시간</span>
+                                          )}
+                                        </td>
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                            hasLeave ? 'bg-yellow-100 text-yellow-800' :
+                                            record.work_status === '정상근무' ? 'bg-green-100 text-green-800' :
+                                            record.work_status === '지각' ? 'bg-orange-100 text-orange-800' :
                                           record.work_status === '조퇴' ? 'bg-orange-100 text-orange-800' :
                                           record.work_status === '결근' ? 'bg-red-100 text-red-800' :
                                           record.work_status?.includes('누락') ? 'bg-gray-100 text-gray-800' :
-                                          'bg-gray-100 text-gray-800'
-                                        }`}>
-                                          {record.work_status || '미확인'}
-                                        </span>
+                                            'bg-gray-100 text-gray-800'
+                                          }`}>
+                                            {hasLeave ? (
+                                              isFullDayLeave ? '휴가' : '반차'
+                                            ) : (
+                                              record.work_status || '미확인'
+                                            )}
+                                          </span>
                                         {record.had_dinner && (
                                           <span className="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
                                             저녁식사
@@ -1158,9 +1275,10 @@ export default function AdminEmployeeManagement() {
                                         >
                                           수정
                                         </button>
-                                      </td>
-                                    </tr>
-                                  ))
+                                        </td>
+                                      </tr>
+                                    )
+                                  })
                                 ) : (
                                   <tr>
                                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
