@@ -1180,7 +1180,7 @@ export default function AdminEmployeeManagement() {
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {attendanceData.daily_records && attendanceData.daily_records.length > 0 ? (
                                   attendanceData.daily_records.map((record: any) => {
-                                    const hasLeave = record.leave_info !== null
+                                    const hasLeave = record.leave_info !== null && record.leave_info !== undefined
                                     const isFullDayLeave = hasLeave && !record.leave_info?.half_day
                                     const isHalfDayLeave = hasLeave && record.leave_info?.half_day
                                     
