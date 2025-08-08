@@ -407,28 +407,28 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (실제 테이블 컬럼만 사용)
+              // 2. 새 기록 삽입 (최소 필수 필드만 사용)
               const insertData: any = {
                 user_id: record.user_id,
                 record_date: record.record_date,
                 record_time: record.record_time,
                 record_timestamp: record.record_timestamp,
-                record_type: record.record_type,
-                reason: record.reason,
-                source: record.source,
-                is_manual: record.is_manual,
-                had_dinner: record.had_dinner
+                record_type: record.record_type
               }
 
-              // employee_number는 존재할 때만 추가
-              if (record.employee_number) {
-                insertData.employee_number = record.employee_number
-              }
+              // 선택적 필드들 (존재하는 경우에만 추가)
+              if (record.reason) insertData.reason = record.reason
+              if (record.source) insertData.source = record.source
+              if (record.employee_number) insertData.employee_number = record.employee_number
+              if (typeof record.is_manual === 'boolean') insertData.is_manual = record.is_manual
+              if (typeof record.had_dinner === 'boolean') insertData.had_dinner = record.had_dinner
+
+              console.log('🔍 INSERT 시도할 데이터:', insertData)
 
               const { data: insertResult, error: insertError } = await supabase
                 .from('attendance_records')
                 .insert(insertData)
-                .select()
+                .select('id, record_date, record_time, record_type')
 
               if (insertError) {
                 console.error('❌ 직접 INSERT 오류:', insertError, 'Record:', record)
