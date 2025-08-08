@@ -199,8 +199,9 @@ export default function CapsUploadManager() {
             continue
           }
 
-          // 사용자 매핑 확인
+          // 사용자 매핑 확인 (이름 우선)
           const userId = userMap.get(record.이름)
+          
           if (!userId) {
             invalidUserCount++
             errors.push(`${i + 1}행: 사용자 "${record.이름}"을 찾을 수 없습니다.`)
@@ -234,10 +235,38 @@ export default function CapsUploadManager() {
             if (timeStr.includes('AM') || timeStr.includes('PM')) {
               const isPM = timeStr.includes('PM')
               const time = timeStr.replace(/AM|PM/g, '').trim()
-              const [hour, minute, second] = time.split(':').map(n => parseInt(n))
+              const timeParts = time.split(':').map(n => parseInt(n))
+              
+              if (timeParts.length < 3) {
+                console.warn(`⚠️ 시간 형식 오류: ${timeStr}`)
+                return '00:00:00' // 기본값 반환
+              }
+              
+              const [hour, minute, second] = timeParts
+              
+              // 시간 유효성 검사
+              if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+                console.warn(`⚠️ 유효하지 않은 시간: ${timeStr} (${hour}:${minute}:${second})`)
+                return '00:00:00' // 기본값 반환
+              }
+              
               let hour24 = hour
-              if (isPM && hour !== 12) hour24 += 12
-              if (!isPM && hour === 12) hour24 = 0
+              
+              // AM/PM이 있는데 이미 24시간 형식인 경우 (예: PM 13:32:00)
+              if (hour >= 13 && isPM) {
+                // 이미 24시간 형식으로 보임 - PM 무시
+                hour24 = hour
+                console.warn(`⚠️ 잘못된 형식 감지: ${timeStr} - PM을 무시하고 24시간 형식으로 처리`)
+              } else if (hour >= 13 && !isPM) {
+                // AM인데 13시 이상 - 24시간 형식으로 처리
+                hour24 = hour
+                console.warn(`⚠️ 잘못된 형식 감지: ${timeStr} - AM을 무시하고 24시간 형식으로 처리`)
+              } else {
+                // 정상적인 12시간 형식
+                if (isPM && hour !== 12) hour24 += 12
+                if (!isPM && hour === 12) hour24 = 0
+              }
+              
               return `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
             }
             return timeStr // 이미 24시간 형식이면 그대로 반환
@@ -252,7 +281,16 @@ export default function CapsUploadManager() {
           // 날짜/시간 파싱
           const recordDate = parseDateString(record.발생일자)
           const recordTime = parseTimeString(record.발생시각)
+          
+          // 타임스탬프 생성 및 검증
           const recordTimestamp = new Date(`${recordDate}T${recordTime}+09:00`) // KST
+          
+          // 유효한 날짜인지 검증
+          if (isNaN(recordTimestamp.getTime())) {
+            errors.push(`${i + 1}행: 유효하지 않은 날짜/시간 - ${record.발생일자} ${record.발생시각}`)
+            console.error(`❌ Invalid timestamp: ${recordDate}T${recordTime}+09:00`)
+            continue
+          }
 
           // 같은 배치 내 중복 체크 (변환된 recordType 사용)
           const batchKey = `${userId}-${recordTimestamp.toISOString()}-${recordType}`
