@@ -159,9 +159,9 @@ export const fetchCalendarEvents = async (
   maxResults: number = 2500
 ): Promise<gapi.client.calendar.Event[]> => {
   try {
-    // API가 설정되지 않은 경우 빈 배열 반환
-    if (!GOOGLE_API_KEY || !GOOGLE_CLIENT_ID) {
-      console.log('📌 Google Calendar API 미설정으로 이벤트 조회 건너뛰기')
+    // Client ID가 없는 경우만 체크 (API Key는 선택사항)
+    if (!GOOGLE_CLIENT_ID) {
+      console.log('📌 Google Client ID 미설정으로 이벤트 조회 건너뛰기')
       return []
     }
 
