@@ -407,21 +407,23 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (최소 필수 필드만 사용)
+              // 2. 새 기록 삽입 (AttendanceRecorder와 동일한 구조 사용)
               const insertData: any = {
                 user_id: record.user_id,
+                employee_number: record.employee_number,
                 record_date: record.record_date,
                 record_time: record.record_time,
                 record_timestamp: record.record_timestamp,
-                record_type: record.record_type
+                record_type: record.record_type,
+                reason: record.reason || `CAPS ${record.record_type} 기록`,
+                location_lat: null, // CAPS는 GPS 정보 없음
+                location_lng: null,
+                location_accuracy: null,
+                source: record.source || 'CAPS',
+                had_dinner: record.had_dinner || false,
+                is_manual: record.is_manual || false,
+                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`
               }
-
-              // 선택적 필드들 (존재하는 경우에만 추가)
-              if (record.reason) insertData.reason = record.reason
-              if (record.source) insertData.source = record.source
-              if (record.employee_number) insertData.employee_number = record.employee_number
-              if (typeof record.is_manual === 'boolean') insertData.is_manual = record.is_manual
-              if (typeof record.had_dinner === 'boolean') insertData.had_dinner = record.had_dinner
 
               console.log('🔍 INSERT 시도할 데이터:', insertData)
 
