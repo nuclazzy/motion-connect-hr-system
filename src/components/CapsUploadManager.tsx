@@ -575,8 +575,10 @@ export default function CapsUploadManager() {
           if (!dayRecords || dayRecords.length === 0) continue
           
           // 출근/퇴근 시간 찾기
+          // 출근: 첫 번째 출근 기록
           const checkIn = dayRecords.find(r => r.record_type === '출근')
-          const checkOut = dayRecords.find(r => r.record_type === '퇴근')
+          // 퇴근: 마지막 퇴근 기록
+          const checkOut = dayRecords.filter(r => r.record_type === '퇴근').pop()
           
           if (checkIn) {
             // 근무시간 계산
@@ -591,10 +593,21 @@ export default function CapsUploadManager() {
               const diffMs = endTime.getTime() - startTime.getTime()
               const totalHours = diffMs / (1000 * 60 * 60)
               
-              // 휴게시간 차감 (점심 1시간)
-              let workHours = totalHours - 1
+              console.log(`📊 ${date} 근무시간 계산:`, {
+                checkIn: checkIn.record_time,
+                checkOut: checkOut.record_time,
+                totalHours: totalHours.toFixed(2),
+                startTime: startTime.toISOString(),
+                endTime: endTime.toISOString()
+              })
               
-              // 저녁식사 시간 차감 (18시 이후 근무 시)
+              // 휴게시간 차감 (4시간 이상 근무 시 점심 1시간)
+              let workHours = totalHours
+              if (totalHours > 4) {
+                workHours = totalHours - 1
+              }
+              
+              // 저녁식사 시간 차감 (18:30 이후 퇴근 시)
               if (endTime.getHours() >= 19 || (endTime.getHours() === 18 && endTime.getMinutes() >= 30)) {
                 workHours -= 0.5
                 hadDinner = true
