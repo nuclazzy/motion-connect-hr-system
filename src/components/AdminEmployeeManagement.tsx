@@ -414,14 +414,14 @@ export default function AdminEmployeeManagement() {
         .lte('record_date', endDateStr)
         .order('record_date', { ascending: true })
       
-      // 휴가 신청 기록 조회 (시작일 또는 종료일이 해당 월에 포함되는 경우 모두 조회)
+      // 휴가 신청 기록 조회 (해당 월에 포함되는 휴가만 정확히 조회)
       const { data: leaveRecords, error: leaveError } = await supabase
         .from('leave_applications')
         .select('*')
         .eq('user_id', selectedEmployee.id)
         .eq('status', 'approved') // 승인된 휴가만
-        .or(`start_date.gte.${startDateStr},end_date.gte.${startDateStr}`)
-        .or(`start_date.lte.${endDateStr},end_date.lte.${endDateStr}`)
+        .lte('start_date', endDateStr) // 시작일이 월말 이전
+        .gte('end_date', startDateStr) // 종료일이 월초 이후
         .order('start_date', { ascending: true })
       
       console.log('📅 휴가 신청 데이터 조회:', {
@@ -468,43 +468,60 @@ export default function AdminEmployeeManagement() {
           
           if (leaveInfo.period === 'morning') {
             // 오전 반차: 9:00~13:00는 근무로 간주 (4시간)
-            // 실제 근무시간이 있으면 그것도 추가
-            let actualWorkHours = 0
+            // 추가로 오후에 실제 근무한 시간을 더함
+            let totalHours = 4 // 오전 반차 기본 4시간
+            
             if (checkInTime && checkOutTime) {
-              const totalWorkMs = checkOutTime.getTime() - checkInTime.getTime()
-              const totalWorkHours = totalWorkMs / (1000 * 60 * 60)
+              // 실제 근무시간 계산
+              const workMs = checkOutTime.getTime() - checkInTime.getTime()
+              const workHours = workMs / (1000 * 60 * 60)
               
-              // 실제 근무가 4시간 이하면 그대로, 초과하면 점심시간 1시간 차감
-              if (totalWorkHours <= 4) {
-                actualWorkHours = totalWorkHours
-              } else {
-                actualWorkHours = totalWorkHours - 1
+              // 오후에만 근무했다면 (14시 이후 출근)
+              const checkInHour = checkInTime.getHours()
+              if (checkInHour >= 14) {
+                // 오후 근무시간 그대로 추가
+                totalHours = 4 + workHours
+              } else if (checkInHour >= 13) {
+                // 13시~14시 사이 출근: 14시부터 계산
+                const pmStart = new Date(checkInTime)
+                pmStart.setHours(14, 0, 0, 0)
+                const pmWorkMs = checkOutTime.getTime() - pmStart.getTime()
+                const pmWorkHours = Math.max(0, pmWorkMs / (1000 * 60 * 60))
+                totalHours = 4 + pmWorkHours
               }
             }
             
-            // 오전 반차 4시간 + 실제 근무시간 (단, 기본 근무는 최대 8시간)
-            const totalHours = 4 + Math.max(0, actualWorkHours)
             adjustedBasicHours = Math.min(8, totalHours)
             adjustedOvertimeHours = Math.max(0, totalHours - 8)
             
           } else if (leaveInfo.period === 'afternoon') {
             // 오후 반차: 14:00~18:00는 근무로 간주 (4시간)
-            // 실제 근무시간이 있으면 그것도 추가
-            let actualWorkHours = 0
+            // 추가로 오전에 실제 근무한 시간을 더함
+            let totalHours = 4 // 오후 반차 기본 4시간
+            
             if (checkInTime && checkOutTime) {
-              const totalWorkMs = checkOutTime.getTime() - checkInTime.getTime()
-              const totalWorkHours = totalWorkMs / (1000 * 60 * 60)
+              // 실제 근무시간 계산
+              const checkOutHour = checkOutTime.getHours()
               
-              // 실제 근무가 4시간 이하면 그대로, 초과하면 점심시간 1시간 차감
-              if (totalWorkHours <= 4) {
-                actualWorkHours = totalWorkHours
-              } else {
-                actualWorkHours = totalWorkHours - 1
+              // 오전에만 근무했다면 (13시 이전 퇴근)
+              if (checkOutHour <= 13) {
+                const workMs = checkOutTime.getTime() - checkInTime.getTime()
+                const workHours = workMs / (1000 * 60 * 60)
+                // 점심시간 차감 (4시간 이상 근무 시)
+                const amWorkHours = workHours > 4 ? workHours - 1 : workHours
+                totalHours = amWorkHours + 4
+              } else if (checkOutHour <= 14) {
+                // 13시~14시 사이 퇴근: 13시까지만 계산
+                const amEnd = new Date(checkOutTime)
+                amEnd.setHours(13, 0, 0, 0)
+                const amWorkMs = amEnd.getTime() - checkInTime.getTime()
+                const amWorkHours = Math.max(0, amWorkMs / (1000 * 60 * 60))
+                // 점심시간 차감 (4시간 이상 근무 시)
+                const adjustedAmHours = amWorkHours > 4 ? amWorkHours - 1 : amWorkHours
+                totalHours = adjustedAmHours + 4
               }
             }
             
-            // 실제 근무시간 + 오후 반차 4시간 (단, 기본 근무는 최대 8시간)
-            const totalHours = Math.max(0, actualWorkHours) + 4
             adjustedBasicHours = Math.min(8, totalHours)
             adjustedOvertimeHours = Math.max(0, totalHours - 8)
           }
