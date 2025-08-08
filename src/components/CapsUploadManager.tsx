@@ -296,10 +296,21 @@ export default function CapsUploadManager() {
             return timeStr // 이미 24시간 형식이면 그대로 반환
           }
           
-          // 웹앱 데이터는 건너뛰기 (별도 처리 필요)
+          // 웹앱 데이터 처리 (GPS 정보 파싱 포함)
+          let gpsLat: number | null = null
+          let gpsLng: number | null = null
+          
           if (record.단말기ID === '웹앱') {
-            console.log(`⚠️ 웹앱 데이터는 건너뜁니다: ${record.이름} ${record.발생일자} ${record.발생시각}`)
-            continue
+            // GPS 정보 파싱 (예: "GPS: 37.559775,127.077181")
+            if (record.직급 && record.직급.includes('GPS:')) {
+              const gpsMatch = record.직급.match(/GPS:\s*([\d.-]+),([\d.-]+)/)
+              if (gpsMatch) {
+                gpsLat = parseFloat(gpsMatch[1])
+                gpsLng = parseFloat(gpsMatch[2])
+                console.log(`📍 GPS 정보 파싱: lat=${gpsLat}, lng=${gpsLng}`)
+              }
+            }
+            console.log(`✅ 웹앱 데이터 처리: ${record.이름} ${record.발생일자} ${record.발생시각} ${recordType}`)
           }
           
           // 날짜/시간 파싱
@@ -344,18 +355,37 @@ export default function CapsUploadManager() {
             continue
           }
 
-          // 처리된 기록 추가
+          // 처리된 기록 추가 (웹앱/CAPS 구분)
+          const isWebApp = record.단말기ID === '웹앱'
+          const source = isWebApp ? 'WEB' : 'CAPS'
+          
+          // reason 설정 (웹앱과 CAPS 구분)
+          let reasonText = ''
+          if (isWebApp) {
+            // 웹앱 데이터 reason
+            if (record.구분 && record.구분.includes('누락')) {
+              reasonText = `웹앱 ${recordType} - 누락 기록 보충`
+            } else if (gpsLat && gpsLng) {
+              reasonText = `웹앱 ${recordType} - GPS: ${gpsLat.toFixed(6)}, ${gpsLng.toFixed(6)}`
+            } else {
+              reasonText = `웹앱 ${recordType} 기록`
+            }
+          } else {
+            // CAPS 데이터 reason
+            reasonText = `CAPS 지문인식 (${record.인증}) - ${matchMethod} - 단말기: ${record.단말기ID}${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`
+          }
+          
           processedRecords.push({
             user_id: userId,
-            employee_number: record.사원번호 || undefined,  // 사원번호 추가
+            employee_number: record.사원번호 || undefined,
             record_date: recordDate,
             record_time: recordTime,
             record_timestamp: recordTimestamp.toISOString(),
             record_type: recordType,
-            source: 'CAPS',
-            reason: `CAPS 지문인식 (${record.인증}) - ${matchMethod} - 단말기: ${record.단말기ID}${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
-            is_manual: false,
-            had_dinner: recordType === '퇴근' ? hasDinner : false  // 퇴근 시에만 저녁식사 정보 적용
+            source: source,
+            reason: reasonText,
+            is_manual: isWebApp,  // 웹앱 데이터는 수동 입력으로 간주
+            had_dinner: recordType === '퇴근' ? hasDinner : false
           })
 
         } catch (error) {
@@ -419,7 +449,20 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입 (트리거 호환성을 위해 check_in_time/check_out_time 포함)
+              // 2. 새 기록 삽입 (웹앱/CAPS 구분하여 처리)
+              const isWebSource = record.source === 'WEB'
+              
+              // GPS 정보 파싱 (웹앱 reason에서 추출)
+              let locationLat = null
+              let locationLng = null
+              if (isWebSource && record.reason && record.reason.includes('GPS:')) {
+                const gpsMatch = record.reason.match(/GPS:\s*([\d.-]+),\s*([\d.-]+)/)
+                if (gpsMatch) {
+                  locationLat = parseFloat(gpsMatch[1])
+                  locationLng = parseFloat(gpsMatch[2])
+                }
+              }
+              
               const insertData: any = {
                 user_id: record.user_id,
                 employee_number: record.employee_number,
@@ -427,15 +470,17 @@ export default function CapsUploadManager() {
                 record_time: record.record_time,
                 record_timestamp: record.record_timestamp,
                 record_type: record.record_type,
-                reason: record.reason || `CAPS ${record.record_type} 기록`,
-                location_lat: null, // CAPS는 GPS 정보 없음
-                location_lng: null,
-                location_accuracy: null,
-                source: record.source || 'CAPS',
+                reason: record.reason,
+                location_lat: locationLat,
+                location_lng: locationLng,
+                location_accuracy: isWebSource && locationLat ? 10 : null, // 웹앱 GPS는 기본 정확도 10m
+                source: record.source,
                 had_dinner: record.had_dinner || false,
                 is_manual: record.is_manual || false,
-                notes: `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
-                // PostgreSQL 트리거 호환성을 위한 필드 (임시)
+                notes: isWebSource 
+                  ? `웹앱 기록 - 사원번호: ${record.employee_number || 'N/A'}`
+                  : `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
+                // PostgreSQL 트리거 호환성을 위한 필드
                 check_in_time: record.record_type === '출근' ? record.record_timestamp : null,
                 check_out_time: record.record_type === '퇴근' ? record.record_timestamp : null
               }
