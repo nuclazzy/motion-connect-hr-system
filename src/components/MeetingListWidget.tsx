@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { CALENDAR_IDS, CALENDAR_NAMES } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, initializeHolidayCache } from '@/lib/holidays'
 import { 
-  fetchCalendarEvents, 
-  createCalendarEvent, 
-  updateCalendarEvent, 
-  deleteCalendarEvent,
+  fetchCalendarEventsFromServer,
   parseEventDate,
-  initializeGoogleAPI 
-} from '@/lib/googleCalendar'
+  createCalendarEventFromServer,
+  updateCalendarEventFromServer,
+  deleteCalendarEventFromServer
+} from '@/lib/googleCalendarClient'
 
 interface CalendarEvent {
   id: string
@@ -65,15 +64,6 @@ export default function MeetingListWidget({
   const fetchCalendarEventsData = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화 시도
-      try {
-        await initializeGoogleAPI()
-      } catch (initError) {
-        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
-        setEvents([])
-        return
-      }
-      
       const calendarId = getCalendarId()
       
       // 이번주 데이터만 가져오기 (일요일 시작 기준)
@@ -90,8 +80,8 @@ export default function MeetingListWidget({
 
       console.log(`📅 [DEBUG] ${title} 이벤트 조회 시작:`, { calendarId, timeMin, timeMax })
 
-      // Google Calendar 직접 연동으로 이벤트 가져오기
-      const googleEvents = await fetchCalendarEvents(calendarId, timeMin, timeMax, 100)
+      // Service Account를 통해 이벤트 가져오기
+      const googleEvents = await fetchCalendarEventsFromServer(calendarId, timeMin, timeMax)
       console.log(`📅 [DEBUG] ${title} 가져온 이벤트 수:`, googleEvents.length)
       
       const fetchedEvents: CalendarEvent[] = googleEvents.map((event: any) => {
@@ -223,9 +213,6 @@ export default function MeetingListWidget({
     }
 
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
       let eventData
       if (formData.is_all_day) {
         // 종일 이벤트
@@ -253,12 +240,12 @@ export default function MeetingListWidget({
         }
       }
 
-      // Google Calendar 직접 연동으로 이벤트 생성/수정  
+      // Service Account를 통해 이벤트 생성/수정  
       if (editingEvent) {
-        await updateCalendarEvent(editingEvent.calendarId || formData.targetCalendar, editingEvent.id, eventData)
+        await updateCalendarEventFromServer(editingEvent.calendarId || formData.targetCalendar, editingEvent.id, eventData)
         alert('일정이 성공적으로 수정되었습니다!')
       } else {
-        await createCalendarEvent(formData.targetCalendar, eventData)
+        await createCalendarEventFromServer(formData.targetCalendar, eventData)
         alert('일정이 성공적으로 등록되었습니다!')
       }
 
@@ -307,11 +294,8 @@ export default function MeetingListWidget({
     }
 
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
-      // Google Calendar 직접 연동으로 이벤트 삭제
-      await deleteCalendarEvent(event.calendarId || '', event.id)
+      // Service Account를 통해 이벤트 삭제
+      await deleteCalendarEventFromServer(event.calendarId || '', event.id)
       
       alert('일정이 성공적으로 삭제되었습니다!')
       fetchCalendarEventsData() // 목록 새로고침

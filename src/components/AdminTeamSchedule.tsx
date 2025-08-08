@@ -5,11 +5,12 @@ import { type User } from '@/lib/auth'
 import { ADMIN_TEAM_CALENDARS } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 import { 
-  fetchCalendarEvents as fetchGoogleCalendarEvents,
-  deleteCalendarEvent,
-  initializeGoogleAPI,
-  parseEventDate 
-} from '@/lib/googleCalendar'
+  fetchMultipleCalendarEventsFromServer,
+  parseEventDate,
+  createCalendarEventFromServer,
+  updateCalendarEventFromServer,
+  deleteCalendarEventFromServer
+} from '@/lib/googleCalendarClient'
 
 interface CalendarEvent {
   id: string
@@ -58,15 +59,6 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
   const fetchCalendarEvents = useCallback(async () => {
     setLoading(true)
     try {
-      // Google API 초기화 시도
-      try {
-        await initializeGoogleAPI()
-      } catch (initError) {
-        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
-        setCalendarEvents([])
-        return
-      }
-      
       const allEvents: CalendarEvent[] = []
       // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
       const startOfWeek = new Date(currentDate)
@@ -82,12 +74,15 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
       
       console.log('📅 [DEBUG] 전체 팀 캘린더 이벤트 조회 시작:', { timeMin, timeMax })
 
-      // 각 팀 캘린더에서 이벤트 가져오기
+      // Service Account를 통해 모든 캘린더 이벤트 한번에 가져오기
+      const calendarIds = ADMIN_TEAM_CALENDARS.map(c => c.id)
+      const eventsData = await fetchMultipleCalendarEventsFromServer(calendarIds, timeMin, timeMax)
+      
+      // 각 팀 캘린더에서 이벤트 처리
       for (const calendarConfig of ADMIN_TEAM_CALENDARS) {
         console.log(`📅 [DEBUG] 캘린더 이벤트 조회: ${calendarConfig.name} (${calendarConfig.id})`)
         try {
-          // Google Calendar 직접 연동으로 이벤트 가져오기
-          const googleEvents = await fetchGoogleCalendarEvents(calendarConfig.id, timeMin, timeMax, 250)
+          const googleEvents = eventsData[calendarConfig.id] || []
           
           console.log(`📅 [DEBUG] ${calendarConfig.name} 가져온 이벤트 수:`, googleEvents.length)
           
@@ -294,8 +289,8 @@ export default function AdminTeamSchedule({}: AdminTeamScheduleProps) {
     }
 
     try {
-      // Google Calendar 직접 연동으로 이벤트 삭제
-      await deleteCalendarEvent(event.calendarId || '', event.id)
+      // Service Account를 통해 이벤트 삭제
+      await deleteCalendarEventFromServer(event.calendarId || '', event.id)
 
       alert('일정이 성공적으로 삭제되었습니다!')
       fetchCalendarEvents() // 목록 새로고침
