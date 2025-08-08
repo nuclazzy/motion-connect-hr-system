@@ -116,18 +116,28 @@ export default function AdminLeaveOverview() {
         .eq('status', 'pending')
         .eq('form_type', '휴가 신청서')
 
-      // 3. 이번 달 휴가 예정자
+      // 3. 이번 달 휴가 예정자 (JSON 필드 쿼리 대신 간단한 필터링 사용)
       const currentMonth = new Date()
       const monthStart = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
       const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
 
-      const { count: upcomingCount } = await supabase
+      // JSON 필드 쿼리 오류를 피하기 위해 전체 승인된 휴가를 가져와서 필터링
+      const { data: approvedLeaveRequests } = await supabase
         .from('form_requests')
-        .select('*', { count: 'exact', head: true })
+        .select('request_data')
         .eq('status', 'approved')
         .eq('form_type', '휴가 신청서')
-        .gte('request_data->시작일', monthStart.toISOString().split('T')[0])
-        .lte('request_data->시작일', monthEnd.toISOString().split('T')[0])
+        .limit(200)
+
+      // 클라이언트에서 날짜 필터링
+      const upcomingCount = approvedLeaveRequests?.filter(req => {
+        const startDate = req.request_data?.['시작일'] || req.request_data?.startDate
+        if (startDate) {
+          const requestDate = new Date(startDate)
+          return requestDate >= monthStart && requestDate <= monthEnd
+        }
+        return false
+      }).length || 0
 
       // 4. 대체휴가 경고 대상자 (16시간 이상)
       const substituteWarnings = employees.filter(emp => emp.substitute_leave_hours >= 16).length
@@ -195,7 +205,7 @@ export default function AdminLeaveOverview() {
         totalEmployees,
         totalAnnualUsageRate,
         pendingRequests: pendingCount || 0,
-        upcomingLeaves: upcomingCount || 0,
+        upcomingLeaves: upcomingCount,
         substituteWarnings,
         expiringAnnualLeaves,
         expiringSubstituteLeaves
@@ -277,12 +287,28 @@ export default function AdminLeaveOverview() {
         .order('processed_at', { ascending: false })
         .limit(100)
 
-      // 2. 특별휴가 이력 (테이블이 있는 경우)
-      const { data: specialLeaves } = await supabase
-        .from('special_leave_records')
-        .select('*, users(name, department)')
-        .order('created_at', { ascending: false })
-        .limit(50)
+      // 2. 특별휴가 이력 (테이블이 있는 경우만 조회)
+      let specialLeaves = null
+      let specialError = null
+      
+      try {
+        const result = await supabase
+          .from('special_leave_records')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        specialLeaves = result.data
+        specialError = result.error
+        
+        if (specialError) {
+          console.log('특별휴가 테이블 조회 오류 (테이블이 없을 수 있음):', specialError.message)
+        }
+      } catch (error) {
+        console.log('특별휴가 테이블이 존재하지 않을 수 있음:', error)
+        specialLeaves = null
+        specialError = null
+      }
 
       const combinedHistory: any[] = []
       
@@ -306,14 +332,21 @@ export default function AdminLeaveOverview() {
         })
       }
 
-      // 특별휴가 추가
-      if (specialLeaves) {
-        specialLeaves.forEach(leave => {
+      // 특별휴가 추가 (사용자 정보 별도 조회)
+      if (specialLeaves && !specialError) {
+        for (const leave of specialLeaves) {
+          // 사용자 정보 별도 조회
+          const { data: userData } = await supabase
+            .from('users')
+            .select('name, department')
+            .eq('id', leave.user_id)
+            .single()
+          
           combinedHistory.push({
             id: leave.id,
             type: 'special',
-            employeeName: leave.users?.name || '알 수 없음',
-            department: leave.users?.department || '알 수 없음',
+            employeeName: userData?.name || '알 수 없음',
+            department: userData?.department || '알 수 없음',
             startDate: leave.start_date,
             endDate: leave.end_date,
             days: leave.leave_days,
@@ -322,7 +355,7 @@ export default function AdminLeaveOverview() {
             processedAt: leave.created_at,
             isSpecial: true
           })
-        })
+        }
       }
 
       // 날짜순 정렬

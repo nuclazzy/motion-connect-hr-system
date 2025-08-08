@@ -103,19 +103,24 @@ export default function SpecialLeaveGrantModal({
       const createdEvent = await createCalendarEventFromServer(CALENDAR_IDS.LEAVE_MANAGEMENT, eventData)
       
       if (createdEvent?.id) {
-        // 2. 특별휴가 기록 저장 (선택사항)
-        await supabase
-          .from('special_leave_records')
-          .insert({
-            user_id: formData.employeeId,
-            leave_title: formData.leaveTitle,
-            start_date: formData.startDate,
-            end_date: formData.endDate || formData.startDate,
-            leave_days: formData.leaveDays,
-            reason: formData.reason,
-            granted_by: 'admin', // 실제로는 현재 관리자 ID
-            calendar_event_id: createdEvent.id
-          })
+        // 2. 특별휴가 기록 저장 (테이블이 있는 경우만)
+        try {
+          await supabase
+            .from('special_leave_records')
+            .insert({
+              user_id: formData.employeeId,
+              leave_title: formData.leaveTitle,
+              start_date: formData.startDate,
+              end_date: formData.endDate || formData.startDate,
+              leave_days: formData.leaveDays,
+              reason: formData.reason,
+              granted_by: 'admin', // 실제로는 현재 관리자 ID
+              calendar_event_id: createdEvent.id
+            })
+        } catch (dbError) {
+          console.log('특별휴가 기록 저장 오류 (테이블이 없을 수 있음):', dbError)
+          // 테이블이 없어도 캘린더 이벤트는 생성되었으므로 계속 진행
+        }
 
         alert(`✅ ${formData.employeeName}님에게 "${formData.leaveTitle}" ${formData.leaveDays}일을 부여했습니다.`)
         
