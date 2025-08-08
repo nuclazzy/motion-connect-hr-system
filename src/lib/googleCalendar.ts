@@ -73,9 +73,23 @@ export const initializeGoogleAPI = async (): Promise<void> => {
           console.log('✅ gapi.client 초기화 성공')
           gapiInited = true
           checkInitComplete()
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ gapi 초기화 오류:', error)
-          reject(error)
+          // API Key 오류인 경우 자세한 정보 출력
+          if (error?.error?.code === 400 || error?.error?.message?.includes('API key')) {
+            console.error('⚠️ API Key 오류 상세:', {
+              message: error?.error?.message,
+              code: error?.error?.code,
+              apiKey: GOOGLE_API_KEY?.substring(0, 10) + '...'
+            })
+            console.log('📌 Google Cloud Console에서 API Key 설정을 확인하세요:')
+            console.log('1. API Key가 활성화되어 있는지 확인')
+            console.log('2. Google Calendar API가 활성화되어 있는지 확인')
+            console.log('3. API Key 제한사항이 올바르게 설정되어 있는지 확인')
+          }
+          // 에러가 발생해도 시스템은 계속 작동하도록 함
+          gapiInited = true
+          checkInitComplete()
         }
       })
     }

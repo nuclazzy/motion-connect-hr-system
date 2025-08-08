@@ -134,11 +134,14 @@ export default function UserWeeklySchedule() {
 
       console.log(`🔄 [DEBUG] 이번 주 미팅 이벤트 수: ${allEvents.length}`)
       setCalendarEvents(allEvents)
-    } catch (error) {
+    } catch (error: any) {
       console.error('미팅 캘린더 이벤트 조회 오류:', error)
-      // 권한 오류인 경우 사용자에게 알림
-      if (error instanceof Error && error.message.includes('Token')) {
-        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
+      // API 초기화 실패나 권한 오류인 경우 조용히 처리
+      if (error?.error?.code === 400 || error?.error?.code === 401) {
+        console.log('📌 Google Calendar API 초기화 실패, 기본 모드로 동작')
+      } else if (error instanceof Error && error.message.includes('Token')) {
+        // 토큰 오류일 때만 알림 표시
+        console.log('⚠️ Google 캘린더 접근 권한이 필요합니다.')
       }
       setCalendarEvents([])
     } finally {

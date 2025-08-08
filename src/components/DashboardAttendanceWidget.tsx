@@ -205,7 +205,7 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
         .select('*')
         .eq('user_id', user.id)
         .eq('work_date', date)
-        .single()
+        .maybeSingle()
 
       setStatus({
         user: {
