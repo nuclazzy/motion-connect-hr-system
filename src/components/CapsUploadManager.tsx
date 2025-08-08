@@ -174,12 +174,19 @@ export default function CapsUploadManager() {
           const hasDinner = hasDinnerColumn && values[11]?.trim()?.toUpperCase() === 'O'
 
           // 구분을 출퇴근으로 변환
-          // 해제 = 경비 해제 = 출근
-          // 세트 = 경비 설정 = 퇴근
-          // 출입 = 무시
+          // 우선순위: 모드 컬럼 → 구분 컬럼 확인
+          // 모드: 출근/퇴근 (웹앱, CAPS 공통)
+          // 구분: 해제=출근, 세트=퇴근, 출입=무시 (CAPS 전용)
           let recordType: '출근' | '퇴근' | null = null
           
-          if (record.구분 === '출근' || record.구분 === '해제') {
+          // 1단계: 모드 컬럼 우선 확인 (웹앱 + CAPS 공통)
+          if (record.모드 === '출근') {
+            recordType = '출근'
+          } else if (record.모드 === '퇴근') {
+            recordType = '퇴근'
+          }
+          // 2단계: 구분 컬럼 확인 (CAPS 전용, 모드가 없을 때)
+          else if (record.구분 === '출근' || record.구분 === '해제') {
             recordType = '출근'
           } else if (record.구분 === '퇴근' || record.구분 === '세트') {
             recordType = '퇴근'
@@ -188,7 +195,7 @@ export default function CapsUploadManager() {
             continue
           } else {
             // 기타 알 수 없는 구분도 무시
-            console.log(`⚠️ 알 수 없는 구분: ${record.구분} (${i + 1}행)`)
+            console.log(`⚠️ 알 수 없는 구분: ${record.구분} / 모드: ${record.모드} (${i + 1}행)`)
             continue
           }
 
