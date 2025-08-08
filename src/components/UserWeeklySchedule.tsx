@@ -4,13 +4,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { getMeetingCalendars, CALENDAR_NAMES } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, initializeHolidayCache } from '@/lib/holidays'
 import { 
-  fetchMultipleCalendarEvents, 
-  createCalendarEvent, 
-  updateCalendarEvent, 
-  deleteCalendarEvent,
+  fetchMultipleCalendarEventsFromServer,
   parseEventDate,
-  initializeGoogleAPI 
-} from '@/lib/googleCalendar'
+  createCalendarEventFromServer,
+  updateCalendarEventFromServer,
+  deleteCalendarEventFromServer
+} from '@/lib/googleCalendarClient'
 
 interface CalendarEvent {
   id: string
@@ -88,9 +87,6 @@ export default function UserWeeklySchedule() {
 
     setCalendarLoading(true)
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
       const allEvents: CalendarEvent[] = []
       // 성능 최적화: 연간 데이터 대신 현재 주간의 데이터만 가져오도록 수정
       const startOfWeek = new Date(currentDate)
@@ -105,9 +101,9 @@ export default function UserWeeklySchedule() {
       const timeMax = endOfWeek.toISOString()
       console.log('🔄 [DEBUG] 시간 범위:', { timeMin, timeMax })
 
-      // Google Calendar 직접 연동으로 이벤트 가져오기
+      // Service Account를 통해 서버에서 이벤트 가져오기
       const calendarIds = calendarConfigs.map(config => config.calendar_id)
-      const eventsData = await fetchMultipleCalendarEvents(calendarIds, timeMin, timeMax)
+      const eventsData = await fetchMultipleCalendarEventsFromServer(calendarIds, timeMin, timeMax)
       
       // 각 캘린더별 이벤트 처리
       for (const config of calendarConfigs) {
@@ -227,9 +223,6 @@ export default function UserWeeklySchedule() {
     }
 
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
       let eventData
       if (formData.is_all_day) {
         // 종일 이벤트
@@ -257,12 +250,12 @@ export default function UserWeeklySchedule() {
         }
       }
 
-      // Google Calendar 직접 연동으로 이벤트 생성/수정
+      // Service Account를 통해 이벤트 생성/수정
       if (editingEvent) {
-        await updateCalendarEvent(editingEvent.calendarId || formData.targetCalendar, editingEvent.id, eventData)
+        await updateCalendarEventFromServer(editingEvent.calendarId || formData.targetCalendar, editingEvent.id, eventData)
         alert('일정이 성공적으로 수정되었습니다!')
       } else {
-        await createCalendarEvent(formData.targetCalendar, eventData)
+        await createCalendarEventFromServer(formData.targetCalendar, eventData)
         alert('일정이 성공적으로 등록되었습니다!')
       }
 
@@ -311,21 +304,14 @@ export default function UserWeeklySchedule() {
     }
 
     try {
-      // Google API 초기화
-      await initializeGoogleAPI()
-      
-      // Google Calendar 직접 연동으로 이벤트 삭제
-      await deleteCalendarEvent(event.calendarId || '', event.id)
+      // Service Account를 통해 이벤트 삭제
+      await deleteCalendarEventFromServer(event.calendarId || '', event.id)
       
       alert('일정이 성공적으로 삭제되었습니다!')
       fetchCalendarEvents() // 목록 새로고침
     } catch (error) {
       console.error('일정 삭제 오류:', error)
-      if (error instanceof Error && error.message.includes('Token')) {
-        alert('Google 캘린더 접근 권한이 필요합니다. 다시 로그인해주세요.')
-      } else {
-        alert('일정 삭제 중 오류가 발생했습니다.')
-      }
+      alert('일정 삭제 중 오류가 발생했습니다.')
     }
   }
 
