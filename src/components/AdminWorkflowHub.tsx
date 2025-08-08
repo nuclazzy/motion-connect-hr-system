@@ -18,7 +18,6 @@ import {
 import AdminEmployeeManagement from './AdminEmployeeManagement'
 import AdminLeaveOverview from './AdminLeaveOverview'
 import AdminFormManagement from './AdminFormManagement'
-import AdminAttendanceManagement from './AdminAttendanceManagement'
 import AdminPayrollManagement from './AdminPayrollManagement'
 import WorkScheduleManagement from './WorkScheduleManagement'
 
@@ -48,15 +47,6 @@ export default function AdminWorkflowHub() {
       category: 'approval',
       priority: 1,
       notifications: 3 // 대기 중인 휴가 신청
-    },
-    {
-      id: 'attendance',
-      name: '출퇴근 관리',
-      icon: <Clock className="h-5 w-5" />,
-      description: '출퇴근 기록, 근무시간 관리, 초과근무 승인',
-      component: <AdminAttendanceManagement />,
-      category: 'management',
-      priority: 2
     },
     {
       id: 'forms',

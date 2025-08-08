@@ -13,7 +13,7 @@ interface WorkTimePreviewProps {
 
 /**
  * 실시간 근무시간 미리보기 컴포넌트
- * WorkPolicyManagement에서 설정한 값들을 실시간으로 반영하여 계산
+ * WorkScheduleManagement에서 설정한 값들을 실시간으로 반영하여 계산
  */
 export default function WorkTimePreview({ 
   checkInTime, 

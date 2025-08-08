@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
-import BulkAttendanceUpload from '@/components/BulkAttendanceUpload'
+import CapsUploadManager from '@/components/CapsUploadManager'
 import SpecialLeaveGrantModal from '@/components/SpecialLeaveGrantModal'
 import { ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
@@ -1581,15 +1581,7 @@ export default function AdminEmployeeManagement() {
             </div>
             
             <div className="max-h-96 overflow-y-auto">
-              <BulkAttendanceUpload 
-                onUploadComplete={() => {
-                  setShowBulkUploadModal(false)
-                  // 업로드 완료 후 데이터 새로고침
-                  if (selectedEmployee && activeTab === 'attendance') {
-                    fetchAttendanceData()
-                  }
-                }}
-              />
+              <CapsUploadManager />
             </div>
             
             <div className="mt-4 flex justify-end">
