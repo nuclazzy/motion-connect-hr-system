@@ -493,6 +493,11 @@ export default function CapsUploadManager() {
                 .select('id, record_date, record_time, record_type')
 
               if (insertError) {
+                // 409 Conflict는 중복 데이터이므로 경고 레벨로 처리
+                if (insertError.code === '23505') {
+                  console.log(`⚠️ 중복 기록 (DB 제약조건): ${record.record_date} ${record.record_time} ${record.record_type}`)
+                  return { success: true, action: 'duplicate_constraint' }
+                }
                 console.error('❌ 직접 INSERT 오류:', insertError, 'Record:', record)
                 return { success: false, error: insertError }
               }
@@ -511,7 +516,11 @@ export default function CapsUploadManager() {
           // 결과 집계
           batchResults.forEach((result) => {
             if (result.status === 'fulfilled' && result.value.success) {
-              insertedCount++
+              if (result.value.action === 'inserted') {
+                insertedCount++
+              } else if (result.value.action === 'duplicate_skipped' || result.value.action === 'duplicate_constraint') {
+                duplicateCount++
+              }
             } else {
               upsertErrors++
             }
@@ -529,6 +538,22 @@ export default function CapsUploadManager() {
         invalidUserCount,
         upsertErrors
       })
+
+      // 업로드 후 데이터 검증 (7월 데이터 확인)
+      if (file.name.includes('7월')) {
+        const { data: julyData, error: checkError } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .gte('record_date', '2025-07-01')
+          .lte('record_date', '2025-07-31')
+          .limit(5)
+        
+        console.log('📊 7월 데이터 확인:', {
+          count: julyData?.length || 0,
+          sample: julyData?.slice(0, 2),
+          error: checkError
+        })
+      }
 
       setResult({
         fileName: file.name,
