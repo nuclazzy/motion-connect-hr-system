@@ -433,7 +433,8 @@ export default function AdminEmployeeManagement() {
           reason: l.reason,
           leave_type: l.leave_type,
           half_day: l.half_day,
-          period: l.period
+          period: l.period,
+          status: l.status
         }))
       })
       
@@ -450,24 +451,79 @@ export default function AdminEmployeeManagement() {
         const startDate = new Date(leave.start_date)
         const endDate = leave.end_date ? new Date(leave.end_date) : startDate
         
-        // reason 또는 leave_type에서 반차 정보 추출
-        const reasonText = (leave.reason || '').toLowerCase() + ' ' + (leave.leave_type || '').toLowerCase()
-        const isMorningHalfDay = reasonText.includes('오전 반차') || reasonText.includes('오전반차')
-        const isAfternoonHalfDay = reasonText.includes('오후 반차') || reasonText.includes('오후반차')
+        // reason 또는 leave_type에서 휴가 정보 추출
+        const reasonText = (leave.reason || '') + ' ' + (leave.leave_type || '')
+        const reasonLower = reasonText.toLowerCase()
+        
+        // 모든 휴가 유형 체크
+        const isMorningHalfDay = reasonLower.includes('오전 반차') || reasonLower.includes('오전반차') || 
+                                reasonLower.includes('대체 오전 반차') || reasonLower.includes('대체오전반차') ||
+                                reasonLower.includes('보상 오전 반차') || reasonLower.includes('보상오전반차')
+        
+        const isAfternoonHalfDay = reasonLower.includes('오후 반차') || reasonLower.includes('오후반차') ||
+                                  reasonLower.includes('대체 오후 반차') || reasonLower.includes('대체오후반차') ||
+                                  reasonLower.includes('보상 오후 반차') || reasonLower.includes('보상오후반차')
+        
         const isHalfDay = isMorningHalfDay || isAfternoonHalfDay
+        
+        // 휴가 유형 판별
+        let leaveCategory = 'annual' // 기본값: 연차
+        if (reasonLower.includes('대체')) {
+          leaveCategory = 'substitute'
+        } else if (reasonLower.includes('보상')) {
+          leaveCategory = 'compensatory'
+        } else if (reasonLower.includes('공가')) {
+          leaveCategory = 'official'
+        } else if (reasonLower.includes('경조사')) {
+          leaveCategory = 'condolence'
+        } else if (reasonLower.includes('병가')) {
+          leaveCategory = 'sick'
+        }
         
         for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
           const dateStr = d.toISOString().split('T')[0]
           leaveByDate[dateStr] = {
             type: leave.leave_type,
+            category: leaveCategory, // 휴가 카테고리 추가
             half_day: isHalfDay,
             period: isMorningHalfDay ? 'morning' : (isAfternoonHalfDay ? 'afternoon' : null),
             reason: leave.reason,
             original_half_day: leave.half_day, // 기존 필드 보존
-            original_period: leave.period // 기존 필드 보존
+            original_period: leave.period, // 기존 필드 보존
+            original_text: reasonText // 원본 텍스트 저장 (디버깅용)
           }
         }
       })
+      
+      // 휴가 카테고리별 집계
+      const leaveSummary = {
+        annual: 0,
+        annualHalfDay: 0,
+        substitute: 0,
+        substituteHalfDay: 0,
+        compensatory: 0,
+        compensatoryHalfDay: 0,
+        official: 0,
+        condolence: 0,
+        sick: 0
+      }
+      
+      Object.values(leaveByDate).forEach((leave: any) => {
+        if (leave.half_day) {
+          if (leave.category === 'annual') leaveSummary.annualHalfDay++
+          else if (leave.category === 'substitute') leaveSummary.substituteHalfDay++
+          else if (leave.category === 'compensatory') leaveSummary.compensatoryHalfDay++
+        } else {
+          if (leave.category === 'annual') leaveSummary.annual++
+          else if (leave.category === 'substitute') leaveSummary.substitute++
+          else if (leave.category === 'compensatory') leaveSummary.compensatory++
+          else if (leave.category === 'official') leaveSummary.official++
+          else if (leave.category === 'condolence') leaveSummary.condolence++
+          else if (leave.category === 'sick') leaveSummary.sick++
+        }
+      })
+      
+      console.log('📊 휴가 유형별 집계:', leaveSummary)
       
       // 일별 데이터에 휴가 정보 병합 및 근무시간 재계산
       const mergedDailyRecords = dailyRecords?.map(record => {
