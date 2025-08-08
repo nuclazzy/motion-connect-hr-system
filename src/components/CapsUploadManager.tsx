@@ -325,14 +325,18 @@ export default function CapsUploadManager() {
           }
           batchRecordSet.add(batchKey)
 
-          // 데이터베이스 중복 체크
-          const { data: existingRecord } = await supabase
+          // 데이터베이스 중복 체크 (날짜 기반 조회 후 메모리 체크)
+          const { data: dayRecords } = await supabase
             .from('attendance_records')
-            .select('id')
+            .select('id, record_timestamp, record_type')
             .eq('user_id', userId)
-            .eq('record_timestamp', recordTimestamp.toISOString())
-            .eq('record_type', recordType)
-            .single()
+            .eq('record_date', recordDate)
+
+          // JavaScript에서 중복 체크 (한글 인코딩 이슈 회피)
+          const existingRecord = dayRecords?.find(r => 
+            r.record_timestamp === recordTimestamp.toISOString() && 
+            r.record_type === recordType
+          )
 
           if (existingRecord) {
             duplicateCount++
