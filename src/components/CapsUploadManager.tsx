@@ -38,7 +38,6 @@ interface ProcessedRecord {
   record_timestamp: string
   record_type: '출근' | '퇴근'
   source: string
-  device_id: string
   reason: string
   is_manual: boolean
   had_dinner?: boolean
@@ -346,8 +345,7 @@ export default function CapsUploadManager() {
             record_timestamp: recordTimestamp.toISOString(),
             record_type: recordType,
             source: 'CAPS',
-            device_id: record.단말기ID,
-            reason: `CAPS 지문인식 (${record.인증}) - ${matchMethod}${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
+            reason: `CAPS 지문인식 (${record.인증}) - ${matchMethod} - 단말기: ${record.단말기ID}${record.구분 === '해제' || record.구분 === '세트' ? ` - 원본: ${record.구분}` : ''}`,
             is_manual: false,
             had_dinner: recordType === '퇴근' ? hasDinner : false  // 퇴근 시에만 저녁식사 정보 적용
           })
@@ -409,24 +407,27 @@ export default function CapsUploadManager() {
                 return { success: true, action: 'duplicate_skipped' }
               }
 
-              // 2. 새 기록 삽입
+              // 2. 새 기록 삽입 (실제 테이블 컬럼만 사용)
+              const insertData: any = {
+                user_id: record.user_id,
+                record_date: record.record_date,
+                record_time: record.record_time,
+                record_timestamp: record.record_timestamp,
+                record_type: record.record_type,
+                reason: record.reason,
+                source: record.source,
+                is_manual: record.is_manual,
+                had_dinner: record.had_dinner
+              }
+
+              // employee_number는 존재할 때만 추가
+              if (record.employee_number) {
+                insertData.employee_number = record.employee_number
+              }
+
               const { data: insertResult, error: insertError } = await supabase
                 .from('attendance_records')
-                .insert({
-                  user_id: record.user_id,
-                  employee_number: record.employee_number,
-                  record_date: record.record_date,
-                  record_time: record.record_time,
-                  record_timestamp: record.record_timestamp,
-                  record_type: record.record_type,
-                  reason: record.reason,
-                  source: record.source,
-                  device_id: record.device_id,
-                  is_manual: record.is_manual,
-                  had_dinner: record.had_dinner,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
+                .insert(insertData)
                 .select()
 
               if (insertError) {
