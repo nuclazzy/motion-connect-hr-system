@@ -133,9 +133,11 @@ const getAccessToken = (): Promise<string> => {
     // 토큰 콜백 설정
     tokenClient.callback = (resp: any) => {
       if (resp.error) {
+        console.error('❌ OAuth2 토큰 오류:', resp)
         reject(resp)
         return
       }
+      console.log('✅ OAuth2 토큰 받음')
       resolve(resp.access_token)
     }
 
