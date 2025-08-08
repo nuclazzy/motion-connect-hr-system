@@ -414,15 +414,22 @@ export default function AdminEmployeeManagement() {
         .lte('record_date', endDateStr)
         .order('record_date', { ascending: true })
       
-      // 휴가 신청 기록 조회
+      // 휴가 신청 기록 조회 (시작일 또는 종료일이 해당 월에 포함되는 경우 모두 조회)
       const { data: leaveRecords, error: leaveError } = await supabase
         .from('leave_applications')
         .select('*')
         .eq('user_id', selectedEmployee.id)
         .eq('status', 'approved') // 승인된 휴가만
-        .gte('start_date', startDateStr)
-        .lte('start_date', endDateStr)
+        .or(`start_date.gte.${startDateStr},end_date.gte.${startDateStr}`)
+        .or(`start_date.lte.${endDateStr},end_date.lte.${endDateStr}`)
         .order('start_date', { ascending: true })
+      
+      console.log('📅 휴가 신청 데이터 조회:', {
+        employee: selectedEmployee.name,
+        month: attendanceMonth,
+        leaveCount: leaveRecords?.length || 0,
+        leaves: leaveRecords
+      })
       
       if (statsError || dailyError || recordsError) {
         const error = statsError || dailyError || recordsError
@@ -1180,9 +1187,20 @@ export default function AdminEmployeeManagement() {
                               <tbody className="bg-white divide-y divide-gray-200">
                                 {attendanceData.daily_records && attendanceData.daily_records.length > 0 ? (
                                   attendanceData.daily_records.map((record: any) => {
-                                    const hasLeave = record.leave_info !== null && record.leave_info !== undefined
-                                    const isFullDayLeave = hasLeave && !record.leave_info?.half_day
-                                    const isHalfDayLeave = hasLeave && record.leave_info?.half_day
+                                    // 휴가 정보 확인 (leave_applications 테이블에서 승인된 휴가만)
+                                    const hasLeave = record.leave_info !== null && record.leave_info !== undefined && typeof record.leave_info === 'object'
+                                    const isFullDayLeave = hasLeave && record.leave_info?.half_day === false
+                                    const isHalfDayLeave = hasLeave && record.leave_info?.half_day === true
+                                    
+                                    // 디버깅용 로그
+                                    if (record.work_date && record.work_date.includes('2025-07')) {
+                                      console.log(`📊 ${record.work_date} 데이터:`, {
+                                        hasLeave,
+                                        leave_info: record.leave_info,
+                                        work_status: record.work_status,
+                                        basic_hours: record.basic_hours
+                                      })
+                                    }
                                     
                                     return (
                                       <tr key={record.work_date} className={`hover:bg-gray-50 ${hasLeave ? 'bg-yellow-50' : ''}`}>
