@@ -639,14 +639,19 @@ export default function CapsUploadManager() {
         const [year, month] = yearMonth.split('-').map(Number)
         const workMonth = `${year}-${String(month).padStart(2, '0')}-01`
         
+        // 해당 월의 마지막 날 계산 (다음 달 1일의 하루 전)
+        const lastDay = new Date(year, month, 0).getDate()
+        const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
+        const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+        
         for (const userId of processedUserIds) {
           // 해당 월의 일별 요약 조회
           const { data: monthSummaries, error: monthError } = await supabase
             .from('daily_work_summary')
             .select('*')
             .eq('user_id', userId)
-            .gte('work_date', `${year}-${String(month).padStart(2, '0')}-01`)
-            .lte('work_date', `${year}-${String(month).padStart(2, '0')}-31`)
+            .gte('work_date', monthStart)
+            .lte('work_date', monthEnd)
           
           if (monthError) {
             console.error(`❌ ${yearMonth} 월별 요약 조회 오류:`, monthError)
@@ -713,7 +718,7 @@ export default function CapsUploadManager() {
           .from('daily_work_summary')
           .select('*')
           .gte('work_date', '2025-07-01')
-          .lte('work_date', '2025-07-31')
+          .lt('work_date', '2025-08-01')
           .limit(5)
         
         console.log('📊 7월 daily_work_summary 확인:', {
