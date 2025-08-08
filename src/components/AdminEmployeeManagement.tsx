@@ -262,10 +262,31 @@ export default function AdminEmployeeManagement() {
       console.log('💾 업데이트할 데이터:', formData)
       console.log('선택된 직원 ID:', selectedEmployee.id)
       
+      // 실제 데이터베이스 컬럼만 필터링하여 업데이트
+      const updateData = {
+        name: formData.name,
+        email: formData.email,
+        employee_number: formData.employee_number,
+        department: formData.department,
+        position: formData.position,
+        phone: formData.phone,
+        hire_date: formData.hire_date,
+        work_type: formData.work_type,
+        resignation_date: formData.resignation_date,
+        updated_at: new Date().toISOString()
+      }
+      
+      // undefined 또는 null 값 제거
+      const filteredUpdateData = Object.fromEntries(
+        Object.entries(updateData).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+      )
+      
+      console.log('🔍 필터링된 업데이트 데이터:', filteredUpdateData)
+      
       // Supabase로 직접 업데이트
       const { data, error } = await supabase
         .from('users')
-        .update(formData)
+        .update(filteredUpdateData)
         .eq('id', selectedEmployee.id)
         .select()
         .single()
@@ -515,11 +536,11 @@ export default function AdminEmployeeManagement() {
         // users 테이블 필드도 업데이트
         (updatedEmployee as any)[targetField] = leaveData[targetField];
         
-        // 잔여 일수 재계산
+        // 잔여 일수 재계산 (로컬 상태용 - 데이터베이스 업데이트에는 포함되지 않음)
         if (leaveType === 'annual_leave') {
-          updatedEmployee.annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0);
+          (updatedEmployee as any).annual_leave = (leaveData.annual_days || 0) - (leaveData.used_annual_days || 0);
         } else {
-          updatedEmployee.sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0);
+          (updatedEmployee as any).sick_leave = (leaveData.sick_days || 0) - (leaveData.used_sick_days || 0);
         }
         
         (updatedEmployee as any).leave_data = leaveData;
