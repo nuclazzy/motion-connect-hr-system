@@ -25,13 +25,9 @@ export const initializeGoogleAPI = async (): Promise<void> => {
     console.log('📌 GOOGLE_API_KEY:', GOOGLE_API_KEY ? '설정됨' : '❌ 없음')
     console.log('📌 GOOGLE_CLIENT_ID:', GOOGLE_CLIENT_ID ? '설정됨' : '❌ 없음')
     
-    // API Key 확인
+    // API Key는 선택사항 - OAuth2만으로도 작동
     if (!GOOGLE_API_KEY) {
-      console.warn('⚠️ GOOGLE_API_KEY가 설정되지 않음. Google Calendar 연동 비활성화')
-      console.log('환경변수를 확인하세요: NEXT_PUBLIC_GOOGLE_API_KEY')
-      // 에러 대신 성공으로 처리하여 시스템이 계속 작동하도록 함
-      resolve()
-      return
+      console.log('📌 API Key 없이 OAuth2 전용 모드로 작동')
     }
 
     // Client ID 확인
@@ -66,8 +62,9 @@ export const initializeGoogleAPI = async (): Promise<void> => {
       gapi.load('client', async () => {
         console.log('📦 gapi.client 로드 중...')
         try {
+          // API Key가 없으면 빈 문자열로 설정 (OAuth2 전용 모드)
           await gapi.client.init({
-            apiKey: GOOGLE_API_KEY,
+            apiKey: GOOGLE_API_KEY || undefined,  // undefined로 설정하면 API Key 없이 작동
             discoveryDocs: [DISCOVERY_DOC],
           })
           console.log('✅ gapi.client 초기화 성공')
