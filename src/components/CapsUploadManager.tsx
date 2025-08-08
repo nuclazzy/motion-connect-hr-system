@@ -387,38 +387,57 @@ export default function CapsUploadManager() {
           const batch = uniqueRecords.slice(i, i + BATCH_SIZE)
           console.log(`📦 배치 ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(uniqueRecords.length/BATCH_SIZE)} 처리 중...`)
           
-          // 배치 내 병렬 처리
+          // 배치 내 병렬 처리 (직접 INSERT/UPSERT 방식)
           const batchPromises = batch.map(async (record) => {
             try {
-              // 새로운 안전한 CAPS UPSERT 함수 호출
-              const { data: upsertResult, error: upsertError } = await supabase
-                .rpc('safe_upsert_caps_attendance', {
-                  p_user_id: record.user_id,
-                  p_employee_number: record.employee_number,
-                  p_record_date: record.record_date,
-                  p_record_time: record.record_time,
-                  p_record_timestamp: record.record_timestamp,
-                  p_record_type: record.record_type,
-                  p_reason: record.reason,
-                  p_device_id: record.device_id
-                })
+              // 1. 중복 체크
+              const { data: existingRecord, error: checkError } = await supabase
+                .from('attendance_records')
+                .select('id')
+                .eq('user_id', record.user_id)
+                .eq('record_timestamp', record.record_timestamp)
+                .eq('record_type', record.record_type)
+                .maybeSingle()
 
-              if (upsertError) {
-                console.error('❌ 안전한 UPSERT 오류:', upsertError, 'Record:', record)
-                return { success: false, error: upsertError }
-              } else if (upsertResult && upsertResult.length > 0) {
-                const result = upsertResult[0]
-                if (result.success) {
-                  console.log(`✅ 안전한 UPSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type} (${result.action_taken})`)
-                  return { success: true, action: result.action_taken }
-                } else {
-                  console.error('❌ UPSERT 함수 실패:', record)
-                  return { success: false, error: result.message }
-                }
+              if (checkError) {
+                console.error('❌ 중복 체크 오류:', checkError)
+                return { success: false, error: checkError }
               }
-              return { success: false, error: 'No result returned' }
+
+              if (existingRecord) {
+                console.log(`⚠️ 중복 기록 스킵: ${record.record_date} ${record.record_time} ${record.record_type}`)
+                return { success: true, action: 'duplicate_skipped' }
+              }
+
+              // 2. 새 기록 삽입
+              const { data: insertResult, error: insertError } = await supabase
+                .from('attendance_records')
+                .insert({
+                  user_id: record.user_id,
+                  employee_number: record.employee_number,
+                  record_date: record.record_date,
+                  record_time: record.record_time,
+                  record_timestamp: record.record_timestamp,
+                  record_type: record.record_type,
+                  reason: record.reason,
+                  source: record.source,
+                  device_id: record.device_id,
+                  is_manual: record.is_manual,
+                  had_dinner: record.had_dinner,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .select()
+
+              if (insertError) {
+                console.error('❌ 직접 INSERT 오류:', insertError, 'Record:', record)
+                return { success: false, error: insertError }
+              }
+
+              console.log(`✅ 직접 INSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+              return { success: true, action: 'inserted' }
             } catch (error) {
-              console.error('❌ 안전한 UPSERT 처리 중 예외:', error, 'Record:', record)
+              console.error('❌ 직접 UPSERT 처리 중 예외:', error, 'Record:', record)
               return { success: false, error }
             }
           })
