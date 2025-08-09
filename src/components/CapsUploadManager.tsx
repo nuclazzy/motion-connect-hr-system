@@ -835,7 +835,7 @@ export default function CapsUploadManager() {
                 
                 // 저녁식사 여부는 기존 로직으로 판단 (자정 넘김과 별개)
                 const webAppDinnerRecord = dayRecords.find(r => 
-                  r.source === 'web' && r.had_dinner === true
+                  r.source === 'WEB' && r.had_dinner === true
                 )
                 const shouldHaveDinner = endTime.getHours() >= 19 || 
                   (endTime.getHours() === 18 && endTime.getMinutes() >= 30)
@@ -880,7 +880,7 @@ export default function CapsUploadManager() {
                     console.log(`✅ 웹앱 저녁식사 기록 확인됨 (중복 차감 방지)`)
                   } 
                 // CAPS에서 처리하는 경우 (웹앱 기록 없음)
-                else if (checkOut && checkOut.source === 'caps') {
+                else if (checkOut && checkOut.source === 'CAPS') {
                   hadDinner = true  // CAPS는 자동으로 저녁식사 시간 적용
                   breakMinutes += 60
                   console.log(`✅ CAPS 저녁식사 시간 자동 적용`)
