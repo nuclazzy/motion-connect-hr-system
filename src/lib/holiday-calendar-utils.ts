@@ -83,7 +83,16 @@ export function getCalendarCellStyle(dayInfo: HolidayInfo, hasEvents: boolean = 
   if (dayInfo.dayType === 'holiday') {
     bgClass = hasEvents ? 'bg-red-50' : 'bg-red-50/70'
   } else if (dayInfo.dayType === 'weekend') {
-    bgClass = hasEvents ? 'bg-gray-50' : 'bg-gray-50/50'
+    // 토요일과 일요일 구분
+    const date = new Date(dayInfo.date)
+    const dayOfWeek = date.getDay()
+    if (dayOfWeek === 6) { // 토요일
+      bgClass = hasEvents ? 'bg-blue-50' : 'bg-blue-50/50'
+    } else if (dayOfWeek === 0) { // 일요일
+      bgClass = hasEvents ? 'bg-red-50/50' : 'bg-red-50/30'
+    } else {
+      bgClass = hasEvents ? 'bg-gray-50' : 'bg-gray-50/50'
+    }
   } else {
     bgClass = hasEvents ? 'bg-blue-50/30' : 'bg-white'
   }
@@ -99,7 +108,15 @@ export function getDayLabelStyle(dayInfo: HolidayInfo): string {
     case 'holiday':
       return 'text-red-600 font-bold'
     case 'weekend':
-      return dayInfo.date.includes('토') ? 'text-blue-600 font-semibold' : 'text-gray-500 font-semibold'
+      // 토요일과 일요일 구분
+      const date = new Date(dayInfo.date)
+      const dayOfWeek = date.getDay()
+      if (dayOfWeek === 6) { // 토요일
+        return 'text-blue-600 font-semibold'
+      } else if (dayOfWeek === 0) { // 일요일
+        return 'text-red-500 font-semibold'
+      }
+      return 'text-gray-500 font-semibold'
     default:
       return 'text-gray-700'
   }

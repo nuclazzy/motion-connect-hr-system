@@ -5,7 +5,7 @@ import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import CapsUploadManager from '@/components/CapsUploadManager'
 import SpecialLeaveGrantModal from '@/components/SpecialLeaveGrantModal'
-import { ChevronLeft, ChevronRight, AlertCircle, Calendar, CalendarSync, FileUp } from 'lucide-react'
+import { ChevronLeft, ChevronRight, AlertCircle, Calendar, CalendarSync, FileUp, CheckCircle, RefreshCw } from 'lucide-react'
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 import { updateHolidayCache } from '@/lib/holidays'
 import { syncLeaveCalendar } from '@/lib/leave-calendar-sync'
@@ -92,9 +92,9 @@ export default function AdminEmployeeManagement() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any>(null)
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false)
-  const [showHolidaySync, setShowHolidaySync] = useState(false)
-  const [showLeaveSync, setShowLeaveSync] = useState(false)
-  const [syncStatus, setSyncStatus] = useState<{type: string, status: 'idle' | 'loading' | 'success' | 'error', message?: string}>({type: '', status: 'idle'})
+  // 자동 동기화 상태
+  const [autoSyncStatus, setAutoSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle')
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
 
   // fetchData 함수를 컴포넌트 스코프로 이동
   const fetchData = async () => {
@@ -244,23 +244,57 @@ export default function AdminEmployeeManagement() {
     }
   }, [attendanceMonth, selectedEmployee, activeTab])
 
-  // useEffect to load holidays when attendanceMonth changes
+  // 공휴일 및 휴가 데이터 자동 로드 및 동기화
   useEffect(() => {
-    const loadHolidays = async () => {
+    const loadHolidaysAndSyncLeave = async () => {
       const [year, month] = attendanceMonth.split('-').map(Number)
-      console.log(`🔄 공휴일 정보 로드: ${year}년 ${month}월`)
-      const holidays = await getMonthHolidayInfo(year, month)
-      console.log(`✅ 공휴일 Map 설정: ${holidays.size}개 항목`)
+      setAutoSyncStatus('syncing')
       
-      // 공휴일만 필터링하여 확인
-      const actualHolidays = Array.from(holidays.values()).filter(h => h.isHoliday)
-      console.log(`📅 실제 공휴일: ${actualHolidays.length}개`, actualHolidays.map(h => h.date + ' - ' + h.name))
+      try {
+        // 1. 공휴일 정보 자동 로드
+        console.log(`🔄 공휴일 정보 자동 로드: ${year}년 ${month}월`)
+        await updateHolidayCache(year) // 캐시 업데이트
+        const holidays = await getMonthHolidayInfo(year, month)
+        console.log(`✅ 공휴일 Map 설정: ${holidays.size}개 항목`)
+        
+        // 공휴일만 필터링하여 확인
+        const actualHolidays = Array.from(holidays.values()).filter(h => h.isHoliday)
+        console.log(`📅 실제 공휴일: ${actualHolidays.length}개`, actualHolidays.map(h => h.date + ' - ' + h.name))
+        
+        setHolidayMap(holidays)
+        
+        // 2. 휴가 데이터 자동 동기화
+        console.log(`🔄 휴가 데이터 자동 동기화 시작: ${year}년`)
+        try {
+          const result = await syncLeaveCalendar(year)
+          if (!result.success) {
+            console.warn('⚠️ 휴가 데이터 동기화 실패:', result.message)
+          } else {
+            console.log(`✅ 휴가 데이터 동기화 완료: ${result.syncedCount || 0}개 이벤트`)
+            // 동기화 후 출퇴근 데이터 새로고침 (선택된 직원이 있을 때만)
+            if (selectedEmployee) {
+              await fetchAttendanceData()
+            }
+          }
+        } catch (error) {
+          console.error('❌ 휴가 동기화 오류:', error)
+        }
+        
+        setAutoSyncStatus('success')
+        setLastSyncTime(new Date())
+      } catch (error) {
+        console.error('❌ 자동 동기화 실패:', error)
+        setAutoSyncStatus('error')
+      }
       
-      setHolidayMap(holidays)
+      // 3초 후 상태 초기화
+      setTimeout(() => {
+        setAutoSyncStatus('idle')
+      }, 3000)
     }
     
     if (activeTab === 'attendance') {
-      loadHolidays()
+      loadHolidaysAndSyncLeave()
     }
   }, [attendanceMonth, activeTab])
 
@@ -1081,20 +1115,32 @@ export default function AdminEmployeeManagement() {
           </div>
           <div className="flex space-x-2">
             {/* 데이터 동기화 버튼들 */}
-            <button
-              onClick={() => setShowLeaveSync(true)}
-              className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
-              title="휴가 및 경조사 캘린더 데이터 가져오기">
-              <CalendarSync className="w-4 h-4" />
-              <span className="hidden lg:inline">휴가데이터 동기화</span>
-            </button>
-            <button
-              onClick={() => setShowHolidaySync(true)}
-              className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
-              title="공휴일 데이터 가져오기">
-              <Calendar className="w-4 h-4" />
-              <span className="hidden lg:inline">공휴일 데이터 동기화</span>
-            </button>
+            {/* 자동 동기화 상태 표시 */}
+            <div className="flex items-center gap-2 px-3 py-2 text-sm">
+              {autoSyncStatus === 'syncing' && (
+                <>
+                  <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                  <span className="text-blue-600">데이터 동기화 중...</span>
+                </>
+              )}
+              {autoSyncStatus === 'success' && (
+                <>
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                  <span className="text-green-600">동기화 완료</span>
+                </>
+              )}
+              {autoSyncStatus === 'error' && (
+                <>
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <span className="text-red-600">동기화 실패</span>
+                </>
+              )}
+              {autoSyncStatus === 'idle' && lastSyncTime && (
+                <span className="text-gray-500 text-xs">
+                  마지막 동기화: {lastSyncTime.toLocaleTimeString('ko-KR')}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => setShowBulkUploadModal(true)}
               className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 flex items-center gap-2"
@@ -2377,16 +2423,15 @@ export default function AdminEmployeeManagement() {
         </div>
       )}
 
-      {/* Holiday Data Sync Modal */}
-      {showHolidaySync && (
+      {/* Holiday Data Sync Modal - Removed (자동 동기화로 변경) 
+      {false && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium text-gray-900">공휴일 데이터 동기화</h3>
               <button
                 onClick={() => {
-                  setShowHolidaySync(false)
-                  setSyncStatus({type: '', status: 'idle'})
+                  // Modal removed - auto sync enabled
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -2514,10 +2559,10 @@ export default function AdminEmployeeManagement() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      {/* Leave Calendar Sync Modal */}
-      {showLeaveSync && (
+      {/* Leave Calendar Sync Modal - Removed (자동 동기화로 변경)
+      {false && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
             <div className="flex justify-between items-center mb-4">
@@ -2664,7 +2709,7 @@ export default function AdminEmployeeManagement() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   )
 }

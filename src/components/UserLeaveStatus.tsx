@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { type User, authenticatedFetch } from '@/lib/auth'
 import { getLeaveStatus, LEAVE_TYPE_NAMES } from '@/lib/hoursToLeaveDay'
 import { supabase } from '@/lib/supabase'
-import { getMonthHolidayInfo, getCalendarCellStyle, getDayLabelStyle, type HolidayInfo } from '@/lib/holiday-calendar-utils'
 
 interface LeaveData {
   id: string
@@ -30,9 +29,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const [leaveData, setLeaveData] = useState<LeaveData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [holidayMap, setHolidayMap] = useState<Map<string, HolidayInfo>>(new Map())
-  const [holidaysLoading, setHolidaysLoading] = useState(false)
-  const [currentDate] = useState(new Date())
 
   const fetchLeaveData = useCallback(async () => {
       try {
@@ -85,25 +81,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
     }
   }, [user.id, user.name, fetchLeaveData])
 
-  // 공휴일 정보 로드
-  useEffect(() => {
-    const loadHolidays = async () => {
-      setHolidaysLoading(true)
-      try {
-        const holidays = await getMonthHolidayInfo(
-          currentDate.getFullYear(), 
-          currentDate.getMonth() + 1
-        )
-        setHolidayMap(holidays)
-      } catch (error) {
-        console.error('공휴일 정보 로드 실패:', error)
-      } finally {
-        setHolidaysLoading(false)
-      }
-    }
-    
-    loadHolidays()
-  }, [currentDate])
 
   if (loading) {
     return (
@@ -175,74 +152,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
   const substituteStatus = getLeaveStatus(substituteHours)
   const compensatoryStatus = getLeaveStatus(compensatoryHours)
   
-  // 미니 캘린더 렌더링
-  const renderMiniCalendar = () => {
-    const year = currentDate.getFullYear()
-    const month = currentDate.getMonth()
-    const firstDay = new Date(year, month, 1).getDay()
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-    const today = new Date()
-    const days = []
-
-    // 빈 셀들
-    for (let i = 0; i < firstDay; i++) {
-      days.push(<div key={`empty-${i}`} className="p-1"></div>)
-    }
-
-    // 날짜들
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      const holidayInfo = holidayMap.get(dateString) || {
-        date: dateString,
-        name: '',
-        isHoliday: false,
-        isWeekend: new Date(year, month, day).getDay() === 0 || new Date(year, month, day).getDay() === 6,
-        dayType: 'weekday' as const
-      }
-      
-      const isToday = today.getFullYear() === year && 
-                     today.getMonth() === month && 
-                     today.getDate() === day
-
-      const dayStyle = holidayInfo.isHoliday ? 'text-red-600 font-bold' : 
-                      holidayInfo.isWeekend ? 'text-gray-400' : 
-                      'text-gray-700'
-      
-      const bgStyle = isToday ? 'bg-blue-100 ring-1 ring-blue-400' :
-                     holidayInfo.isHoliday ? 'bg-red-50' :
-                     holidayInfo.isWeekend ? 'bg-gray-50' : ''
-
-      days.push(
-        <div 
-          key={day} 
-          className={`p-1 text-center text-xs ${bgStyle} rounded-sm relative group cursor-default`}
-          title={holidayInfo.isHoliday ? holidayInfo.name : ''}
-        >
-          <span className={dayStyle}>{day}</span>
-          {holidayInfo.isHoliday && (
-            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-red-500 rounded-full"></div>
-          )}
-        </div>
-      )
-    }
-
-    return (
-      <div>
-        <div className="grid grid-cols-7 gap-1 text-xs text-center mb-2">
-          {['일', '월', '화', '수', '목', '금', '토'].map((dayName, idx) => (
-            <div key={dayName} className={`font-medium ${
-              idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-gray-600'
-            }`}>
-              {dayName}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {days}
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -415,30 +324,6 @@ export default function UserLeaveStatus({ user, onApply }: UserLeaveStatusProps)
             </div>
           </div>
 
-          {/* 이번 달 캘린더 (공휴일 포함) */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
-            <h4 className="text-base font-semibold leading-6 text-gray-900 mb-3">
-              <span className="flex items-center">
-                <svg className="h-5 w-5 text-gray-600 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
-              </span>
-            </h4>
-            <div className="bg-gray-50 rounded-lg p-3">
-              {renderMiniCalendar()}
-              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-center gap-4 text-xs">
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-red-50 border border-red-200 rounded-sm mr-1"></div>
-                  <span className="text-gray-600">공휴일</span>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-3 h-3 bg-blue-100 border border-blue-300 rounded-sm mr-1"></div>
-                  <span className="text-gray-600">오늘</span>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* 업데이트 일시 */}
           <div className="mt-3 text-xs text-gray-400 text-right">
