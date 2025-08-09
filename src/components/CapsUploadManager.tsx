@@ -260,24 +260,16 @@ export default function CapsUploadManager() {
           let recordType: '출근' | '퇴근' | null = null
           
           // 1단계: 모드 컬럼 우선 확인 (CAPS 핵심 정보)
-          if (record.모드 === '출근') {
+          if (record.모드 === '출근' || record.모드 === '해제') {
             recordType = '출근'
-          } else if (record.모드 === '퇴근') {
+          } else if (record.모드 === '퇴근' || record.모드 === '세트') {
             recordType = '퇴근'
-          } else if (record.모드 === '해제' || record.모드 === '세트') {
-            // 해제/세트는 보안 시스템 모드 변경용이므로 무시
-            console.log(`ℹ️ 보안 모드 기록 무시: ${record.이름} ${record.발생일자} ${record.발생시각} - 모드: ${record.모드}`)
-            continue
           }
           // 2단계: 구분 컬럼 확인 (모드가 명확하지 않을 때만)
-          else if (record.구분 === '출근') {
+          else if (record.구분 === '출근' || record.구분 === '해제') {
             recordType = '출근'
-          } else if (record.구분 === '퇴근') {
+          } else if (record.구분 === '퇴근' || record.구분 === '세트') {
             recordType = '퇴근'
-          } else if (record.구분 === '해제' || record.구분 === '세트') {
-            // 해제/세트는 보안 시스템 모드 변경용이므로 무시
-            console.log(`ℹ️ 보안 모드 기록 무시: ${record.이름} ${record.발생일자} ${record.발생시각} - 구분: ${record.구분}`)
-            continue
           } else if (record.구분 === '출입') {
             // 출입은 무시
             continue
@@ -765,10 +757,56 @@ export default function CapsUploadManager() {
           if (!dayRecords || dayRecords.length === 0) continue
           
           // 출근/퇴근 시간 찾기 (시간순 정렬된 데이터 활용)
-          // 출근: 첫 번째 출근 기록 (시간순 정렬이므로 가장 이른 출근)
-          const checkIn = dayRecords.find(r => r.record_type === '출근')
-          // 퇴근: 마지막 퇴근 기록 (시간순 정렬이므로 가장 늦은 퇴근)
-          const checkOut = dayRecords.filter(r => r.record_type === '퇴근').pop()
+          // 🎯 개선된 로직: 연속된 해제/세트 쌍 감지 및 필터링
+          
+          // 1. 실제 근무 시작/종료 찾기 (해제/세트 연속 쌍 제외)
+          let checkIn = null
+          let checkOut = null
+          
+          // 모든 출근 기록 중에서 유효한 첫 번째 출근 찾기
+          for (let i = 0; i < dayRecords.length; i++) {
+            const record = dayRecords[i]
+            if (record.record_type === '출근') {
+              // 다음 기록이 5분 이내 퇴근인지 확인 (해제/세트 쌍 감지)
+              const nextRecord = dayRecords[i + 1]
+              if (nextRecord && nextRecord.record_type === '퇴근') {
+                const timeDiff = (new Date(nextRecord.record_timestamp).getTime() - 
+                                new Date(record.record_timestamp).getTime()) / (1000 * 60) // 분 단위
+                if (timeDiff <= 10) {
+                  // 10분 이내 출퇴근은 보안 시스템 해제/세트로 간주하고 건너뛰기
+                  console.log(`🔒 보안 시스템 해제/세트 감지 (${timeDiff.toFixed(1)}분 간격): ${record.record_time} → ${nextRecord.record_time}`)
+                  i++ // 다음 기록도 건너뛰기
+                  continue
+                }
+              }
+              // 유효한 출근 기록
+              if (!checkIn) {
+                checkIn = record
+              }
+            }
+          }
+          
+          // 모든 퇴근 기록 중에서 유효한 마지막 퇴근 찾기
+          for (let i = dayRecords.length - 1; i >= 0; i--) {
+            const record = dayRecords[i]
+            if (record.record_type === '퇴근') {
+              // 이전 기록이 5분 이내 출근인지 확인 (해제/세트 쌍 감지)
+              const prevRecord = dayRecords[i - 1]
+              if (prevRecord && prevRecord.record_type === '출근') {
+                const timeDiff = (new Date(record.record_timestamp).getTime() - 
+                                new Date(prevRecord.record_timestamp).getTime()) / (1000 * 60) // 분 단위
+                if (timeDiff <= 10) {
+                  // 10분 이내 출퇴근은 보안 시스템 해제/세트로 간주하고 건너뛰기
+                  i-- // 이전 기록도 건너뛰기
+                  continue
+                }
+              }
+              // 유효한 퇴근 기록
+              if (!checkOut) {
+                checkOut = record
+              }
+            }
+          }
           
           // 🔍 출퇴근 매칭 디버깅 로그 (문제 해결 추적용)
           if (dayRecords.length > 0) {
@@ -1639,7 +1677,7 @@ export default function CapsUploadManager() {
           <li className="break-words">• <strong>덮어쓰기 모드:</strong> 기존 기록을 새 데이터로 교체 (잘못된 기록 수정용)</li>
           <li className="break-words">• <strong>일반 모드:</strong> 중복 데이터 자동 스킵 (안전한 재업로드)</li>
           <li className="break-words">• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
-          <li className="break-words">• <strong>해제/세트</strong> 기록은 보안 시스템 모드용이므로 <strong>무시됩니다</strong></li>
+          <li className="break-words">• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
           <li className="break-words">• "출입" 기록은 무시됩니다</li>
         </ul>
       </div>
