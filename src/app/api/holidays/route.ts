@@ -72,31 +72,38 @@ async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: str
     }
 
     const contentType = response.headers.get('content-type')
+    console.log(`🔍 KASI API Content-Type: ${contentType}`)
+    
+    const responseText = await response.text()
+    console.log(`📦 KASI API Response preview: ${responseText.substring(0, 200)}...`)
+    
     const holidays: { [key: string]: string } = {}
     
-    // JSON 응답 처리
-    if (contentType?.includes('application/json')) {
-      const data = await response.json()
-      console.log('📊 KASI API returned JSON response')
+    // JSON 응답인지 확인 (Content-Type이 정확하지 않을 수 있으므로 내용으로 판단)
+    let data
+    try {
+      data = JSON.parse(responseText)
+      console.log('📊 KASI API returned JSON response (parsed successfully)')
       
       // JSON 응답 구조 처리
       const items = data?.response?.body?.items?.item || []
+      console.log(`🔍 Found ${Array.isArray(items) ? items.length : (items ? 1 : 0)} items in response`)
+      
       for (const item of Array.isArray(items) ? items : [items]) {
-        if (item.isHoliday === 'Y') {
+        if (item && item.isHoliday === 'Y') {
           const dateStr = String(item.locdate)
           const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`
           holidays[formattedDate] = item.dateName
+          console.log(`✅ Added holiday: ${formattedDate} - ${item.dateName}`)
         }
       }
-    } 
-    // XML 응답 처리
-    else {
-      const xml = await response.text()
-      console.log('📄 KASI API returned XML response')
+    } catch (jsonError) {
+      console.log('📄 KASI API returned XML response (JSON parsing failed)')
       
       // 개선된 XML 파싱
       const itemRegex = /<item>([\s\S]*?)<\/item>/g
-      const itemMatches = xml.match(itemRegex) || []
+      const itemMatches = responseText.match(itemRegex) || []
+      console.log(`🔍 Found ${itemMatches.length} XML items`)
       
       for (const itemMatch of itemMatches) {
         const itemXml = itemMatch
@@ -108,6 +115,7 @@ async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: str
           const dateStr = locdateMatch[1]
           const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`
           holidays[formattedDate] = dateNameMatch[1]
+          console.log(`✅ Added holiday: ${formattedDate} - ${dateNameMatch[1]}`)
         }
       }
     }
@@ -128,27 +136,42 @@ async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: str
 function getMinimalFallbackHolidays(year: number): { [key: string]: string } {
   const holidays: { [key: string]: string } = {}
   
-  // 고정 공휴일만 추가 (변동 가능한 설날, 추석 제외)
-  holidays[`${year}-01-01`] = '신정'
+  // 고정 공휴일 추가
+  holidays[`${year}-01-01`] = '1월1일'
   holidays[`${year}-03-01`] = '삼일절'
   holidays[`${year}-05-05`] = '어린이날'
   holidays[`${year}-06-06`] = '현충일'
   holidays[`${year}-08-15`] = '광복절'
   holidays[`${year}-10-03`] = '개천절'
   holidays[`${year}-10-09`] = '한글날'
-  holidays[`${year}-12-25`] = '성탄절'
+  holidays[`${year}-12-25`] = '기독탄신일'
   
-  // 🎯 2025년 특별 임시공휴일 (정부 공식 발표 기준)
+  // 🎯 2025년 특별 공휴일 (정부 공식 발표 + 일반 공휴일)
   if (year === 2025) {
-    // 설 연휴 임시공휴일 (2025.1.8 지정)
-    holidays[`${year}-01-27`] = '임시공휴일(설 연휴)'
+    // 설 연휴
+    holidays[`${year}-01-27`] = '임시공휴일'
+    holidays[`${year}-01-28`] = '설날'
+    holidays[`${year}-01-29`] = '설날'
+    holidays[`${year}-01-30`] = '설날'
     
-    // 🚨 제21대 대통령 선거일 임시공휴일 (2025.4.8 지정)
-    holidays[`${year}-06-03`] = '임시공휴일(대통령 선거일)'
+    // 삼일절 대체공휴일
+    holidays[`${year}-03-03`] = '대체공휴일'
+    
+    // 어린이날/부처님오신날 (5월 5일 중복)
+    holidays[`${year}-05-06`] = '대체공휴일'
+    
+    // 🚨 제21대 대통령 선거일 임시공휴일
+    holidays[`${year}-06-03`] = '임시공휴일(제21대 대통령 선거)'
+    
+    // 추석 연휴
+    holidays[`${year}-10-05`] = '추석'
+    holidays[`${year}-10-06`] = '추석'
+    holidays[`${year}-10-07`] = '추석'
+    holidays[`${year}-10-08`] = '대체공휴일'
   }
   
   const totalCount = Object.keys(holidays).length
-  console.log(`📋 Using enhanced fallback holidays for ${year} (${totalCount} holidays including confirmed temporary holidays)`)
+  console.log(`📋 Enhanced fallback: ${totalCount}개 공휴일 (${year}년)`)
   return holidays
 }
 
@@ -158,37 +181,39 @@ function getMinimalFallbackHolidays(year: number): { [key: string]: string } {
  * 2순위: Enhanced fallback (정부발표 확정 임시공휴일 포함)
  */
 async function fetchHolidaysKASI(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
-  // 1순위: 한국천문연구원 API 시도 + 정부발표 보완
+  // 1순위: 한국천문연구원 API 시도
   try {
     const holidays = await fetchHolidaysFromKASI(year)
     
-    // 🎯 정부 공식 발표 누락 데이터 보완 (2025년)
-    if (year === 2025) {
-      if (!holidays['2025-06-03']) {
-        holidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
-        console.log('🎯 Enhanced KASI data with June 3 election holiday')
+    // API가 실제 공휴일을 반환했는지 확인 (5개 이상이면 성공으로 간주)
+    if (Object.keys(holidays).length >= 5) {
+      console.log(`✅ KASI API 성공: ${Object.keys(holidays).length}개 공휴일 조회`)
+      
+      // 🎯 정부 공식 발표 누락 데이터 보완 (2025년)
+      if (year === 2025) {
+        if (!holidays['2025-06-03']) {
+          holidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
+          console.log('🎯 Enhanced KASI data with June 3 election holiday')
+        }
+        if (!holidays['2025-01-27']) {
+          holidays['2025-01-27'] = '임시공휴일(설 연휴)'
+          console.log('🎯 Enhanced KASI data with January 27 Lunar New Year holiday')
+        }
       }
-      if (!holidays['2025-01-27']) {
-        holidays['2025-01-27'] = '임시공휴일(설 연휴)'
-        console.log('🎯 Enhanced KASI data with January 27 Lunar New Year holiday')
-      }
+      
+      return { holidays, source: 'kasi-api' }
+    } else {
+      console.warn(`⚠️ KASI API 응답 부족: ${Object.keys(holidays).length}개만 조회됨, fallback 사용`)
+      throw new Error('Insufficient KASI API response')
     }
-    
-    return { holidays, source: 'kasi-api-enhanced' }
   } catch (error) {
-    console.warn(`⚠️ KASI API also failed for ${year}, using enhanced fallback...`)
+    console.warn(`⚠️ KASI API 실패 for ${year}, enhanced fallback 사용...`)
   }
 
-  // 3순위: Enhanced fallback (정부발표 확정 임시공휴일 포함)
-  const currentYear = new Date().getFullYear()
-  if (Math.abs(year - currentYear) <= 2) {
-    const holidays = getMinimalFallbackHolidays(year)
-    return { holidays, source: 'enhanced-fallback' }
-  }
-
-  // 완전 실패
-  console.error(`❌ All holiday sources failed for year ${year}`)
-  return { holidays: {}, source: 'none' }
+  // 2순위: Enhanced fallback (전체 공휴일 포함)
+  console.log(`📋 Enhanced fallback 사용 for ${year}`)
+  const holidays = getMinimalFallbackHolidays(year)
+  return { holidays, source: 'enhanced-fallback' }
 }
 
 /**
