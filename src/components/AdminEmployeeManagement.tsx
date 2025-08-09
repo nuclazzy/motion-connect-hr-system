@@ -9,6 +9,10 @@ import { ChevronLeft, ChevronRight, AlertCircle, Calendar, CalendarSync, FileUp 
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 import { updateHolidayCache } from '@/lib/holidays'
 import { syncLeaveCalendar } from '@/lib/leave-calendar-sync'
+import { 
+  getMonthHolidayInfo,
+  type HolidayInfo
+} from '@/lib/holiday-calendar-utils'
 
 
 // Assuming a more complete User type
@@ -84,6 +88,7 @@ export default function AdminEmployeeManagement() {
   })
   const [attendanceData, setAttendanceData] = useState<any>(null)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [holidayMap, setHolidayMap] = useState<Map<string, HolidayInfo>>(new Map())
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any>(null)
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false)
@@ -238,6 +243,19 @@ export default function AdminEmployeeManagement() {
       fetchAttendanceData()
     }
   }, [attendanceMonth, selectedEmployee, activeTab])
+
+  // useEffect to load holidays when attendanceMonth changes
+  useEffect(() => {
+    const loadHolidays = async () => {
+      const [year, month] = attendanceMonth.split('-').map(Number)
+      const holidays = await getMonthHolidayInfo(year, month)
+      setHolidayMap(holidays)
+    }
+    
+    if (activeTab === 'attendance') {
+      loadHolidays()
+    }
+  }, [attendanceMonth, activeTab])
 
   const handleSelectEmployee = (employee: Employee) => {
     setSelectedEmployee(employee)
@@ -1413,6 +1431,10 @@ export default function AdminEmployeeManagement() {
                                     const isFullDayLeave = hasLeave && record.leave_info?.half_day === false
                                     const isHalfDayLeave = hasLeave && record.leave_info?.half_day === true
                                     
+                                    // 공휴일 정보 확인
+                                    const holidayInfo = holidayMap.get(record.work_date)
+                                    const isHoliday = !!holidayInfo
+                                    
                                     // 디버깅용 로그
                                     if (record.work_date && record.work_date.includes('2025-07')) {
                                       console.log(`📊 ${record.work_date} 데이터:`, {
@@ -1424,14 +1446,21 @@ export default function AdminEmployeeManagement() {
                                     }
                                     
                                     return (
-                                      <tr key={record.work_date} className={`hover:bg-gray-50 ${hasLeave ? 'bg-yellow-50' : ''}`}>
+                                      <tr key={record.work_date} className={`hover:bg-gray-50 ${hasLeave ? 'bg-yellow-50' : isHoliday ? 'bg-red-50' : ''}`}>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                                           <div>
-                                            {new Date(record.work_date).toLocaleDateString('ko-KR', {
-                                              month: 'long',
-                                              day: 'numeric',
-                                              weekday: 'short'
-                                            })}
+                                            <span className={isHoliday ? 'text-red-600 font-medium' : ''}>
+                                              {new Date(record.work_date).toLocaleDateString('ko-KR', {
+                                                month: 'long',
+                                                day: 'numeric',
+                                                weekday: 'short'
+                                              })}
+                                            </span>
+                                            {isHoliday && (
+                                              <div className="text-xs text-red-600 mt-1">
+                                                {holidayInfo.name}
+                                              </div>
+                                            )}
                                             {hasLeave && (
                                               <div className="text-xs text-yellow-600 mt-1">
                                                 {record.leave_info.type === 'annual' ? '연차' : 
