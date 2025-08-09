@@ -248,7 +248,14 @@ export default function AdminEmployeeManagement() {
   useEffect(() => {
     const loadHolidays = async () => {
       const [year, month] = attendanceMonth.split('-').map(Number)
+      console.log(`🔄 공휴일 정보 로드: ${year}년 ${month}월`)
       const holidays = await getMonthHolidayInfo(year, month)
+      console.log(`✅ 공휴일 Map 설정: ${holidays.size}개 항목`)
+      
+      // 공휴일만 필터링하여 확인
+      const actualHolidays = Array.from(holidays.values()).filter(h => h.isHoliday)
+      console.log(`📅 실제 공휴일: ${actualHolidays.length}개`, actualHolidays.map(h => h.date + ' - ' + h.name))
+      
       setHolidayMap(holidays)
     }
     
@@ -1433,15 +1440,16 @@ export default function AdminEmployeeManagement() {
                                     
                                     // 공휴일 정보 확인
                                     const holidayInfo = holidayMap.get(record.work_date)
-                                    const isHoliday = !!holidayInfo
+                                    const isHoliday = !!holidayInfo && holidayInfo.isHoliday
                                     
                                     // 디버깅용 로그
-                                    if (record.work_date && record.work_date.includes('2025-07')) {
-                                      console.log(`📊 ${record.work_date} 데이터:`, {
+                                    if (record.work_date && record.work_date.includes('2025-')) {
+                                      console.log(`📊 ${record.work_date} 공휴일 체크:`, {
+                                        holidayMapSize: holidayMap.size,
+                                        holidayInfo: holidayInfo,
+                                        isHoliday: isHoliday,
                                         hasLeave,
-                                        leave_info: record.leave_info,
-                                        work_status: record.work_status,
-                                        basic_hours: record.basic_hours
+                                        leave_info: record.leave_info
                                       })
                                     }
                                     
@@ -1456,9 +1464,9 @@ export default function AdminEmployeeManagement() {
                                                 weekday: 'short'
                                               })}
                                             </span>
-                                            {isHoliday && (
+                                            {isHoliday && holidayInfo && (
                                               <div className="text-xs text-red-600 mt-1">
-                                                {holidayInfo.name}
+                                                {holidayInfo.name || '공휴일'}
                                               </div>
                                             )}
                                             {hasLeave && (
