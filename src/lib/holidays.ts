@@ -81,10 +81,28 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
     emergencyHolidays[`${year}-10-09`] = '한글날'
     emergencyHolidays[`${year}-12-25`] = '성탄절'
     
-    // 🎯 2025년 중요 임시공휴일 보장
+    // 🎯 2025년 모든 공휴일 보장 (정부 발표 포함)
     if (year === 2025) {
+      // 설 연휴
       emergencyHolidays['2025-01-27'] = '임시공휴일(설 연휴)'
+      emergencyHolidays['2025-01-28'] = '설날'
+      emergencyHolidays['2025-01-29'] = '설날'
+      emergencyHolidays['2025-01-30'] = '설날'
+      
+      // 삼일절 대체공휴일
+      emergencyHolidays['2025-03-03'] = '대체공휴일'
+      
+      // 어린이날 대체공휴일
+      emergencyHolidays['2025-05-06'] = '대체공휴일'
+      
+      // 🚨 대통령 선거일 임시공휴일
       emergencyHolidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
+      
+      // 추석 연휴
+      emergencyHolidays['2025-10-05'] = '추석'
+      emergencyHolidays['2025-10-06'] = '추석'
+      emergencyHolidays['2025-10-07'] = '추석'
+      emergencyHolidays['2025-10-08'] = '대체공휴일'
     }
     
     console.log(`🚨 Using emergency fallback: ${Object.keys(emergencyHolidays).length} core holidays for ${year}`)

@@ -2463,6 +2463,13 @@ export default function AdminEmployeeManagement() {
                           const currentYear = new Date().getFullYear()
                           console.log(`🔄 공휴일 캐시 업데이트 시작: ${currentYear}, ${currentYear + 1}년`)
                           
+                          // 캐시 강제 초기화 (6월 3일 등 누락된 공휴일 재로드)
+                          if (typeof window !== 'undefined') {
+                            localStorage.removeItem(`holidays_cache_${currentYear}`)
+                            localStorage.removeItem(`holidays_cache_${currentYear + 1}`)
+                            console.log('🗑️ 기존 캐시 삭제됨')
+                          }
+                          
                           await updateHolidayCache(currentYear)
                           await updateHolidayCache(currentYear + 1)
                           console.log('✅ 공휴일 캐시 업데이트 완료')
