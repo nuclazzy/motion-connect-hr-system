@@ -13,10 +13,18 @@ export { default as Dropdown } from './Dropdown';
 
 // Button variants
 export {
+  PrimaryButton,
+  SecondaryButton,
+  OutlineButton,
+  GhostButton,
+  TextButton,
+  SubmitButton,
+  CancelButton,
   ApproveButton,
   RejectButton,
-  EditButton,
   DeleteButton,
+  SaveButton,
+  EditButton,
   LoadingButton
 } from './Button';
 

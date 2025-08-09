@@ -57,21 +57,27 @@ export interface InputProps {
   variant?: InputVariant
   size?: InputSize
   type?: InputType
+  name?: string
   label?: string
   placeholder?: string
   value?: string
   defaultValue?: string
   disabled?: boolean
   required?: boolean
-  error?: boolean
+  error?: boolean | string
   errorMessage?: string
   helpText?: string
   startAdornment?: React.ReactNode
   endAdornment?: React.ReactNode
   fullWidth?: boolean
+  loading?: boolean
+  min?: number
+  max?: number
+  step?: number
   onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void
   onBlur?: (event: React.FocusEvent<HTMLInputElement>) => void
   onFocus?: (event: React.FocusEvent<HTMLInputElement>) => void
+  onSearch?: (value: string) => void
   className?: string
   inputClassName?: string
 }
@@ -113,7 +119,8 @@ export interface CardTitleProps {
 export type ModalSize = ComponentSize | 'xs' | 'xl' | '2xl' | '3xl' | '4xl' | '5xl' | 'full' | 'auto'
 
 export interface ModalProps {
-  open: boolean
+  isOpen?: boolean  // Also support isOpen for consistency
+  open?: boolean    // Legacy support
   onClose: () => void
   size?: ModalSize
   centered?: boolean
