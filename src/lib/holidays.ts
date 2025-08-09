@@ -32,15 +32,15 @@ export const initializeHolidayCache = async (year?: number) => {
 }
 
 /**
- * 한국천문연구원 API를 통해 공휴일 정보 가져오기 (실시간 연동)
- * Source: KASI API → fallback
+ * 내부 API 엔드포인트를 통해 공휴일 정보 가져오기 (실시간 연동)
+ * Source: /api/holidays → KASI API → enhanced fallback
  */
 export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string]: string }> => {
   try {
-    console.log(`🌟 Fetching holidays for ${year} from KASI API`)
+    console.log(`🌟 Fetching holidays for ${year} from internal API`)
     
-    // KASI API 엔드포인트 호출 (POST)
-    const response = await fetch(API_ENDPOINTS.fullYear, {
+    // 내부 API 엔드포인트 호출 (POST)
+    const response = await fetch('/api/holidays', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -49,12 +49,12 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
     })
     
     if (!response.ok) {
-      throw new Error(`Hybrid API request failed with status ${response.status}`)
+      throw new Error(`Internal API request failed with status ${response.status}`)
     }
     
     const data = await response.json()
     
-    // 새로운 API 응답 형식 처리
+    // API 응답 형식 처리
     if (data.holidays && Object.keys(data.holidays).length > 0) {
       console.log(`✅ Successfully fetched ${data.count} holidays for ${year} from source: ${data.source}`)
       console.log(`📊 API Source: ${data.source}, Timestamp: ${data.timestamp}`)
@@ -66,7 +66,7 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
     }
     
   } catch (error) {
-    console.warn(`⚠️ KASI API fetch failed for ${year}, using emergency fallback:`, error)
+    console.warn(`⚠️ Internal API fetch failed for ${year}, using emergency fallback:`, error)
     
     // 🚨 긴급 복구: 최소한의 핵심 공휴일 보장
     const emergencyHolidays: { [key: string]: string } = {}
@@ -93,22 +93,22 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
 }
 
 /**
- * 특정 월의 공휴일 정보 가져오기 (KASI 월별 요청)
+ * 특정 월의 공휴일 정보 가져오기 (내부 API 월별 요청)
  */
 export const fetchMonthlyHolidays = async (year: number, month: number): Promise<{ [key: string]: string }> => {
   try {
-    console.log(`🌟 Fetching holidays for ${year}/${month} from KASI API`)
+    console.log(`🌟 Fetching holidays for ${year}/${month} from internal API`)
     
-    const url = `${API_ENDPOINTS.holidays}?year=${year}&month=${month}`
+    const url = `/api/holidays?year=${year}&month=${month}`
     const response = await fetch(url)
     
     if (!response.ok) {
-      throw new Error(`KASI monthly API request failed with status ${response.status}`)
+      throw new Error(`Internal monthly API request failed with status ${response.status}`)
     }
     
     const data = await response.json()
     
-    // 새로운 API 응답 형식 처리
+    // API 응답 형식 처리
     if (data.holidays && typeof data.holidays === 'object') {
       console.log(`✅ Fetched ${data.count} holidays for ${year}/${month} from source: ${data.source}`)
       return data.holidays
@@ -119,10 +119,10 @@ export const fetchMonthlyHolidays = async (year: number, month: number): Promise
     }
     
   } catch (error) {
-    console.warn(`⚠️ KASI monthly API failed for ${year}/${month}, no local fallback available:`, error)
+    console.warn(`⚠️ Internal monthly API failed for ${year}/${month}, no local fallback available:`, error)
     
-    // 월별 API 실패 시 빈 객체 반환 (route.ts의 Fallback에 의존)
-    console.log(`📅 Monthly API failed for ${year}/${month}, relying on route.ts fallback system`)
+    // 월별 API 실패 시 빈 객체 반환
+    console.log(`📅 Monthly API failed for ${year}/${month}, using fallback system`)
     return {}
   }
 }
