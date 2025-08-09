@@ -573,6 +573,9 @@ export default function CapsUploadManager() {
                 r.record_type === record.record_type
               )
 
+              // 덮어쓰기 여부를 별도 변수로 추적
+              let wasDeleted = false
+
               if (existingRecord) {
                 if (!overwriteMode) {
                   console.log(`⚠️ 중복 기록 스킵 (덮어쓰기 비활성화): ${record.record_date} ${record.record_time} ${record.record_type}`)
@@ -589,6 +592,7 @@ export default function CapsUploadManager() {
                     return { success: false, error: deleteError }
                   }
                   
+                  wasDeleted = true
                   console.log(`🔄 덮어쓰기 모드: 기존 기록 삭제됨 ${record.record_date} ${record.record_time} ${record.record_type}`)
                 }
               }
@@ -644,7 +648,7 @@ export default function CapsUploadManager() {
                 return { success: false, error: insertError }
               }
 
-              const wasOverwritten = existingRecord && overwriteMode
+              const wasOverwritten = wasDeleted && overwriteMode
               if (wasOverwritten) {
                 console.log(`✅ 덮어쓰기 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
                 return { success: true, action: 'overwritten' }
