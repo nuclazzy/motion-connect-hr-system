@@ -1592,11 +1592,72 @@ export default function AdminEmployeeManagement() {
                                     )
                                   })
                                 ) : (
-                                  <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500">
-                                      {attendanceMonth} 근무 기록이 없습니다.
-                                    </td>
-                                  </tr>
+                                  // 근무 기록이 없어도 월별 전체 날짜 표시
+                                  (() => {
+                                    const [year, month] = attendanceMonth.split('-').map(Number)
+                                    const daysInMonth = new Date(year, month, 0).getDate()
+                                    const dates = []
+                                    
+                                    for (let day = 1; day <= daysInMonth; day++) {
+                                      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                                      const date = new Date(year, month - 1, day)
+                                      const dayOfWeek = date.getDay()
+                                      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+                                      
+                                      // 공휴일 정보 확인
+                                      const holidayInfo = holidayMap.get(dateStr)
+                                      const isHoliday = !!holidayInfo && holidayInfo.isHoliday
+                                      
+                                      dates.push(
+                                        <tr key={dateStr} className={`hover:bg-gray-50 ${isHoliday ? 'bg-red-50' : isWeekend ? 'bg-gray-50' : ''}`}>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                                            <div>
+                                              <span className={isHoliday ? 'text-red-600 font-medium' : isWeekend ? 'text-gray-500' : ''}>
+                                                {date.toLocaleDateString('ko-KR', {
+                                                  month: 'long',
+                                                  day: 'numeric',
+                                                  weekday: 'short'
+                                                })}
+                                              </span>
+                                              {isHoliday && holidayInfo && (
+                                                <div className="text-xs text-red-600 mt-1">
+                                                  {holidayInfo.name || '공휴일'}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400">-</td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400">-</td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400">-</td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400">-</td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-400">
+                                            {isHoliday ? '공휴일' : isWeekend ? '주말' : '미기록'}
+                                          </td>
+                                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button
+                                              onClick={() => {
+                                                setEditingRecord({
+                                                  work_date: dateStr,
+                                                  check_in_time: '',
+                                                  check_out_time: '',
+                                                  basic_hours: 0,
+                                                  overtime_hours: 0,
+                                                  night_hours: 0,
+                                                  had_dinner: false
+                                                })
+                                                setShowEditModal(true)
+                                              }}
+                                              className="text-indigo-600 hover:text-indigo-900"
+                                            >
+                                              추가
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      )
+                                    }
+                                    
+                                    return dates
+                                  })()
                                 )}
                               </tbody>
                             </table>
