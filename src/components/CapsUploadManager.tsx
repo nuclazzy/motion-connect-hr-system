@@ -691,26 +691,52 @@ export default function CapsUploadManager() {
         overwriteMode
       })
 
-      // 업로드된 데이터의 일자별 통계 재계산
-      console.log('📊 일별/월별 통계 재계산 시작...')
+      // 🔄 업로드된 데이터의 daily_work_summary 강제 재계산
+      console.log('🔄 daily_work_summary 강제 재계산 시작...')
       
-      // 처리된 날짜와 사용자 목록 수집
-      const processedDates = new Set<string>()
-      const processedMonths = new Set<string>()
-      const processedUserIds = new Set<string>()
+      // 영향받은 날짜와 사용자 목록 수집 (개선된 방식)
+      const affectedDates = new Set<string>()
+      const affectedMonths = new Set<string>()
+      const affectedUserIds = new Set<string>()
       
-      processedRecords.forEach(record => {
-        processedDates.add(record.record_date)
-        const [year, month] = record.record_date.split('-')
-        processedMonths.add(`${year}-${month}`)
-        if (record.user_id) {
-          processedUserIds.add(record.user_id)
-        }
-      })
+      // 성공적으로 처리된 기록들만 대상으로 함
+      if (insertedCount > 0 || overwrittenCount > 0) {
+        processedRecords.forEach(record => {
+          affectedDates.add(record.record_date)
+          const [year, month] = record.record_date.split('-')
+          affectedMonths.add(`${year}-${month}`)
+          affectedUserIds.add(record.user_id)
+        })
+        
+        console.log('📋 재계산 대상:', {
+          dates: affectedDates.size,
+          months: affectedMonths.size,
+          users: affectedUserIds.size,
+          overwriteMode
+        })
+      } else {
+        console.log('⚠️ 처리된 기록이 없어 재계산을 건너뜁니다.')
+        // 처리된 기록이 없으면 바로 결과 반환
+        setResult({
+          fileName: file.name,
+          fileSize: file.size,
+          totalProcessed: processedRecords.length,
+          inserted: insertedCount,
+          overwritten: overwrittenCount,
+          duplicates: duplicateCount,
+          invalidUsers: invalidUserCount,
+          upsertErrors,
+          errors: errors.concat(
+            upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 처리 오류가 발생했습니다.`] : []
+          ).slice(0, 10)
+        })
+        return
+      }
       
-      // 일별 근무시간 재계산
-      for (const date of processedDates) {
-        for (const userId of processedUserIds) {
+      // 🔄 일별 근무시간 강제 재계산 (덮어쓰기 모드에서 특히 중요)
+      let recalculatedDays = 0
+      for (const date of affectedDates) {
+        for (const userId of affectedUserIds) {
           // 해당일의 출퇴근 기록 조회 (시간순 정렬 보장)
           const { data: dayRecords, error: dayError } = await supabase
             .from('attendance_records')
@@ -1014,14 +1040,18 @@ export default function CapsUploadManager() {
             if (summaryError) {
               console.error(`❌ ${date} daily_work_summary 업데이트 오류:`, summaryError)
             } else {
-              console.log(`✅ ${date} daily_work_summary 업데이트 완료`)
+              recalculatedDays++
+              console.log(`✅ ${date} daily_work_summary 재계산 완료: ${userId.slice(0,8)}...`)
             }
           }
         }
       }
       
-      // 월별 통계 재계산
-      for (const yearMonth of processedMonths) {
+      console.log(`✅ daily_work_summary 재계산 완료: ${recalculatedDays}일`)
+      
+      // 🔄 월별 통계 강제 재계산
+      let recalculatedMonths = 0
+      for (const yearMonth of affectedMonths) {
         const [year, month] = yearMonth.split('-').map(Number)
         const workMonth = `${year}-${String(month).padStart(2, '0')}-01`
         
@@ -1030,7 +1060,7 @@ export default function CapsUploadManager() {
         const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
         const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
         
-        for (const userId of processedUserIds) {
+        for (const userId of affectedUserIds) {
           // 해당 월의 일별 요약 조회
           const { data: monthSummaries, error: monthError } = await supabase
             .from('daily_work_summary')
@@ -1077,56 +1107,57 @@ export default function CapsUploadManager() {
           if (statsError) {
             console.error(`❌ ${yearMonth} monthly_work_stats 업데이트 오류:`, statsError)
           } else {
-            console.log(`✅ ${yearMonth} monthly_work_stats 업데이트 완료`)
+            recalculatedMonths++
+            console.log(`✅ ${yearMonth} monthly_work_stats 재계산 완료: ${userId.slice(0,8)}...`)
           }
         }
       }
       
-      console.log('✅ 일별/월별 통계 재계산 완료')
+      console.log(`✅ monthly_work_stats 재계산 완료: ${recalculatedMonths}월`)
+      console.log(`🎯 전체 재계산 완료: 일별 ${recalculatedDays}건, 월별 ${recalculatedMonths}건`)
       
       // 3개월 탄력근무제 정산 처리
       // await processFlexibleWorkSettlement(processedRecords, userMap) // 현재 미구현
       
-      // 업로드 후 데이터 검증 (7월 데이터 확인)
-      if (file.name.includes('7월')) {
-        const { data: julyData, error: checkError } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .gte('record_date', '2025-07-01')
-          .lte('record_date', '2025-07-31')
-          .limit(5)
+      // 🔍 업로드 후 데이터 검증 및 재계산 결과 확인
+      if (overwriteMode && (insertedCount > 0 || overwrittenCount > 0)) {
+        console.log('🔍 덮어쓰기 모드 데이터 검증 시작...')
         
-        console.log('📊 7월 attendance_records 확인:', {
-          count: julyData?.length || 0,
-          sample: julyData?.slice(0, 2),
-          error: checkError
-        })
+        // 가장 최근 업데이트된 몇 개 레코드 검증
+        const recentDates = Array.from(affectedDates).slice(0, 3)
+        const recentUsers = Array.from(affectedUserIds).slice(0, 3)
         
-        // daily_work_summary도 확인
-        const { data: julySummary, error: summaryError } = await supabase
-          .from('daily_work_summary')
-          .select('*')
-          .gte('work_date', '2025-07-01')
-          .lt('work_date', '2025-08-01')
-          .limit(5)
-        
-        console.log('📊 7월 daily_work_summary 확인:', {
-          count: julySummary?.length || 0,
-          sample: julySummary?.slice(0, 2),
-          error: summaryError
-        })
-        
-        // monthly_work_stats도 확인
-        const { data: julyStats, error: statsError } = await supabase
-          .from('monthly_work_stats')
-          .select('*')
-          .eq('work_month', '2025-07-01')
-        
-        console.log('📊 7월 monthly_work_stats 확인:', {
-          count: julyStats?.length || 0,
-          data: julyStats,
-          error: statsError
-        })
+        for (const date of recentDates) {
+          for (const userId of recentUsers) {
+            // attendance_records 확인
+            const { data: records, error: recordsError } = await supabase
+              .from('attendance_records')
+              .select('record_time, record_type, source')
+              .eq('user_id', userId)
+              .eq('record_date', date)
+              .order('record_timestamp', { ascending: true })
+            
+            // daily_work_summary 확인
+            const { data: summary, error: summaryError } = await supabase
+              .from('daily_work_summary')
+              .select('check_in_time, check_out_time, basic_hours, overtime_hours, calculated_at')
+              .eq('user_id', userId)
+              .eq('work_date', date)
+              .single()
+            
+            if (!recordsError && !summaryError && records && summary) {
+              const checkIn = records.find(r => r.record_type === '출근')
+              const checkOut = records.filter(r => r.record_type === '퇴근').pop()
+              
+              console.log(`📋 검증: ${date} ${userId.slice(0,8)}...`, {
+                records: `${checkIn?.record_time || 'N/A'} → ${checkOut?.record_time || 'N/A'}`,
+                summary: `${summary.check_in_time ? new Date(summary.check_in_time).toLocaleTimeString('ko-KR') : 'N/A'} → ${summary.check_out_time ? new Date(summary.check_out_time).toLocaleTimeString('ko-KR') : 'N/A'}`,
+                hours: `기본 ${summary.basic_hours}h, 연장 ${summary.overtime_hours}h`,
+                recalculated: summary.calculated_at ? new Date(summary.calculated_at).toLocaleString('ko-KR') : 'N/A'
+              })
+            }
+          }
+        }
       }
 
       setResult({
@@ -1139,8 +1170,10 @@ export default function CapsUploadManager() {
         invalidUsers: invalidUserCount,
         upsertErrors,
         errors: errors.concat(
-          upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 처리 오류가 발생했습니다.`] : []
-        ).slice(0, 10) // 최대 10개 에러만 표시
+          upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 처리 오류가 발생했습니다.`] : [],
+          recalculatedDays > 0 ? [`🔄 daily_work_summary ${recalculatedDays}일 재계산 완료`] : [],
+          recalculatedMonths > 0 ? [`📊 monthly_work_stats ${recalculatedMonths}월 재계산 완료`] : []
+        ).slice(0, 12) // 재계산 메시지 포함하여 12개까지 표시
       })
 
     } catch (err) {
@@ -1367,10 +1400,13 @@ export default function CapsUploadManager() {
             </div>
           )}
 
-          {/* 안내 메시지 - 모바일 패딩 조정 */}
+          {/* 안내 메시지 - 재계산 정보 포함 */}
           <div className="mt-3 sm:mt-4 p-2.5 sm:p-3 bg-green-50 rounded-lg">
             <p className="text-xs sm:text-sm text-green-800">
               ✅ 업로드된 데이터는 자동으로 근무시간이 계산되며, 출퇴근 현황에서 확인할 수 있습니다.
+              {(result.overwritten > 0) && (
+                <><br /><strong>🔄 덮어쓰기 모드:</strong> 기존 출퇴근 기록이 새 데이터로 교체되고 근무시간이 재계산되었습니다.</>
+              )}
             </p>
           </div>
         </div>
