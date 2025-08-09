@@ -260,16 +260,24 @@ export default function CapsUploadManager() {
           let recordType: '출근' | '퇴근' | null = null
           
           // 1단계: 모드 컬럼 우선 확인 (CAPS 핵심 정보)
-          if (record.모드 === '출근' || record.모드 === '해제') {
+          if (record.모드 === '출근') {
             recordType = '출근'
-          } else if (record.모드 === '퇴근' || record.모드 === '세트') {
+          } else if (record.모드 === '퇴근') {
             recordType = '퇴근'
+          } else if (record.모드 === '해제' || record.모드 === '세트') {
+            // 해제/세트는 보안 시스템 모드 변경용이므로 무시
+            console.log(`ℹ️ 보안 모드 기록 무시: ${record.이름} ${record.발생일자} ${record.발생시각} - 모드: ${record.모드}`)
+            continue
           }
           // 2단계: 구분 컬럼 확인 (모드가 명확하지 않을 때만)
-          else if (record.구분 === '출근' || record.구분 === '해제') {
+          else if (record.구분 === '출근') {
             recordType = '출근'
-          } else if (record.구분 === '퇴근' || record.구분 === '세트') {
+          } else if (record.구분 === '퇴근') {
             recordType = '퇴근'
+          } else if (record.구분 === '해제' || record.구분 === '세트') {
+            // 해제/세트는 보안 시스템 모드 변경용이므로 무시
+            console.log(`ℹ️ 보안 모드 기록 무시: ${record.이름} ${record.발생일자} ${record.발생시각} - 구분: ${record.구분}`)
+            continue
           } else if (record.구분 === '출입') {
             // 출입은 무시
             continue
@@ -773,6 +781,15 @@ export default function CapsUploadManager() {
             })
           }
           
+          // 📅 날짜/공휴일/주말 정보 미리 계산 (전체 로직에서 사용)
+          const dayOfWeek = new Date(date).getDay()
+          const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+          
+          // 공휴일 확인
+          const { getHolidayInfoSync } = await import('@/lib/holidays')
+          const holidayInfo = getHolidayInfoSync(new Date(date))
+          const isHoliday = holidayInfo.isHoliday
+          
           if (checkIn) {
             // 근무시간 계산
             let basicHours = 0
@@ -918,14 +935,7 @@ export default function CapsUploadManager() {
               // 야간근무 수당은 1.5배 지급
               nightPayHours = nightHours * 1.5
               
-              // 요일 및 공휴일 확인
-              const dayOfWeek = new Date(date).getDay()
-              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
-              
-              // 공휴일 데이터 연동 (holidays.ts 활용)
-              const { isHolidaySync, getHolidayInfoSync } = await import('@/lib/holidays')
-              const holidayInfo = getHolidayInfoSync(new Date(date))
-              const isHoliday = holidayInfo.isHoliday
+              // 요일 및 공휴일 확인 (이미 함수 상단에서 정의됨)
               
               // 휴가 캘린더와 공휴일 매칭 (텍스트 기준)
               if (isHoliday) {
@@ -1001,25 +1011,118 @@ export default function CapsUploadManager() {
                 }
               }
               
-              // 근무 상태 판별 (0시간/음수 시간은 오류로 처리)
+              // 공휴일/주말 근무 확인 (work_status에 추가 정보 포함)
+              // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
+              
+              // 승인된 휴가 확인
+              const { data: leaveData } = await supabase
+                .from('form_requests')
+                .select('leave_start_date, leave_end_date, leave_type')
+                .eq('user_id', userId)
+                .eq('form_type', 'leave')
+                .eq('status', 'approved')
+                .lte('leave_start_date', date)
+                .gte('leave_end_date', date)
+                .limit(1)
+              
+              const hasApprovedLeave = leaveData && leaveData.length > 0
+              
+              // 기본 근무 상태 판별 (0시간/음수 시간은 오류로 처리)
+              let baseStatus = ''
               if (basicHours <= 0) {
-                workStatus = '근무시간 오류'
+                baseStatus = '근무시간 오류'
               } else if (basicHours < 4) {
-                workStatus = '조기퇴근'
+                baseStatus = '조기퇴근'
               } else if (basicHours < 8) {
-                workStatus = '조정근무'  // "단축근무"보다 부드러운 표현
+                baseStatus = '조정근무'  // "단축근무"보다 부드러운 표현
               } else {
-                workStatus = '정상근무'
+                baseStatus = '정상근무'
+              }
+              
+              // 특수 상황에 따른 work_status 설정 (우선순위: 휴가 > 공휴일 > 주말)
+              if (hasApprovedLeave) {
+                const leaveType = leaveData[0].leave_type
+                if (leaveType === 'half_day_am' || leaveType === 'half_day_pm') {
+                  workStatus = `${baseStatus}(반차)`
+                } else if (leaveType === 'hourly') {
+                  workStatus = `${baseStatus}(시간차)`
+                } else {
+                  workStatus = `${baseStatus}(휴가중근무)`
+                }
+                console.log(`📅 휴가 중 근무 확인: ${date} - ${workStatus}`)
+              } else if (isHoliday) {
+                workStatus = `${baseStatus}(공휴일)`
+                console.log(`📅 공휴일 근무 확인: ${date} - ${workStatus}, ${holidayInfo.name}`)
+              } else if (isWeekend) {
+                const weekendType = dayOfWeek === 0 ? '일요일' : '토요일'
+                workStatus = `${baseStatus}(${weekendType})`
+                console.log(`📅 주말 근무 확인: ${date} - ${workStatus}`)
+              } else {
+                workStatus = baseStatus
               }
             } else if (checkIn && !checkOut) {
-              // 출근만 있고 퇴근 없음
-              workStatus = '퇴근누락'
+              // 출근만 있고 퇴근 없음 - 공휴일/주말 정보 포함
+              // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
+              
+              if (isHoliday) {
+                workStatus = '퇴근누락(공휴일)'
+                console.log(`📅 공휴일 퇴근누락: ${date} - ${holidayInfo.name}`)
+              } else if (isWeekend) {
+                const weekendType = dayOfWeek === 0 ? '일요일' : '토요일'
+                workStatus = `퇴근누락(${weekendType})`
+              } else {
+                workStatus = '퇴근누락'
+              }
             } else if (!checkIn && checkOut) {
-              // 퇴근만 있고 출근 없음
-              workStatus = '출근누락'
+              // 퇴근만 있고 출근 없음 - 공휴일/주말 정보 포함
+              // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
+              
+              if (isHoliday) {
+                workStatus = '출근누락(공휴일)'
+                console.log(`📅 공휴일 출근누락: ${date} - ${holidayInfo.name}`)
+              } else if (isWeekend) {
+                const weekendType = dayOfWeek === 0 ? '일요일' : '토요일'
+                workStatus = `출근누락(${weekendType})`
+              } else {
+                workStatus = '출근누락'
+              }
             } else {
-              // 둘 다 없음
-              workStatus = '기록없음'
+              // 둘 다 없음 - 공휴일, 주말, 휴가 상태 확인
+              // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
+              
+              // 승인된 휴가 확인
+              const { data: leaveData } = await supabase
+                .from('form_requests')
+                .select('leave_start_date, leave_end_date, leave_type')
+                .eq('user_id', userId)
+                .eq('form_type', 'leave')
+                .eq('status', 'approved')
+                .lte('leave_start_date', date)
+                .gte('leave_end_date', date)
+                .limit(1)
+              
+              const hasApprovedLeave = leaveData && leaveData.length > 0
+              
+              // work_status 우선순위: 휴가 > 공휴일 > 주말 > 기록없음
+              if (hasApprovedLeave) {
+                const leaveType = leaveData[0].leave_type
+                if (leaveType === 'half_day_am' || leaveType === 'half_day_pm') {
+                  workStatus = '반차'
+                } else if (leaveType === 'hourly') {
+                  workStatus = '시간차'
+                } else {
+                  workStatus = '휴가'
+                }
+                console.log(`📅 승인된 휴가 확인: ${date} - ${workStatus}`)
+              } else if (isHoliday) {
+                workStatus = '공휴일'
+                console.log(`📅 공휴일 확인: ${date} - ${holidayInfo.name}`)
+              } else if (isWeekend) {
+                workStatus = dayOfWeek === 0 ? '주말(일)' : '주말(토)'
+                console.log(`📅 주말 확인: ${date} - ${workStatus}`)
+              } else {
+                workStatus = '기록없음'
+              }
             }
             
             // 🔄 daily_work_summary 강제 업데이트 (덮어쓰기 모드에서 특히 중요)
@@ -1536,7 +1639,7 @@ export default function CapsUploadManager() {
           <li className="break-words">• <strong>덮어쓰기 모드:</strong> 기존 기록을 새 데이터로 교체 (잘못된 기록 수정용)</li>
           <li className="break-words">• <strong>일반 모드:</strong> 중복 데이터 자동 스킵 (안전한 재업로드)</li>
           <li className="break-words">• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
-          <li className="break-words">• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
+          <li className="break-words">• <strong>해제/세트</strong> 기록은 보안 시스템 모드용이므로 <strong>무시됩니다</strong></li>
           <li className="break-words">• "출입" 기록은 무시됩니다</li>
         </ul>
       </div>
