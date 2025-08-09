@@ -38,18 +38,34 @@ interface ParsedLeaveData {
  * 이벤트 제목에서 직원 이름과 휴가 유형 파싱
  */
 function parseEventTitle(title: string): { name: string; type: string } | null {
+  // 생일, 재택근무 등 휴가가 아닌 이벤트 필터링
+  const excludePatterns = ['생일', '재택근무', '회의', '미팅', '출장']
+  if (excludePatterns.some(pattern => title.includes(pattern))) {
+    return null
+  }
+
   // 패턴: "이름 - 휴가유형" 또는 "이름 휴가유형"
   const patterns = [
     /^(.+?)\s*[-–]\s*(.+)$/,  // 이름 - 휴가유형
-    /^(.+?)\s+(연차|반차|오전반차|오후반차|병가|경조사|특별휴가)$/,  // 이름 휴가유형
+    /^(.+?)\s+(연차|반차|오전반차|오후반차|병가|경조사|특별휴가|보상휴가|공가|휴가)(\s*\(.+\))?$/,  // 이름 휴가유형 (세부사항)
+    /^(.+?)\s+(보상휴가|공가)$/,  // 보상휴가, 공가 추가
   ]
 
   for (const pattern of patterns) {
     const match = title.match(pattern)
     if (match) {
+      // 괄호 안 내용 제거 (예: "보상휴가 (오후 반차)" -> "보상휴가")
+      let type = match[2].trim()
+      
+      // 괄호 안에 오전/오후 정보가 있으면 추출
+      const detailMatch = title.match(/\((오전|오후)\s*반차\)/)
+      if (detailMatch) {
+        type = `${detailMatch[1]}반차`
+      }
+      
       return {
         name: match[1].trim(),
-        type: match[2].trim()
+        type: type
       }
     }
   }
@@ -63,6 +79,7 @@ function parseEventTitle(title: string): { name: string; type: string } | null {
 function normalizeLeaveType(type: string): ParsedLeaveData['leaveType'] {
   const lowerType = type.toLowerCase()
   
+  // 오전/오후 반차 먼저 체크
   if (lowerType.includes('오전') || lowerType.includes('am')) {
     return 'half_morning'
   }
@@ -72,14 +89,25 @@ function normalizeLeaveType(type: string): ParsedLeaveData['leaveType'] {
   if (lowerType.includes('반차') || lowerType.includes('half')) {
     return 'half_morning' // 기본 반차는 오전반차로 처리
   }
+  
+  // 휴가 유형 체크
   if (lowerType.includes('병가') || lowerType.includes('sick')) {
     return 'sick'
   }
-  if (lowerType.includes('경조사') || lowerType.includes('특별')) {
+  if (lowerType.includes('경조사')) {
     return 'special'
+  }
+  if (lowerType.includes('특별') || lowerType.includes('공가')) {
+    return 'special'
+  }
+  if (lowerType.includes('보상')) {
+    return 'special' // 보상휴가도 특별휴가로 분류
   }
   if (lowerType.includes('연차') || lowerType.includes('annual')) {
     return 'annual'
+  }
+  if (lowerType === '휴가') {
+    return 'annual' // 단순 '휴가'는 연차로 분류
   }
   
   return 'other'
@@ -91,7 +119,7 @@ function normalizeLeaveType(type: string): ParsedLeaveData['leaveType'] {
 function parseLeaveEvent(event: LeaveEvent): ParsedLeaveData | null {
   const parsed = parseEventTitle(event.summary)
   if (!parsed) {
-    console.warn(`Failed to parse event title: ${event.summary}`)
+    // 파싱 실패한 이벤트는 조용히 건너뛰기 (생일, 재택근무 등)
     return null
   }
 
@@ -245,7 +273,7 @@ export async function syncLeaveCalendar(
         // 이벤트 파싱
         const leaveData = parseLeaveEvent(event)
         if (!leaveData) {
-          errors.push(`Failed to parse: ${event.summary}`)
+          // 휴가가 아닌 이벤트는 조용히 건너뛰기
           continue
         }
         
