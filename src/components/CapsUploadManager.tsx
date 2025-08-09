@@ -1022,10 +1022,30 @@ export default function CapsUploadManager() {
               workStatus = '기록없음'
             }
             
-            // daily_work_summary 업데이트
-            const { error: summaryError } = await supabase
-              .from('daily_work_summary')
-              .upsert({
+            // 🔄 daily_work_summary 강제 업데이트 (덮어쓰기 모드에서 특히 중요)
+            let summaryError = null
+            
+            if (overwriteMode) {
+              // 덮어쓰기 모드: 기존 레코드 완전 삭제 후 INSERT
+              console.log(`🔄 덮어쓰기 모드: ${date} daily_work_summary 기존 레코드 삭제 중...`)
+              
+              const { error: deleteError } = await supabase
+                .from('daily_work_summary')
+                .delete()
+                .eq('user_id', userId)
+                .eq('work_date', date)
+              
+              if (deleteError) {
+                console.error(`❌ ${date} daily_work_summary 삭제 오류:`, deleteError)
+                summaryError = deleteError
+              } else {
+                console.log(`✅ ${date} daily_work_summary 기존 레코드 삭제 완료`)
+              }
+            }
+            
+            // 새 레코드 INSERT (덮어쓰기 모드) 또는 UPSERT (일반 모드)
+            if (!summaryError) {
+              const summaryData = {
                 user_id: userId,
                 work_date: date,
                 check_in_time: checkIn?.record_timestamp || null,
@@ -1039,15 +1059,39 @@ export default function CapsUploadManager() {
                 had_dinner: hadDinner,
                 auto_calculated: true,
                 calculated_at: new Date().toISOString()
-              }, {
-                onConflict: 'user_id,work_date'
-              })
+              }
+              
+              if (overwriteMode) {
+                // 덮어쓰기 모드: 강제 INSERT
+                const { error: insertError } = await supabase
+                  .from('daily_work_summary')
+                  .insert(summaryData)
+                
+                summaryError = insertError
+                
+                if (!insertError) {
+                  console.log(`✅ ${date} daily_work_summary 강제 INSERT 완료: ${userId.slice(0,8)}... (${basicHours}h + ${overtimeHours}h = ${roundToOneDecimal(basicHours + overtimeHours)}h)`)
+                }
+              } else {
+                // 일반 모드: UPSERT
+                const { error: upsertError } = await supabase
+                  .from('daily_work_summary')
+                  .upsert(summaryData, {
+                    onConflict: 'user_id,work_date'
+                  })
+                
+                summaryError = upsertError
+                
+                if (!upsertError) {
+                  console.log(`✅ ${date} daily_work_summary UPSERT 완료: ${userId.slice(0,8)}... (${basicHours}h + ${overtimeHours}h = ${roundToOneDecimal(basicHours + overtimeHours)}h)`)
+                }
+              }
+            }
             
             if (summaryError) {
               console.error(`❌ ${date} daily_work_summary 업데이트 오류:`, summaryError)
             } else {
               recalculatedDays++
-              console.log(`✅ ${date} daily_work_summary 재계산 완료: ${userId.slice(0,8)}...`)
             }
           }
         }
@@ -1125,44 +1169,106 @@ export default function CapsUploadManager() {
       // 3개월 탄력근무제 정산 처리
       // await processFlexibleWorkSettlement(processedRecords, userMap) // 현재 미구현
       
-      // 🔍 업로드 후 데이터 검증 및 재계산 결과 확인
-      if (overwriteMode && (insertedCount > 0 || overwrittenCount > 0)) {
-        console.log('🔍 덮어쓰기 모드 데이터 검증 시작...')
+      // 🔍 업로드 후 데이터 검증 및 재계산 결과 확인 (강화된 검증)
+      if (insertedCount > 0 || overwrittenCount > 0) {
+        console.log(`🔍 ${overwriteMode ? '덮어쓰기 모드' : '일반 모드'} 데이터 검증 시작...`)
         
-        // 가장 최근 업데이트된 몇 개 레코드 검증
-        const recentDates = Array.from(affectedDates).slice(0, 3)
-        const recentUsers = Array.from(affectedUserIds).slice(0, 3)
+        // 모든 영향받은 날짜와 사용자에 대해 검증 (최대 5개씩)
+        const datesToVerify = Array.from(affectedDates).slice(0, 5)
+        const usersToVerify = Array.from(affectedUserIds).slice(0, 5)
         
-        for (const date of recentDates) {
-          for (const userId of recentUsers) {
-            // attendance_records 확인
+        let verificationPassed = 0
+        let verificationFailed = 0
+        
+        for (const date of datesToVerify) {
+          for (const userId of usersToVerify) {
+            // 1. attendance_records 확인
             const { data: records, error: recordsError } = await supabase
               .from('attendance_records')
-              .select('record_time, record_type, source')
+              .select('record_time, record_type, source, record_timestamp')
               .eq('user_id', userId)
               .eq('record_date', date)
               .order('record_timestamp', { ascending: true })
             
-            // daily_work_summary 확인
+            // 2. daily_work_summary 확인
             const { data: summary, error: summaryError } = await supabase
               .from('daily_work_summary')
-              .select('check_in_time, check_out_time, basic_hours, overtime_hours, calculated_at')
+              .select('check_in_time, check_out_time, basic_hours, overtime_hours, calculated_at, work_status')
               .eq('user_id', userId)
               .eq('work_date', date)
               .single()
             
-            if (!recordsError && !summaryError && records && summary) {
-              const checkIn = records.find(r => r.record_type === '출근')
-              const checkOut = records.filter(r => r.record_type === '퇴근').pop()
+            if (recordsError) {
+              console.error(`❌ 검증 실패 (records): ${date} ${userId.slice(0,8)}... -`, recordsError)
+              verificationFailed++
+              continue
+            }
+            
+            if (summaryError) {
+              console.error(`❌ 검증 실패 (summary): ${date} ${userId.slice(0,8)}... -`, summaryError)
+              verificationFailed++
+              continue
+            }
+            
+            if (!records || records.length === 0) {
+              console.log(`⚠️ 검증: ${date} ${userId.slice(0,8)}... - 출퇴근 기록 없음`)
+              continue
+            }
+            
+            // 3. 데이터 일관성 검증
+            const checkIn = records.find(r => r.record_type === '출근')
+            const checkOut = records.filter(r => r.record_type === '퇴근').pop()
+            
+            // 시간 계산 재검증
+            let expectedBasicHours = 0
+            let expectedOvertimeHours = 0
+            if (checkIn && checkOut) {
+              const startTime = new Date(checkIn.record_timestamp)
+              const endTime = new Date(checkOut.record_timestamp)
+              const diffHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60)
               
-              console.log(`📋 검증: ${date} ${userId.slice(0,8)}...`, {
+              // 휴게시간 차감 (점심 60분 + 저녁 60분 가정)
+              let workHours = diffHours - 1 // 점심시간
+              if (endTime.getHours() >= 19) workHours -= 1 // 저녁식사 시간
+              
+              expectedBasicHours = Math.min(workHours, 8)
+              expectedOvertimeHours = Math.max(0, workHours - 8)
+            }
+            
+            const timeDifference = Math.abs(
+              (summary.basic_hours + summary.overtime_hours) - 
+              (expectedBasicHours + expectedOvertimeHours)
+            )
+            
+            // 검증 결과 판정 (1시간 이내 차이는 허용)
+            const isValid = !summary || timeDifference <= 1.0
+            
+            if (isValid) {
+              verificationPassed++
+              console.log(`✅ 검증 통과: ${date} ${userId.slice(0,8)}...`, {
                 records: `${checkIn?.record_time || 'N/A'} → ${checkOut?.record_time || 'N/A'}`,
                 summary: `${summary.check_in_time ? new Date(summary.check_in_time).toLocaleTimeString('ko-KR') : 'N/A'} → ${summary.check_out_time ? new Date(summary.check_out_time).toLocaleTimeString('ko-KR') : 'N/A'}`,
-                hours: `기본 ${summary.basic_hours}h, 연장 ${summary.overtime_hours}h`,
-                recalculated: summary.calculated_at ? new Date(summary.calculated_at).toLocaleString('ko-KR') : 'N/A'
+                hours: `기본 ${summary.basic_hours}h, 연장 ${summary.overtime_hours}h (총 ${roundToOneDecimal(summary.basic_hours + summary.overtime_hours)}h)`,
+                status: summary.work_status,
+                calculated: summary.calculated_at ? new Date(summary.calculated_at).toLocaleString('ko-KR') : 'N/A'
+              })
+            } else {
+              verificationFailed++
+              console.error(`❌ 검증 실패: ${date} ${userId.slice(0,8)}...`, {
+                records: `${checkIn?.record_time || 'N/A'} → ${checkOut?.record_time || 'N/A'}`,
+                expected: `기본 ${roundToOneDecimal(expectedBasicHours)}h, 연장 ${roundToOneDecimal(expectedOvertimeHours)}h`,
+                actual: `기본 ${summary.basic_hours}h, 연장 ${summary.overtime_hours}h`,
+                difference: `${timeDifference.toFixed(1)}h 차이`
               })
             }
           }
+        }
+        
+        console.log(`🔍 검증 완료: 통과 ${verificationPassed}건, 실패 ${verificationFailed}건`)
+        
+        // 실패가 많으면 경고 메시지
+        if (verificationFailed > verificationPassed) {
+          console.warn(`⚠️ 검증 실패율이 높습니다. 데이터 재확인이 필요할 수 있습니다.`)
         }
       }
 
@@ -1406,13 +1512,15 @@ export default function CapsUploadManager() {
             </div>
           )}
 
-          {/* 안내 메시지 - 재계산 정보 포함 */}
+          {/* 안내 메시지 - 강화된 재계산 정보 */}
           <div className="mt-3 sm:mt-4 p-2.5 sm:p-3 bg-green-50 rounded-lg">
             <p className="text-xs sm:text-sm text-green-800">
               ✅ 업로드된 데이터는 자동으로 근무시간이 계산되며, 출퇴근 현황에서 확인할 수 있습니다.
               {(result.overwritten > 0) && (
-                <><br /><strong>🔄 덮어쓰기 모드:</strong> 기존 출퇴근 기록이 새 데이터로 교체되고 근무시간이 재계산되었습니다.</>
+                <><br /><strong>🔄 덮어쓰기 모드:</strong> 기존 출퇴근 기록과 daily_work_summary를 완전히 삭제한 후 새 데이터로 교체했습니다.</>
               )}
+              <br /><strong>📊 재계산 완료:</strong> attendance_records → daily_work_summary → monthly_work_stats 순서로 연동되어 업데이트됩니다.
+              <br /><strong>🔍 확인 방법:</strong> 관리자 &gt; 출퇴근 관리에서 해당 날짜의 근무시간을 확인하세요.
             </p>
           </div>
         </div>
