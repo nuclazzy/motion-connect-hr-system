@@ -2388,18 +2388,39 @@ export default function AdminEmployeeManagement() {
                     </button>
                     <button
                       onClick={async () => {
+                        console.log('🌟 공휴일 동기화 버튼 클릭됨')
                         setSyncStatus({type: 'holiday', status: 'loading'})
                         try {
                           const currentYear = new Date().getFullYear()
+                          console.log(`🔄 공휴일 캐시 업데이트 시작: ${currentYear}, ${currentYear + 1}년`)
+                          
                           await updateHolidayCache(currentYear)
                           await updateHolidayCache(currentYear + 1)
+                          console.log('✅ 공휴일 캐시 업데이트 완료')
+                          
+                          // UI 데이터 새로고침
+                          if (selectedEmployee && activeTab === 'attendance') {
+                            console.log('🔄 UI 데이터 새로고침 시작 (근무시간 탭)')
+                            await fetchAttendanceData()
+                            
+                            // 공휴일 정보 재로드
+                            const [year, month] = attendanceMonth.split('-').map(Number)
+                            console.log(`🔄 공휴일 정보 재로드: ${year}년 ${month}월`)
+                            const holidays = await getMonthHolidayInfo(year, month)
+                            setHolidayMap(holidays)
+                            console.log(`✅ 공휴일 정보 재로드 완료: ${holidays.size}개 공휴일`)
+                          } else {
+                            console.log('ℹ️ 근무시간 탭이 아니므로 UI 새로고침 건너뜀')
+                          }
+                          
                           setSyncStatus({
                             type: 'holiday', 
                             status: 'success', 
                             message: `${currentYear}년과 ${currentYear + 1}년 공휴일 데이터가 동기화되었습니다.`
                           })
+                          console.log('🎉 공휴일 동기화 완료!')
                         } catch (error) {
-                          console.error('Holiday sync error:', error)
+                          console.error('❌ Holiday sync error:', error)
                           setSyncStatus({
                             type: 'holiday', 
                             status: 'error', 
@@ -2505,13 +2526,16 @@ export default function AdminEmployeeManagement() {
                     </button>
                     <button
                       onClick={async () => {
+                        console.log('🌟 휴가 데이터 동기화 버튼 클릭됨')
                         setSyncStatus({type: 'leave', status: 'loading'})
                         try {
                           // 현재 연도의 휴가 데이터만 동기화
                           const currentYear = new Date().getFullYear()
+                          console.log(`🔄 휴가 캘린더 동기화 시작: ${currentYear}년`)
                           const result = await syncLeaveCalendar(currentYear)
                           
                           if (result.success) {
+                            console.log(`✅ 휴가 데이터 동기화 성공: ${result.syncedCount || 0}건`)
                             setSyncStatus({
                               type: 'leave', 
                               status: 'success', 
@@ -2519,13 +2543,26 @@ export default function AdminEmployeeManagement() {
                             })
                             
                             // 데이터 새로고침
+                            console.log('🔄 전체 데이터 새로고침 시작')
                             await fetchData()
                             
                             // 근무시간 관리 탭이 활성화된 경우 출근 데이터도 새로고침
                             if (selectedEmployee && activeTab === 'attendance') {
+                              console.log('🔄 근무시간 데이터 새로고침 시작')
                               await fetchAttendanceData()
+                              
+                              // 공휴일 정보도 재로드
+                              const [year, month] = attendanceMonth.split('-').map(Number)
+                              console.log(`🔄 공휴일 정보 재로드: ${year}년 ${month}월`)
+                              const holidays = await getMonthHolidayInfo(year, month)
+                              setHolidayMap(holidays)
+                              console.log(`✅ 공휴일 정보 재로드 완료: ${holidays.size}개 공휴일`)
+                            } else {
+                              console.log('ℹ️ 근무시간 탭이 아니므로 출근 데이터 새로고침 건너뜀')
                             }
+                            console.log('🎉 휴가 데이터 동기화 완료!')
                           } else {
+                            console.warn('❌ 휴가 데이터 동기화 실패:', result.message)
                             setSyncStatus({
                               type: 'leave', 
                               status: 'error', 
@@ -2533,7 +2570,7 @@ export default function AdminEmployeeManagement() {
                             })
                           }
                         } catch (error) {
-                          console.error('Leave sync error:', error)
+                          console.error('❌ Leave sync error:', error)
                           setSyncStatus({
                             type: 'leave', 
                             status: 'error', 
