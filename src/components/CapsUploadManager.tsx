@@ -14,6 +14,7 @@ interface UploadResult {
   duplicates: number
   invalidUsers: number
   upsertErrors: number
+  overwritten: number
   errors: string[]
 }
 
@@ -56,6 +57,7 @@ export default function CapsUploadManager() {
   const [dragOver, setDragOver] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [overwriteMode, setOverwriteMode] = useState(false)
 
   // 컴포넌트 마운트 시 사용자 정보 로드
   useEffect(() => {
@@ -407,7 +409,7 @@ export default function CapsUploadManager() {
           }
           batchRecordSet.add(batchKey)
 
-          // 데이터베이스 중복 체크 (날짜 기반 조회 후 메모리 체크)
+          // 데이터베이스 중복 체크 또는 덮어쓰기 처리
           const { data: dayRecords } = await supabase
             .from('attendance_records')
             .select('id, record_timestamp, record_type')
@@ -420,9 +422,9 @@ export default function CapsUploadManager() {
             r.record_type === recordType
           )
 
-          if (existingRecord) {
+          if (existingRecord && !overwriteMode) {
             duplicateCount++
-            console.log(`⚠️ DB 중복 발견: ${record.이름} ${recordDate} ${recordTime} ${recordType} (원본: ${record.구분})`)
+            console.log(`⚠️ DB 중복 발견 (덮어쓰기 비활성화): ${record.이름} ${recordDate} ${recordTime} ${recordType} (원본: ${record.구분})`)
             continue
           }
 
@@ -514,6 +516,7 @@ export default function CapsUploadManager() {
       // 안전한 UPSERT 방식으로 전환
       let insertedCount = 0
       let upsertErrors = 0
+      let overwrittenCount = 0
       
       if (processedRecords.length > 0) {
         // 1. 고유한 레코드만 필터링 (시간순 정렬 후 중복 완전 제거)
@@ -549,7 +552,7 @@ export default function CapsUploadManager() {
           const batch = uniqueRecords.slice(i, i + BATCH_SIZE)
           console.log(`📦 배치 ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(uniqueRecords.length/BATCH_SIZE)} 처리 중...`)
           
-          // 배치 내 병렬 처리 (직접 INSERT/UPSERT 방식)
+          // 배치 내 병렬 처리 (직접 INSERT/UPSERT/OVERWRITE 방식)
           const batchPromises = batch.map(async (record) => {
             try {
               // 1. 중복 체크 (날짜와 시간 기반으로 먼저 조회)
@@ -571,8 +574,23 @@ export default function CapsUploadManager() {
               )
 
               if (existingRecord) {
-                console.log(`⚠️ 중복 기록 스킵: ${record.record_date} ${record.record_time} ${record.record_type}`)
-                return { success: true, action: 'duplicate_skipped' }
+                if (!overwriteMode) {
+                  console.log(`⚠️ 중복 기록 스킵 (덮어쓰기 비활성화): ${record.record_date} ${record.record_time} ${record.record_type}`)
+                  return { success: true, action: 'duplicate_skipped' }
+                } else {
+                  // 덮어쓰기 모드: 기존 기록 삭제
+                  const { error: deleteError } = await supabase
+                    .from('attendance_records')
+                    .delete()
+                    .eq('id', existingRecord.id)
+                    
+                  if (deleteError) {
+                    console.error('❌ 기존 기록 삭제 오류:', deleteError)
+                    return { success: false, error: deleteError }
+                  }
+                  
+                  console.log(`🔄 덮어쓰기 모드: 기존 기록 삭제됨 ${record.record_date} ${record.record_time} ${record.record_type}`)
+                }
               }
 
               // 2. 새 기록 삽입 (웹앱/CAPS 구분하여 처리)
@@ -626,8 +644,14 @@ export default function CapsUploadManager() {
                 return { success: false, error: insertError }
               }
 
-              console.log(`✅ 직접 INSERT 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
-              return { success: true, action: 'inserted' }
+              const wasOverwritten = existingRecord && overwriteMode
+              if (wasOverwritten) {
+                console.log(`✅ 덮어쓰기 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+                return { success: true, action: 'overwritten' }
+              } else {
+                console.log(`✅ 새 기록 삽입 완료: ${record.record_date} ${record.record_time} ${record.record_type}`)
+                return { success: true, action: 'inserted' }
+              }
             } catch (error) {
               console.error('❌ 직접 UPSERT 처리 중 예외:', error, 'Record:', record)
               return { success: false, error }
@@ -642,6 +666,8 @@ export default function CapsUploadManager() {
             if (result.status === 'fulfilled' && result.value.success) {
               if (result.value.action === 'inserted') {
                 insertedCount++
+              } else if (result.value.action === 'overwritten') {
+                overwrittenCount++
               } else if (result.value.action === 'duplicate_skipped' || result.value.action === 'duplicate_constraint') {
                 duplicateCount++
               }
@@ -658,9 +684,11 @@ export default function CapsUploadManager() {
         admin: currentUser.name,
         fileName: file.name,
         insertedCount,
+        overwrittenCount,
         duplicateCount,
         invalidUserCount,
-        upsertErrors
+        upsertErrors,
+        overwriteMode
       })
 
       // 업로드된 데이터의 일자별 통계 재계산
@@ -1106,11 +1134,12 @@ export default function CapsUploadManager() {
         fileSize: file.size,
         totalProcessed: processedRecords.length,
         inserted: insertedCount,
+        overwritten: overwrittenCount,
         duplicates: duplicateCount,
         invalidUsers: invalidUserCount,
         upsertErrors,
         errors: errors.concat(
-          upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 UPSERT 오류가 발생했습니다.`] : []
+          upsertErrors > 0 ? [`${upsertErrors}건의 데이터베이스 처리 오류가 발생했습니다.`] : []
         ).slice(0, 10) // 최대 10개 에러만 표시
       })
 
@@ -1180,6 +1209,32 @@ export default function CapsUploadManager() {
         </h2>
         <p className="text-sm sm:text-base text-gray-600">
           CAPS 지문인식 시스템 출퇴근 데이터를 일괄 업로드하세요
+        </p>
+      </div>
+
+      {/* 덮어쓰기 옵션 - 업로드 영역 위에 추가 */}
+      <div className="bg-white border border-gray-200 rounded-lg p-4">
+        <div className="flex items-center space-x-3">
+          <input
+            id="overwrite-mode"
+            type="checkbox"
+            checked={overwriteMode}
+            onChange={(e) => setOverwriteMode(e.target.checked)}
+            disabled={uploading}
+            className="h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded"
+          />
+          <label htmlFor="overwrite-mode" className="text-sm font-medium text-gray-900">
+            덮어쓰기 모드
+          </label>
+          <span className="text-xs text-red-600 font-medium">
+            {overwriteMode ? '활성화됨' : '비활성화됨'}
+          </span>
+        </div>
+        <p className="text-xs text-gray-600 mt-2 ml-7">
+          {overwriteMode 
+            ? '⚠️ 같은 날짜/시간의 기존 기록이 새로운 데이터로 교체됩니다.' 
+            : '✅ 기존 기록과 중복되는 데이터는 건너뜁니다.'
+          }
         </p>
       </div>
 
@@ -1263,12 +1318,18 @@ export default function CapsUploadManager() {
             </div>
           </div>
 
-          {/* 처리 결과 통계 - 모바일 그리드 개선 */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
+          {/* 처리 결과 통계 - 덮어쓰기 결과 추가 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
             <div className="text-center p-2 sm:p-3 bg-blue-50 rounded-lg">
               <div className="text-xl sm:text-2xl font-bold text-blue-600">{result.inserted}</div>
               <div className="text-xs sm:text-sm text-blue-800">새로 추가</div>
             </div>
+            {result.overwritten > 0 && (
+              <div className="text-center p-2 sm:p-3 bg-orange-50 rounded-lg">
+                <div className="text-xl sm:text-2xl font-bold text-orange-600">{result.overwritten}</div>
+                <div className="text-xs sm:text-sm text-orange-800">덮어쓰기</div>
+              </div>
+            )}
             <div className="text-center p-2 sm:p-3 bg-yellow-50 rounded-lg">
               <div className="text-xl sm:text-2xl font-bold text-yellow-600">{result.duplicates}</div>
               <div className="text-xs sm:text-sm text-yellow-800">중복 스킵</div>
@@ -1281,7 +1342,7 @@ export default function CapsUploadManager() {
               <div className="text-xl sm:text-2xl font-bold text-red-600">{result.invalidUsers}</div>
               <div className="text-xs sm:text-sm text-red-800">사용자 오류</div>
             </div>
-            <div className="text-center p-2 sm:p-3 bg-purple-50 rounded-lg col-span-2 sm:col-span-1">
+            <div className="text-center p-2 sm:p-3 bg-purple-50 rounded-lg">
               <div className="text-xl sm:text-2xl font-bold text-purple-600">{result.upsertErrors}</div>
               <div className="text-xs sm:text-sm text-purple-800">DB 오류</div>
             </div>
@@ -1322,7 +1383,8 @@ export default function CapsUploadManager() {
           <li className="break-words">• CAPS 관리 프로그램에서 "데이터 내보내기" → CSV 형식으로 저장</li>
           <li className="break-words">• 파일명 예시: "7월4주차.xls - Sheet1.csv"</li>
           <li className="break-words">• <strong>사용자 인식:</strong> 사원번호 우선, 이름 백업으로 매핑</li>
-          <li className="break-words">• 중복 데이터는 자동으로 스킵되므로 안전하게 재업로드 가능</li>
+          <li className="break-words">• <strong>덮어쓰기 모드:</strong> 기존 기록을 새 데이터로 교체 (잘못된 기록 수정용)</li>
+          <li className="break-words">• <strong>일반 모드:</strong> 중복 데이터 자동 스킵 (안전한 재업로드)</li>
           <li className="break-words">• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
           <li className="break-words">• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
           <li className="break-words">• "출입" 기록은 무시됩니다</li>
