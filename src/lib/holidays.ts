@@ -1,74 +1,22 @@
 /**
- * 공휴일 API 직접 연동 유틸리티
- * 한국 공공데이터포털 API만 사용
+ * 공휴일 하이브리드 API 통합 시스템 🎯
+ * Multi-Source 실시간 연동:
+ * 1순위: distbe/holidays (GitHub 오픈소스) ⚡
+ * 2순위: 한국천문연구원 특일정보 API 🏛️
+ * 3순위: 최소 fallback (현재연도 ±2년) 📅
  */
 
-// 한국 공공데이터포털 API 설정 (Supabase Edge Function 활용)
-const SUPABASE_URL = 'https://uxfjjquhbksvlqzrjfpj.supabase.co'
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4ZmpqcXVoYmtzdmxxenJqZnBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1Njk3NTYsImV4cCI6MjA2ODE0NTc1Nn0.6AcbiyzXHczbCF2Mv3lt5Qck7FQ_Gf4i6eMqiLAmDWA'
-
-// 하드코딩된 한국 공휴일 데이터 (2024-2026)
-const KOREAN_HOLIDAYS: { [key: string]: string } = {
-  // 2024년
-  '2024-01-01': '신정',
-  '2024-02-09': '설날 연휴',
-  '2024-02-10': '설날',
-  '2024-02-11': '설날 연휴',
-  '2024-02-12': '대체휴일',
-  '2024-03-01': '삼일절',
-  '2024-04-10': '국회의원선거',
-  '2024-05-05': '어린이날',
-  '2024-05-06': '대체휴일',
-  '2024-05-15': '부처님 오신 날',
-  '2024-06-06': '현충일',
-  '2024-08-15': '광복절',
-  '2024-09-16': '추석 연휴',
-  '2024-09-17': '추석',
-  '2024-09-18': '추석 연휴',
-  '2024-10-03': '개천절',
-  '2024-10-09': '한글날',
-  '2024-12-25': '성탄절',
-  // 2025년
-  '2025-01-01': '신정',
-  '2025-01-28': '설날 연휴',
-  '2025-01-29': '설날',
-  '2025-01-30': '설날 연휴',
-  '2025-03-01': '삼일절',
-  '2025-03-03': '대체휴일',
-  '2025-05-05': '어린이날',
-  '2025-05-06': '대체휴일',
-  '2025-06-06': '현충일',
-  '2025-08-15': '광복절',
-  '2025-10-03': '개천절',
-  '2025-10-05': '추석 연휴',
-  '2025-10-06': '추석',
-  '2025-10-07': '추석 연휴',
-  '2025-10-08': '대체휴일',
-  '2025-10-09': '한글날',
-  '2025-12-25': '성탄절',
-  // 2026년
-  '2026-01-01': '신정',
-  '2026-02-16': '설날 연휴',
-  '2026-02-17': '설날',
-  '2026-02-18': '설날 연휴',
-  '2026-03-01': '삼일절',
-  '2026-03-02': '대체휴일',
-  '2026-05-05': '어린이날',
-  '2026-05-25': '부처님 오신 날',
-  '2026-06-06': '현충일',
-  '2026-08-15': '광복절',
-  '2026-08-17': '대체휴일',
-  '2026-09-24': '추석 연휴',
-  '2026-09-25': '추석',
-  '2026-09-26': '추석 연휴',
-  '2026-10-03': '개천절',
-  '2026-10-05': '대체휴일',
-  '2026-10-09': '한글날',
-  '2026-12-25': '성탄절'
+// API 설정
+const API_ENDPOINTS = {
+  holidays: '/api/holidays',
+  fullYear: '/api/holidays' // POST 요청으로 전체 연도 데이터
 }
 
-// 공휴일 데이터 캐시
-let holidayCache: { [key: string]: string } = { ...KOREAN_HOLIDAYS }
+// 🗑️ 하드코딩 데이터 제거됨!
+// 이제 하이브리드 API + Enhanced Fallback (route.ts)에서 모든 데이터 처리
+
+// 공휴일 데이터 캐시 (API에서 동적으로 채워짐)
+let holidayCache: { [key: string]: string } = {}
 let lastCacheUpdate: number = Date.now()
 const CACHE_DURATION = 24 * 60 * 60 * 1000 // 24시간
 
@@ -86,110 +34,155 @@ export const initializeHolidayCache = async (year?: number) => {
 }
 
 /**
- * 공공데이터포털 API를 통해 공휴일 정보 가져오기 (CORS 문제로 인해 하드코딩 데이터 사용)
+ * 하이브리드 공휴일 API를 통해 공휴일 정보 가져오기 (실시간 연동)
+ * Multi-Source: distbe/holidays → KASI API → minimal fallback
  */
 export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string]: string }> => {
   try {
-    console.log(`📅 Using hardcoded holidays for ${year} (CORS issue with Edge Function)`)
+    console.log(`🌟 Fetching holidays for ${year} from hybrid API (distbe/KASI)`)
     
-    // 하드코딩된 데이터에서 해당 연도 공휴일 필터링
-    const yearHolidays: { [key: string]: string } = {}
-    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
-      if (date.startsWith(`${year}-`)) {
-        yearHolidays[date] = KOREAN_HOLIDAYS[date]
-      }
+    // 하이브리드 API 엔드포인트 호출 (POST)
+    const response = await fetch(API_ENDPOINTS.fullYear, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ year })
     })
     
-    console.log(`📅 Found ${Object.keys(yearHolidays).length} holidays for ${year}`)
-    return yearHolidays
-    
-    // Edge Function CORS 문제가 해결되면 아래 코드 활성화
-    /*
-    const edgeFunctionUrl = `${SUPABASE_URL}/functions/v1/swift-service?year=${year}`
-    console.log(`📅 Calling Edge Function: ${edgeFunctionUrl}`)
-    
-    const headers: HeadersInit = {
-      'Content-Type': 'application/json'
+    if (!response.ok) {
+      throw new Error(`Hybrid API request failed with status ${response.status}`)
     }
     
-    if (SUPABASE_ANON_KEY) {
-      headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`
-    }
+    const data = await response.json()
     
-    const response = await fetch(edgeFunctionUrl, {
-      method: 'GET',
-      headers
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      console.log(`📅 Fetched ${Object.keys(data.holidays || {}).length} holidays for ${year} via Edge Function`)
-      return data.holidays || {}
+    // 새로운 API 응답 형식 처리
+    if (data.holidays && Object.keys(data.holidays).length > 0) {
+      console.log(`✅ Successfully fetched ${data.count} holidays for ${year} from source: ${data.source}`)
+      console.log(`📊 API Source: ${data.source}, Timestamp: ${data.timestamp}`)
+      return data.holidays
+    } else if (data.error) {
+      throw new Error(data.error)
     } else {
-      const errorText = await response.text()
-      throw new Error(`Edge Function failed with status ${response.status}: ${errorText}`)
+      throw new Error('API returned empty or invalid response')
     }
-    */
     
   } catch (error) {
-    console.error('공휴일 조회 오류:', error)
-    // 에러 발생 시 하드코딩된 데이터 반환
-    const yearHolidays: { [key: string]: string } = {}
-    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
-      if (date.startsWith(`${year}-`)) {
-        yearHolidays[date] = KOREAN_HOLIDAYS[date]
-      }
-    })
-    return yearHolidays
+    console.warn(`⚠️ Hybrid API fetch failed for ${year}, using emergency fallback:`, error)
+    
+    // 🚨 긴급 복구: 최소한의 핵심 공휴일 보장
+    const emergencyHolidays: { [key: string]: string } = {}
+    
+    // 고정 공휴일 (매년 동일)
+    emergencyHolidays[`${year}-01-01`] = '신정'
+    emergencyHolidays[`${year}-03-01`] = '삼일절'
+    emergencyHolidays[`${year}-05-05`] = '어린이날'
+    emergencyHolidays[`${year}-06-06`] = '현충일'
+    emergencyHolidays[`${year}-08-15`] = '광복절'
+    emergencyHolidays[`${year}-10-03`] = '개천절'
+    emergencyHolidays[`${year}-10-09`] = '한글날'
+    emergencyHolidays[`${year}-12-25`] = '성탄절'
+    
+    // 🎯 2025년 중요 임시공휴일 보장
+    if (year === 2025) {
+      emergencyHolidays['2025-01-27'] = '임시공휴일(설 연휴)'
+      emergencyHolidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
+    }
+    
+    console.log(`🚨 Using emergency fallback: ${Object.keys(emergencyHolidays).length} core holidays for ${year}`)
+    return emergencyHolidays
+  }
+}
+
+/**
+ * 특정 월의 공휴일 정보 가져오기 (하이브리드 월별 요청)
+ */
+export const fetchMonthlyHolidays = async (year: number, month: number): Promise<{ [key: string]: string }> => {
+  try {
+    console.log(`🌟 Fetching holidays for ${year}/${month} from hybrid API`)
+    
+    const url = `${API_ENDPOINTS.holidays}?year=${year}&month=${month}`
+    const response = await fetch(url)
+    
+    if (!response.ok) {
+      throw new Error(`Hybrid monthly API request failed with status ${response.status}`)
+    }
+    
+    const data = await response.json()
+    
+    // 새로운 API 응답 형식 처리
+    if (data.holidays && typeof data.holidays === 'object') {
+      console.log(`✅ Fetched ${data.count} holidays for ${year}/${month} from source: ${data.source}`)
+      return data.holidays
+    } else if (data.error) {
+      throw new Error(data.error)
+    } else {
+      throw new Error('Monthly API returned empty or invalid response')
+    }
+    
+  } catch (error) {
+    console.warn(`⚠️ Hybrid monthly API failed for ${year}/${month}, no local fallback available:`, error)
+    
+    // 월별 API 실패 시 빈 객체 반환 (route.ts의 Enhanced Fallback에 의존)
+    console.log(`📅 Monthly API failed for ${year}/${month}, relying on route.ts fallback system`)
+    return {}
   }
 }
 
 
 
 /**
- * 공휴일 캐시 업데이트
+ * 공휴일 캐시 업데이트 (향상된 로직)
  */
 export const updateHolidayCache = async (year: number) => {
   const now = Date.now()
   const yearCacheKey = `holidays_cache_${year}`
   
-  // localStorage 캐시 확인
-  const cachedData = localStorage.getItem(yearCacheKey)
-  if (cachedData) {
-    const parsed = JSON.parse(cachedData)
-    if (now - parsed.timestamp < CACHE_DURATION) {
-      holidayCache = { ...holidayCache, ...parsed.holidays }
-      console.log(`📅 Using cached holiday data for ${year}`)
-      return
+  // 브라우저 환경에서만 localStorage 사용
+  if (typeof window !== 'undefined') {
+    const cachedData = localStorage.getItem(yearCacheKey)
+    if (cachedData) {
+      try {
+        const parsed = JSON.parse(cachedData)
+        if (parsed.timestamp && now - parsed.timestamp < CACHE_DURATION) {
+          holidayCache = { ...holidayCache, ...parsed.holidays }
+          console.log(`📅 Using cached holiday data for ${year} (${Object.keys(parsed.holidays).length} holidays)`)
+          return
+        }
+      } catch (cacheError) {
+        console.warn(`⚠️ Invalid cache data for ${year}:`, cacheError)
+        localStorage.removeItem(yearCacheKey)
+      }
     }
   }
   
   try {
-    // 공공데이터포털 API 호출
+    console.log(`🔄 Updating holiday cache for ${year}...`)
+    
+    // 한국천문연구원 API 호출
     const holidays = await fetchHolidaysFromAPI(year)
     
     // 캐시 업데이트
     holidayCache = { ...holidayCache, ...holidays }
     lastCacheUpdate = now
     
-    // localStorage에 저장
-    localStorage.setItem(yearCacheKey, JSON.stringify({
-      holidays,
-      timestamp: now
-    }))
+    // 브라우저 환경에서 localStorage에 저장
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(yearCacheKey, JSON.stringify({
+          holidays,
+          timestamp: now,
+          apiSource: 'hybrid-api-distbe-kasi'
+        }))
+      } catch (storageError) {
+        console.warn(`⚠️ Failed to save to localStorage:`, storageError)
+      }
+    }
     
-    console.log(`📅 Successfully cached ${Object.keys(holidays).length} holidays for ${year}`)
+    console.log(`✅ Successfully cached ${Object.keys(holidays).length} holidays for ${year}`)
   } catch (error) {
     console.error(`❌ Failed to update holiday cache for ${year}:`, error)
-    // 에러 발생 시 하드코딩된 데이터 사용
-    const yearHolidays: { [key: string]: string } = {}
-    Object.keys(KOREAN_HOLIDAYS).forEach(date => {
-      if (date.startsWith(`${year}-`)) {
-        yearHolidays[date] = KOREAN_HOLIDAYS[date]
-      }
-    })
-    holidayCache = { ...holidayCache, ...yearHolidays }
-    console.log(`📅 Using fallback hardcoded data for ${year}`)
+    console.warn(`⚠️ No local fallback data available, relying on route.ts Enhanced Fallback system`)
   }
 }
 
@@ -316,9 +309,23 @@ export const isWeekendOrHolidaySync = (date: Date) => {
 }
 
 /**
- * 특정 월의 공휴일 목록 가져오기
+ * 특정 월의 공휴일 목록 가져오기 (향상된 버전)
  */
 export const getMonthlyHolidays = async (year: number, month: number): Promise<{ [date: string]: string }> => {
+  try {
+    // 먼저 API에서 월별 데이터 시도
+    const monthlyData = await fetchMonthlyHolidays(year, month)
+    
+    if (Object.keys(monthlyData).length > 0) {
+      // 성공하면 캐시에도 업데이트
+      holidayCache = { ...holidayCache, ...monthlyData }
+      return monthlyData
+    }
+  } catch (error) {
+    console.warn(`⚠️ Monthly API failed for ${year}/${month}:`, error)
+  }
+  
+  // API 실패 시 캐시에서 찾기
   await updateHolidayCache(year)
   
   const monthStr = String(month).padStart(2, '0')
@@ -330,5 +337,40 @@ export const getMonthlyHolidays = async (year: number, month: number): Promise<{
     }
   }
   
+  console.log(`📅 Found ${Object.keys(monthHolidays).length} holidays for ${year}/${month}`)
   return monthHolidays
+}
+
+/**
+ * 캐시 상태 확인 및 디버깅 정보
+ */
+export const getCacheInfo = () => {
+  const cacheKeys = Object.keys(holidayCache)
+  const years = [...new Set(cacheKeys.map(key => key.split('-')[0]))]
+  
+  return {
+    totalHolidays: cacheKeys.length,
+    availableYears: years.sort(),
+    lastUpdate: new Date(lastCacheUpdate).toISOString(),
+    cacheAge: Date.now() - lastCacheUpdate
+  }
+}
+
+/**
+ * 전체 캐시 초기화 (디버깅/문제 해결용)
+ */
+export const clearHolidayCache = () => {
+  holidayCache = {}
+  lastCacheUpdate = Date.now()
+  
+  if (typeof window !== 'undefined') {
+    // localStorage에서 공휴일 캐시 모두 제거
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('holidays_cache_')) {
+        localStorage.removeItem(key)
+      }
+    })
+  }
+  
+  console.log('📅 Holiday cache cleared - will be repopulated from hybrid API')
 }

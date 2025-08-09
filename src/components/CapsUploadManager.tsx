@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSupabase } from '@/components/SupabaseProvider'
 import { getCurrentUser } from '@/lib/auth'
 import { Upload, FileText, CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react'
+import { calculateCrossDateWork, isCrossDateWork } from '@/lib/cross-date-work-calculator'
 
 interface UploadResult {
   fileName: string
@@ -43,6 +44,11 @@ interface ProcessedRecord {
   had_dinner?: boolean
 }
 
+// 시간 반올림 표준화 함수 (소수점 1자리)
+const roundToOneDecimal = (value: number): number => {
+  return Math.round(value * 10) / 10
+}
+
 export default function CapsUploadManager() {
   const { supabase } = useSupabase()
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -67,6 +73,71 @@ export default function CapsUploadManager() {
     } catch (error) {
       console.error('사용자 정보 로드 실패:', error)
       setError('사용자 인증에 실패했습니다.')
+    }
+  }
+
+  // 3개월 탄력근무제 정산 처리 함수
+  const processFlexibleWorkSettlement = async (
+    processedRecords: ProcessedRecord[],
+    userMap: Map<string, any>
+  ) => {
+    try {
+      const { getCurrentFlexibleWorkSettingsSync, calculateQuarterlyOvertimeAllowance } = await import('@/lib/flexible-work-utils')
+      
+      // 탄력근무제 설정 가져오기
+      const flexSettings = getCurrentFlexibleWorkSettingsSync()
+      if (!flexSettings || flexSettings.length === 0) return
+      
+      const currentDate = new Date().toISOString().split('T')[0]
+      
+      // 종료된 탄력근무제 기간 확인
+      for (const setting of flexSettings) {
+        if (currentDate > setting.end) {
+          console.log(`📊 탄력근무제 정산 시작: ${setting.start} ~ ${setting.end}`)
+          
+          // 해당 기간의 모든 직원별 근무 데이터 조회
+          for (const [userId, user] of userMap) {
+            const { data: quarterlyData, error } = await supabase
+              .from('daily_work_summary')
+              .select('*')
+              .eq('user_id', userId)
+              .gte('work_date', setting.start)
+              .lte('work_date', setting.end)
+            
+            if (error || !quarterlyData) continue
+            
+            // 3개월 총 근무시간 계산
+            const totalWorkHours = quarterlyData.reduce((sum, d) => 
+              sum + (d.basic_hours || 0) + (d.overtime_hours || 0), 0
+            )
+            const totalNightHours = quarterlyData.reduce((sum, d) => 
+              sum + (d.night_hours || 0), 0
+            )
+            const totalSubstituteHours = quarterlyData.reduce((sum, d) => 
+              sum + (d.substitute_hours || 0), 0
+            )
+            const totalCompensatoryHours = quarterlyData.reduce((sum, d) => 
+              sum + (d.compensatory_hours || 0), 0
+            )
+            
+            // 초과근무 수당 계산
+            const overtimeAllowance = calculateQuarterlyOvertimeAllowance(
+              totalWorkHours,
+              setting.standard_weekly_hours,
+              totalNightHours,
+              totalSubstituteHours,
+              totalCompensatoryHours,
+              user.hourly_rate || 0
+            )
+            
+            if (overtimeAllowance > 0) {
+              console.log(`✅ ${user.name} 3개월 탄력근무제 정산: ${overtimeAllowance.toLocaleString()}원`)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 탄력근무제 정산 오류:', error)
     }
   }
 
@@ -479,10 +550,8 @@ export default function CapsUploadManager() {
                 is_manual: record.is_manual || false,
                 notes: isWebSource 
                   ? `웹앱 기록 - 사원번호: ${record.employee_number || 'N/A'}`
-                  : `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`,
-                // PostgreSQL 트리거 호환성을 위한 필드
-                check_in_time: record.record_type === '출근' ? record.record_timestamp : null,
-                check_out_time: record.record_type === '퇴근' ? record.record_timestamp : null
+                  : `CAPS 지문인식 기록 - 사원번호: ${record.employee_number || 'N/A'}`
+                // 🔄 임시 컬럼 제거: check_in_time, check_out_time은 daily_work_summary에서만 관리
               }
 
               console.log('🔍 INSERT 시도할 데이터:', insertData)
@@ -590,32 +659,223 @@ export default function CapsUploadManager() {
             if (checkIn && checkOut) {
               const startTime = new Date(checkIn.record_timestamp)
               const endTime = new Date(checkOut.record_timestamp)
-              const diffMs = endTime.getTime() - startTime.getTime()
-              const totalHours = diffMs / (1000 * 60 * 60)
+              
+              // 🔄 자정 넘김 근무시간 계산 시스템 통합
+              let totalHours: number
+              let crossDateCalculation: any = null
+              
+              if (isCrossDateWork(checkIn.record_time, checkOut.record_time)) {
+                console.log(`🌙 자정 넘김 근무 감지: ${date} ${checkIn.record_time} → ${checkOut.record_time}`)
+                
+                try {
+                  crossDateCalculation = await calculateCrossDateWork(
+                    date, 
+                    checkIn.record_time, 
+                    checkOut.record_time,
+                    60 // 점심시간 60분
+                  )
+                  totalHours = crossDateCalculation.totalHours
+                  
+                  console.log(`🌙 자정 넘김 계산 결과:`, {
+                    firstDate: crossDateCalculation.firstDate,
+                    secondDate: crossDateCalculation.secondDate,
+                    totalHours: totalHours.toFixed(2),
+                    basicHours: crossDateCalculation.basicHours,
+                    overtimeHours: crossDateCalculation.overtimeHours,
+                    warnings: crossDateCalculation.warnings
+                  })
+                } catch (error) {
+                  console.error('❌ 자정 넘김 계산 오류, 기본 계산으로 fallback:', error)
+                  const diffMs = endTime.getTime() - startTime.getTime()
+                  totalHours = diffMs / (1000 * 60 * 60)
+                }
+              } else {
+                // 일반적인 단일 날짜 근무
+                const diffMs = endTime.getTime() - startTime.getTime()
+                totalHours = diffMs / (1000 * 60 * 60)
+              }
               
               console.log(`📊 ${date} 근무시간 계산:`, {
                 checkIn: checkIn.record_time,
                 checkOut: checkOut.record_time,
                 totalHours: totalHours.toFixed(2),
+                isCrossDate: !!crossDateCalculation,
                 startTime: startTime.toISOString(),
                 endTime: endTime.toISOString()
               })
               
-              // 휴게시간 차감 (4시간 이상 근무 시 점심 1시간)
-              let workHours = totalHours
-              if (totalHours > 4) {
-                workHours = totalHours - 1
+              // 🔄 자정 넘김 계산 결과 활용 또는 기존 로직 사용
+              let workHours: number
+              
+              if (crossDateCalculation) {
+                // 자정 넘김 계산 시스템의 결과 사용 (이미 휴게시간 차감 완료)
+                workHours = crossDateCalculation.totalHours
+                basicHours = crossDateCalculation.basicHours
+                overtimeHours = crossDateCalculation.overtimeHours
+                
+                // 저녁식사 여부는 기존 로직으로 판단 (자정 넘김과 별개)
+                const webAppDinnerRecord = dayRecords.find(r => 
+                  r.source === 'web' && r.had_dinner === true
+                )
+                const shouldHaveDinner = endTime.getHours() >= 19 || 
+                  (endTime.getHours() === 18 && endTime.getMinutes() >= 30)
+                
+                if (shouldHaveDinner && webAppDinnerRecord) {
+                  hadDinner = true
+                  console.log(`✅ 자정 넘김: 웹앱 저녁식사 기록 확인됨`)
+                } else if (shouldHaveDinner) {
+                  hadDinner = true
+                  console.log(`✅ 자정 넘김: 저녁식사 시간 자동 적용`)
+                }
+                
+                console.log(`🌙 자정 넘김 최종 결과: 기본 ${basicHours}h, 연장 ${overtimeHours}h`)
+              } else {
+                // 기존 GAS 로직과 동일하게 휴게시간 계산
+                const workMinutes = totalHours * 60
+                let breakMinutes = 0
+                
+                // 점심시간 차감 (4시간 이상 근무 시 60분) - GAS 라인 94-95
+                if (workMinutes >= 240) {
+                  breakMinutes += 60
+                }
+                
+                // 저녁식사 시간 차감 (GAS와 동일하게 60분) - GAS 라인 966
+                // 중복 차감 방지를 위한 로직 개선
+                
+                // 1. 웹앱에서 이미 저녁식사를 체크했는지 확인
+                const webAppDinnerRecord = dayRecords.find(r => 
+                  r.source === 'web' && r.had_dinner === true
+                )
+                
+                // 2. CAPS 기록에서 저녁식사 해당 시간대인지 확인
+                const shouldHaveDinner = endTime.getHours() >= 19 || 
+                  (endTime.getHours() === 18 && endTime.getMinutes() >= 30)
+                
+                // 3. 저녁식사 차감 결정 (중복 방지)
+                if (shouldHaveDinner) {
+                  // 웹앱에서 이미 체크했다면 그대로 사용
+                  if (webAppDinnerRecord) {
+                    hadDinner = true
+                    breakMinutes += 60
+                    console.log(`✅ 웹앱 저녁식사 기록 확인됨 (중복 차감 방지)`)
+                  } 
+                // CAPS에서 처리하는 경우 (웹앱 기록 없음)
+                else if (checkOut && checkOut.source === 'caps') {
+                  hadDinner = true  // CAPS는 자동으로 저녁식사 시간 적용
+                  breakMinutes += 60
+                  console.log(`✅ CAPS 저녁식사 시간 자동 적용`)
+                }
               }
               
-              // 저녁식사 시간 차감 (18:30 이후 퇴근 시)
-              if (endTime.getHours() >= 19 || (endTime.getHours() === 18 && endTime.getMinutes() >= 30)) {
-                workHours -= 0.5
-                hadDinner = true
+              // 실제 근무시간 계산
+              workHours = (workMinutes - breakMinutes) / 60
+              
+              // 기본시간/연장시간 계산 (탄력근무제 고려)
+              const { getOvertimeThreshold, getCurrentFlexibleWorkSettings } = await import('@/lib/flexible-work-utils')
+              const flexSettings = await getCurrentFlexibleWorkSettings()
+              const overtimeThreshold = getOvertimeThreshold(date, flexSettings)
+              
+              basicHours = Math.min(workHours, overtimeThreshold)
+              overtimeHours = Math.max(0, workHours - overtimeThreshold)
+            }
+              
+              // 야간근무 시간 계산 (22시-06시) - GAS 라인 100-106, 971-977
+              let nightHours = 0
+              let nightPayHours = 0  // 야간근무 수당 시간 (1.5배)
+              const tempTime = new Date(startTime.getTime())
+              while (tempTime < endTime) {
+                const currentHour = tempTime.getHours()
+                if (currentHour >= 22 || currentHour < 6) {
+                  nightHours++
+                }
+                tempTime.setHours(tempTime.getHours() + 1)
               }
               
-              // 기본근무 8시간, 초과분은 연장근무
-              basicHours = Math.min(workHours, 8)
-              overtimeHours = Math.max(0, workHours - 8)
+              // 야간근무 수당은 1.5배 지급
+              nightPayHours = nightHours * 1.5
+              
+              // 요일 및 공휴일 확인
+              const dayOfWeek = new Date(date).getDay()
+              const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+              
+              // 공휴일 데이터 연동 (holidays.ts 활용)
+              const { isHolidaySync, getHolidayInfoSync } = await import('@/lib/holidays')
+              const holidayInfo = getHolidayInfoSync(new Date(date))
+              const isHoliday = holidayInfo.isHoliday
+              
+              // 휴가 캘린더와 공휴일 매칭 (텍스트 기준)
+              if (isHoliday) {
+                console.log(`📅 공휴일 감지: ${date} - ${holidayInfo.name}`)
+              }
+              
+              // 대체휴가, 보상휴가 시간 계산 (토요일/일요일/공휴일 구분)
+              let substituteHours = 0  // 대체휴가 (토요일)
+              let compensatoryHours = 0  // 보상휴가 (일요일/공휴일)
+              
+              if (isWeekend || isHoliday) {
+                if (dayOfWeek === 6) {  // 토요일
+                  substituteHours = workHours
+                  basicHours = workHours
+                  overtimeHours = 0
+                  nightHours = 0  // 휴일근무는 야간수당 별도 계산 안함
+                } else if (dayOfWeek === 0 || isHoliday) {  // 일요일 또는 공휴일
+                  // GAS 로직: 8시간까지 1.5배, 초과분 2.0배, 야간 0.5배 추가
+                  const holidayExtension = Math.max(0, workHours - 8)
+                  compensatoryHours = ((workHours - holidayExtension) * 1.5) + (holidayExtension * 2.0) + (nightHours * 0.5)
+                  basicHours = workHours
+                  overtimeHours = 0
+                  nightHours = 0  // 보상 계산에 포함됨
+                }
+              } else {
+                // 평일: 탄력근로제 기간 확인
+                const { getOvertimeThreshold, getCurrentFlexibleWorkSettings } = await import('@/lib/flexible-work-utils')
+                
+                // 탄력근로제 설정 조회 (DB나 설정 파일에서)
+                const flexSettings = await getCurrentFlexibleWorkSettings()
+                const overtimeThreshold = getOvertimeThreshold(date, flexSettings)
+                
+                // 기본근무와 연장근무 계산
+                basicHours = Math.min(workHours, overtimeThreshold)
+                overtimeHours = Math.max(0, workHours - overtimeThreshold)
+                
+                // 주휴수당 계산 (주 40시간 이상 근무 시 일요일 유급)
+                if (dayOfWeek === 0 && !isHoliday) {  // 일요일이면서 공휴일이 아닌 경우
+                  // 이전 주 (월-토) 근무시간 확인
+                  const weekStart = new Date(date)
+                  weekStart.setDate(weekStart.getDate() - 6)  // 월요일
+                  const weekEnd = new Date(date)
+                  weekEnd.setDate(weekEnd.getDate() - 1)  // 토요일
+                  
+                  // 주간 근무시간 조회
+                  const { data: weekRecords } = await supabase
+                    .from('daily_work_summary')
+                    .select('basic_hours, overtime_hours')
+                    .eq('user_id', userId)
+                    .gte('work_date', weekStart.toISOString().split('T')[0])
+                    .lte('work_date', weekEnd.toISOString().split('T')[0])
+                  
+                  // 주간 총 근무시간 계산
+                  let weeklyWorkHours = 0
+                  if (weekRecords) {
+                    weekRecords.forEach(record => {
+                      weeklyWorkHours += (record.basic_hours || 0) + (record.overtime_hours || 0)
+                    })
+                  }
+                  
+                  // 주 40시간 이상 근무 시 일요일 주휴수당 지급
+                  if (weeklyWorkHours >= 40) {
+                    if (!checkIn && !checkOut) {
+                      // 일요일 미출근: 8시간 주휴수당
+                      basicHours = 8
+                      workStatus = '주휴(유급)'
+                      console.log(`📅 주휴수당 적용: ${date} (주 ${Math.round(weeklyWorkHours)}시간 근무)`)
+                    } else {
+                      // 일요일 출근: 기본 근무 + 8시간 주휴수당은 별도 계산 필요
+                      console.log(`📅 일요일 근무 + 주휴수당 대상: ${date} (주 ${Math.round(weeklyWorkHours)}시간 근무)`)
+                    }
+                  }
+                }
+              }
               
               // 근무 상태 판별
               if (basicHours < 4) {
@@ -644,11 +904,11 @@ export default function CapsUploadManager() {
                 work_date: date,
                 check_in_time: checkIn?.record_timestamp || null,
                 check_out_time: checkOut?.record_timestamp || null,
-                basic_hours: Math.round(basicHours * 10) / 10,
-                overtime_hours: Math.round(overtimeHours * 10) / 10,
-                night_hours: 0, // TODO: 야간근무 계산
-                substitute_hours: 0,
-                compensatory_hours: 0,
+                basic_hours: roundToOneDecimal(basicHours),
+                overtime_hours: roundToOneDecimal(overtimeHours),
+                night_hours: 0,  // 야간근무 시간 (현재 미구현)
+                substitute_hours: 0,  // 대체휴가 시간 (현재 미구현)
+                compensatory_hours: 0,  // 보상휴가 시간 (현재 미구현)
                 work_status: workStatus,
                 had_dinner: hadDinner,
                 auto_calculated: true,
@@ -715,7 +975,7 @@ export default function CapsUploadManager() {
               user_id: userId,
               work_month: workMonth,
               ...stats,
-              average_daily_hours: Math.round(avgDailyHours * 10) / 10
+              average_daily_hours: roundToOneDecimal(avgDailyHours)
             }, {
               onConflict: 'user_id,work_month'
             })
@@ -729,6 +989,9 @@ export default function CapsUploadManager() {
       }
       
       console.log('✅ 일별/월별 통계 재계산 완료')
+      
+      // 3개월 탄력근무제 정산 처리
+      // await processFlexibleWorkSettlement(processedRecords, userMap) // 현재 미구현
       
       // 업로드 후 데이터 검증 (7월 데이터 확인)
       if (file.name.includes('7월')) {
@@ -843,20 +1106,20 @@ export default function CapsUploadManager() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      {/* 헤더 */}
-      <div className="text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
+      {/* 헤더 - 모바일 반응형 */}
+      <div className="text-center px-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
           CAPS CSV 데이터 업로드
         </h2>
-        <p className="text-gray-600">
+        <p className="text-sm sm:text-base text-gray-600">
           CAPS 지문인식 시스템 출퇴근 데이터를 일괄 업로드하세요
         </p>
       </div>
 
-      {/* 업로드 영역 */}
+      {/* 업로드 영역 - 모바일 최적화 */}
       <div
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+        className={`border-2 border-dashed rounded-lg p-6 sm:p-8 text-center transition-colors ${
           dragOver 
             ? 'border-blue-500 bg-blue-50' 
             : uploading 
@@ -872,18 +1135,19 @@ export default function CapsUploadManager() {
       >
         {uploading ? (
           <div className="flex flex-col items-center">
-            <RefreshCw className="h-12 w-12 text-blue-500 animate-spin mb-4" />
-            <p className="text-lg font-medium text-blue-600">업로드 중...</p>
-            <p className="text-sm text-gray-500">데이터를 처리하고 있습니다.</p>
+            <RefreshCw className="h-10 w-10 sm:h-12 sm:w-12 text-blue-500 animate-spin mb-3 sm:mb-4" />
+            <p className="text-base sm:text-lg font-medium text-blue-600">업로드 중...</p>
+            <p className="text-xs sm:text-sm text-gray-500">데이터를 처리하고 있습니다.</p>
           </div>
         ) : (
           <div className="flex flex-col items-center">
-            <Upload className="h-12 w-12 text-gray-400 mb-4" />
-            <p className="text-lg font-medium text-gray-900 mb-2">
-              CAPS CSV 파일을 드래그하거나 클릭하여 업로드
+            <Upload className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mb-3 sm:mb-4" />
+            <p className="text-base sm:text-lg font-medium text-gray-900 mb-2">
+              <span className="hidden sm:inline">CAPS CSV 파일을 드래그하거나 클릭하여 업로드</span>
+              <span className="sm:hidden">CSV 파일 업로드</span>
             </p>
-            <p className="text-sm text-gray-500 mb-4">
-              지원 형식: CAPS 지문인식 시스템에서 추출한 .csv 파일
+            <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4 px-4">
+              지원 형식: CAPS 지문인식 시스템 .csv 파일
             </p>
             <label className="cursor-pointer">
               <input
@@ -893,7 +1157,7 @@ export default function CapsUploadManager() {
                 className="hidden"
                 disabled={uploading}
               />
-              <span className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+              <span className="bg-blue-600 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base">
                 파일 선택
               </span>
             </label>
@@ -901,72 +1165,74 @@ export default function CapsUploadManager() {
         )}
       </div>
 
-      {/* 에러 표시 */}
+      {/* 에러 표시 - 모바일 최적화 */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 sm:p-4">
           <div className="flex items-center">
-            <XCircle className="h-5 w-5 text-red-500 mr-2" />
-            <h3 className="text-sm font-medium text-red-800">업로드 실패</h3>
+            <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-500 mr-2 flex-shrink-0" />
+            <h3 className="text-xs sm:text-sm font-medium text-red-800">업로드 실패</h3>
           </div>
-          <p className="text-sm text-red-700 mt-1">{error}</p>
+          <p className="text-xs sm:text-sm text-red-700 mt-1">{error}</p>
         </div>
       )}
 
-      {/* 업로드 결과 */}
+      {/* 업로드 결과 - 모바일 최적화 */}
       {result && (
-        <div className="bg-white border border-gray-200 rounded-lg p-6">
-          <div className="flex items-center mb-4">
-            <CheckCircle className="h-6 w-6 text-green-500 mr-2" />
-            <h3 className="text-lg font-medium text-green-800">업로드 완료</h3>
+        <div className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
+          <div className="flex items-center mb-3 sm:mb-4">
+            <CheckCircle className="h-5 w-5 sm:h-6 sm:w-6 text-green-500 mr-2" />
+            <h3 className="text-base sm:text-lg font-medium text-green-800">업로드 완료</h3>
           </div>
 
-          {/* 파일 정보 */}
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <div className="flex items-center mb-2">
-              <FileText className="h-4 w-4 text-gray-500 mr-2" />
-              <span className="font-medium">{result.fileName}</span>
-              <span className="text-sm text-gray-500 ml-2">
+          {/* 파일 정보 - 모바일 최적화 */}
+          <div className="bg-gray-50 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-0">
+              <div className="flex items-center">
+                <FileText className="h-4 w-4 text-gray-500 mr-2" />
+                <span className="font-medium text-sm sm:text-base truncate">{result.fileName}</span>
+              </div>
+              <span className="text-xs sm:text-sm text-gray-500 sm:ml-2">
                 ({formatFileSize(result.fileSize)})
               </span>
             </div>
           </div>
 
-          {/* 처리 결과 통계 */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{result.inserted}</div>
-              <div className="text-sm text-blue-800">새로 추가</div>
+          {/* 처리 결과 통계 - 모바일 그리드 개선 */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 lg:gap-4 mb-3 sm:mb-4">
+            <div className="text-center p-2 sm:p-3 bg-blue-50 rounded-lg">
+              <div className="text-xl sm:text-2xl font-bold text-blue-600">{result.inserted}</div>
+              <div className="text-xs sm:text-sm text-blue-800">새로 추가</div>
             </div>
-            <div className="text-center p-3 bg-yellow-50 rounded-lg">
-              <div className="text-2xl font-bold text-yellow-600">{result.duplicates}</div>
-              <div className="text-sm text-yellow-800">중복 스킵</div>
+            <div className="text-center p-2 sm:p-3 bg-yellow-50 rounded-lg">
+              <div className="text-xl sm:text-2xl font-bold text-yellow-600">{result.duplicates}</div>
+              <div className="text-xs sm:text-sm text-yellow-800">중복 스킵</div>
             </div>
-            <div className="text-center p-3 bg-gray-50 rounded-lg">
-              <div className="text-2xl font-bold text-gray-600">{result.totalProcessed}</div>
-              <div className="text-sm text-gray-800">총 처리</div>
+            <div className="text-center p-2 sm:p-3 bg-gray-50 rounded-lg">
+              <div className="text-xl sm:text-2xl font-bold text-gray-600">{result.totalProcessed}</div>
+              <div className="text-xs sm:text-sm text-gray-800">총 처리</div>
             </div>
-            <div className="text-center p-3 bg-red-50 rounded-lg">
-              <div className="text-2xl font-bold text-red-600">{result.invalidUsers}</div>
-              <div className="text-sm text-red-800">사용자 오류</div>
+            <div className="text-center p-2 sm:p-3 bg-red-50 rounded-lg">
+              <div className="text-xl sm:text-2xl font-bold text-red-600">{result.invalidUsers}</div>
+              <div className="text-xs sm:text-sm text-red-800">사용자 오류</div>
             </div>
-            <div className="text-center p-3 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">{result.upsertErrors}</div>
-              <div className="text-sm text-purple-800">DB 오류</div>
+            <div className="text-center p-2 sm:p-3 bg-purple-50 rounded-lg col-span-2 sm:col-span-1">
+              <div className="text-xl sm:text-2xl font-bold text-purple-600">{result.upsertErrors}</div>
+              <div className="text-xs sm:text-sm text-purple-800">DB 오류</div>
             </div>
           </div>
 
-          {/* 오류 목록 */}
+          {/* 오류 목록 - 모바일 스크롤 개선 */}
           {result.errors.length > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 sm:p-4">
               <div className="flex items-center mb-2">
-                <AlertTriangle className="h-4 w-4 text-orange-500 mr-2" />
-                <h4 className="text-sm font-medium text-orange-800">
+                <AlertTriangle className="h-4 w-4 text-orange-500 mr-2 flex-shrink-0" />
+                <h4 className="text-xs sm:text-sm font-medium text-orange-800">
                   처리 중 발견된 문제점 ({result.errors.length}개)
                 </h4>
               </div>
-              <div className="text-sm text-orange-700 space-y-1">
+              <div className="text-xs sm:text-sm text-orange-700 space-y-1 max-h-40 overflow-y-auto">
                 {result.errors.map((error, index) => (
-                  <div key={index} className="font-mono text-xs bg-orange-100 p-2 rounded">
+                  <div key={index} className="font-mono text-xs bg-orange-100 p-1.5 sm:p-2 rounded break-all">
                     {error}
                   </div>
                 ))}
@@ -974,26 +1240,26 @@ export default function CapsUploadManager() {
             </div>
           )}
 
-          {/* 안내 메시지 */}
-          <div className="mt-4 p-3 bg-green-50 rounded-lg">
-            <p className="text-sm text-green-800">
+          {/* 안내 메시지 - 모바일 패딩 조정 */}
+          <div className="mt-3 sm:mt-4 p-2.5 sm:p-3 bg-green-50 rounded-lg">
+            <p className="text-xs sm:text-sm text-green-800">
               ✅ 업로드된 데이터는 자동으로 근무시간이 계산되며, 출퇴근 현황에서 확인할 수 있습니다.
             </p>
           </div>
         </div>
       )}
 
-      {/* 사용법 안내 */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="text-sm font-medium text-blue-800 mb-2">📋 사용법 안내</h4>
-        <ul className="text-sm text-blue-700 space-y-1">
-          <li>• CAPS 관리 프로그램에서 "데이터 내보내기" → CSV 형식으로 저장</li>
-          <li>• 파일명 예시: "7월4주차.xls - Sheet1.csv"</li>
-          <li>• <strong>사용자 인식:</strong> 사원번호 우선, 이름 백업으로 매핑</li>
-          <li>• 중복 데이터는 자동으로 스킵되므로 안전하게 재업로드 가능</li>
-          <li>• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
-          <li>• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
-          <li>• "출입" 기록은 무시됩니다</li>
+      {/* 사용법 안내 - 모바일 최적화 */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+        <h4 className="text-xs sm:text-sm font-medium text-blue-800 mb-2">📋 사용법 안내</h4>
+        <ul className="text-xs sm:text-sm text-blue-700 space-y-1">
+          <li className="break-words">• CAPS 관리 프로그램에서 "데이터 내보내기" → CSV 형식으로 저장</li>
+          <li className="break-words">• 파일명 예시: "7월4주차.xls - Sheet1.csv"</li>
+          <li className="break-words">• <strong>사용자 인식:</strong> 사원번호 우선, 이름 백업으로 매핑</li>
+          <li className="break-words">• 중복 데이터는 자동으로 스킵되므로 안전하게 재업로드 가능</li>
+          <li className="break-words">• 시스템에 등록되지 않은 사용자는 무시됩니다</li>
+          <li className="break-words">• <strong>해제 → 출근</strong>, <strong>세트 → 퇴근</strong>으로 자동 변환</li>
+          <li className="break-words">• "출입" 기록은 무시됩니다</li>
         </ul>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { getCurrentUser, type User as AuthUser } from '@/lib/auth'
 import { useSupabase } from '@/components/SupabaseProvider'
 import WorkTimePreview from './WorkTimePreview'
 import { detectDinnerEligibility, formatDinnerDetectionResult } from '@/lib/dinner-detection'
+import { safeInsertAttendanceRecord, type AttendanceRecord as DeduplicationRecord } from '@/lib/attendance-deduplication'
 
 interface User {
   id: string
@@ -390,65 +391,55 @@ export default function AttendanceRecorder() {
         recordTimestamp = new Date(`${recordDate}T${recordTime}`)
       }
 
-      // 중복 기록 확인 (같은 날, 같은 타입의 웹 기록만 체크)
-      const { data: existingRecords, error: duplicateError } = await supabase
-        .from('attendance_records')
-        .select('id, source')
-        .eq('user_id', currentUser.id)
-        .eq('record_date', recordDate)
-        .eq('record_type', recordType)
-        .eq('source', 'WEB') // 웹 기록만 중복 체크 (CAPS 기록과는 별도)
+      // 🔄 새로운 중복 제거 시스템 사용
+      const attendanceRecord: DeduplicationRecord = {
+        user_id: currentUser.id,
+        record_date: recordDate,
+        record_time: recordTime,
+        record_type: recordType as '출근' | '퇴근',
+        source: 'WEB'
+      }
 
-      if (duplicateError) {
-        console.error('중복 기록 확인 오류:', duplicateError)
-        alert('기록 확인 중 오류가 발생했습니다.')
+      const { success, data: newRecord, deduplication } = await safeInsertAttendanceRecord(supabase, {
+        ...attendanceRecord,
+        // 추가 메타데이터는 확장하여 저장
+        employee_number: status?.user?.employee_number,
+        record_timestamp: recordTimestamp.toISOString(),
+        reason: reason.trim() || `웹 ${recordType} 기록`,
+        location_lat: location?.lat,
+        location_lng: location?.lng,
+        location_accuracy: location?.accuracy,
+        had_dinner: recordType === '퇴근' ? hadDinner : false,
+        is_manual: !useCurrentTime,
+        notes: `웹앱 기록 - 사용자: ${user.name}${status?.user?.employee_number ? ` (${status.user.employee_number})` : ''}, 시간: ${useCurrentTime ? '현재시간' : '수동선택'}`
+      })
+
+      // 결과에 따른 처리
+      if (!success) {
+        if (deduplication.action === 'duplicate_detected') {
+          alert(`중복 기록: ${deduplication.message}`)
+          console.warn('중복 기록 감지:', deduplication.conflicting_record)
+        } else {
+          alert(`기록 실패: ${deduplication.message}`)
+          console.error('기록 실패:', deduplication)
+        }
         return
       }
 
-      if (existingRecords && existingRecords.length > 0) {
-        alert(`오늘 이미 ${recordType} 기록이 존재합니다.`)
-        return
+      // 성공 처리
+      let successMessage = `${recordType} 기록이 완료되었습니다!`
+      if (deduplication.action === 'merged') {
+        successMessage = `${recordType} 기록이 업데이트되었습니다! (${deduplication.message})`
       }
-
-      // CAPS 형식 호환 출퇴근 기록 생성
-      const { data: newRecord, error: insertError } = await supabase
-        .from('attendance_records')
-        .insert({
-          user_id: currentUser.id,
-          employee_number: status?.user?.employee_number, // 사원번호 추가
-          record_date: recordDate,
-          record_time: recordTime,
-          record_timestamp: recordTimestamp.toISOString(),
-          record_type: recordType, // '출근' 또는 '퇴근' (CAPS 호환)
-          reason: reason.trim() || `웹 ${recordType} 기록`,
-          location_lat: location?.lat,
-          location_lng: location?.lng,
-          location_accuracy: location?.accuracy,
-          source: 'WEB', // CAPS 형식에 맞춰 대문자로 통일
-          had_dinner: recordType === '퇴근' ? hadDinner : false,
-          is_manual: !useCurrentTime,
-          // CAPS 호환 메타데이터 추가
-          notes: `웹앱 기록 - 사용자: ${user.name}${status?.user?.employee_number ? ` (${status.user.employee_number})` : ''}, 시간: ${useCurrentTime ? '현재시간' : '수동선택'}`
-        })
-        .select()
-        .single()
-
-      if (insertError) {
-        console.error('출퇴근 기록 생성 오류:', insertError)
-        alert(`기록 실패: ${insertError.message}`)
-        return
-      }
-
-      if (newRecord) {
-        alert(`${recordType} 기록이 완료되었습니다!`)
-        setReason('')
-        setHadDinner(false)
-        setUseCurrentTime(true)
-        setSelectedTime('')
-        
-        // 상태 새로고침
-        await fetchAttendanceStatus()
-      }
+      
+      alert(successMessage)
+      setReason('')
+      setHadDinner(false)
+      setUseCurrentTime(true)
+      setSelectedTime('')
+      
+      // 상태 새로고침
+      await fetchAttendanceStatus()
     } catch (error) {
       console.error('출퇴근 기록 오류:', error)
       alert('출퇴근 기록 중 오류가 발생했습니다.')

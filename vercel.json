@@ -5,6 +5,9 @@
     },
     "src/app/api/cron/sync-holidays/route.ts": {
       "maxDuration": 60
+    },
+    "src/app/api/cron/holiday-sync/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [
@@ -15,6 +18,11 @@
     {
       "path": "/api/cron/sync-holidays",
       "schedule": "0 2 1 * *"
+    },
+    {
+      "path": "/api/cron/holiday-sync",
+      "schedule": "0 2 * * *",
+      "description": "Daily holiday sync with temporary holiday detection"
     }
   ]
 }

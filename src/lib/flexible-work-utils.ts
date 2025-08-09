@@ -1,6 +1,8 @@
 // 탄력근무제 관련 유틸리티 함수들
 // 근무시간관리 웹앱.md 파일의 Google Apps Script 로직을 TypeScript로 이식
 
+import { calculateNetWorkHours, calculateBreakMinutes } from '@/lib/break-time-calculator'
+
 export interface FlexibleWorkSettings {
   start: string // 'YYYY-MM-DD' 형식
   end: string   // 'YYYY-MM-DD' 형식
@@ -181,7 +183,7 @@ export function detectDinnerBreak(
 }
 
 /**
- * 요일 및 공휴일 확인 함수
+ * 요일 및 공휴일 확인 함수 (하이브리드 공휴일 API 연동)
  * @param workDate 근무날짜 (YYYY-MM-DD)
  * @returns 근무 유형 ('weekday', 'saturday', 'sunday_or_holiday')
  */
@@ -194,8 +196,19 @@ export function getWorkDayType(workDate: string): 'weekday' | 'saturday' | 'sund
   } else if (dayOfWeek === 0) {
     return 'sunday_or_holiday' // 일요일은 보상휴가 대상
   } else {
-    // TODO: 공휴일 API 연동하여 공휴일인지 확인 필요
-    // 공휴일이면 'sunday_or_holiday' 반환
+    // 🎯 공휴일 API 연동하여 공휴일인지 확인 (동기 버전)
+    try {
+      const { isHolidaySync } = require('@/lib/holidays')
+      const holidayName = isHolidaySync(workDate)
+      
+      if (holidayName) {
+        console.log(`📅 Holiday detected: ${workDate} - ${holidayName}`)
+        return 'sunday_or_holiday' // 공휴일도 보상휴가 대상 (일요일과 동일)
+      }
+    } catch (error) {
+      console.warn(`⚠️ Holiday check failed for ${workDate}:`, error)
+    }
+    
     return 'weekday'
   }
 }
@@ -400,14 +413,19 @@ export async function calculateWorkTimeAsync(
       checkOut += 24
     }
     
-    // 총 근무시간 (점심시간 제외)
-    let totalHours = checkOut - checkIn - (lunchBreakMinutes / 60)
+    // 🔄 통합된 휴게시간 계산 시스템 사용
+    const dinnerBreakDetected = detectDinnerBreak(checkInTime, checkOutTime, checkOut - checkIn, overtimeSettings || undefined)
+    const totalHours = calculateNetWorkHours(checkInTime, checkOutTime, dinnerBreakDetected)
     
-    // 저녁식사 시간 감지 및 차감 (DB 설정 적용)
-    const dinnerBreakDetected = detectDinnerBreak(checkInTime, checkOutTime, totalHours, overtimeSettings || undefined)
-    if (dinnerBreakDetected) {
-      totalHours -= 1 // 1시간 차감
-    }
+    // 저녁식사 시간이 이미 차감된 순수 근무시간 사용
+    console.log(`📊 ${workDate} 통합 휴게시간 계산:`, {
+      checkIn: checkInTime,
+      checkOut: checkOutTime,
+      totalHours: totalHours.toFixed(2),
+      dinnerDetected: dinnerBreakDetected
+    })
+    
+    // calculateNetWorkHours에서 이미 저녁식사 시간이 차감되어 totalHours에 반영됨
     
     // 야간근무시간 계산 (DB 설정 적용)
     const nightHours = calculateNightHours(checkInTime, checkOutTime, overtimeSettings)

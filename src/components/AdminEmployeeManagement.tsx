@@ -387,7 +387,7 @@ export default function AdminEmployeeManagement() {
       const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`
       const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`
       
-      // 월별 통계 조회
+      // 월별 통계 조회 (대체휴가, 보상휴가 시간 포함)
       const { data: monthlyStatsArray, error: statsError } = await supabase
         .from('monthly_work_stats')
         .select('*')
@@ -395,6 +395,30 @@ export default function AdminEmployeeManagement() {
         .eq('work_month', `${year}-${String(month).padStart(2, '0')}-01`)
       
       const monthlyStats = monthlyStatsArray && monthlyStatsArray.length > 0 ? monthlyStatsArray[0] : null
+      
+      // 대체휴가, 보상휴가 시간 집계 (daily_work_summary에서)
+      const { data: compensatoryData, error: compError } = await supabase
+        .from('daily_work_summary')
+        .select('substitute_hours, compensatory_hours')
+        .eq('user_id', selectedEmployee.id)
+        .gte('work_date', startDateStr)
+        .lte('work_date', endDateStr)
+      
+      // 대체휴가, 보상휴가 시간 합계 계산
+      let totalSubstituteHours = 0
+      let totalCompensatoryHours = 0
+      
+      if (compensatoryData) {
+        compensatoryData.forEach(day => {
+          totalSubstituteHours += day.substitute_hours || 0
+          totalCompensatoryHours += day.compensatory_hours || 0
+        })
+      }
+      
+      console.log('📊 휴가 발생시간:', {
+        대체휴가: totalSubstituteHours,
+        보상휴가: totalCompensatoryHours
+      })
       
       // 일별 상세 데이터 조회
       const { data: dailyRecords, error: dailyError } = await supabase
@@ -623,10 +647,16 @@ export default function AdminEmployeeManagement() {
       
       // 데이터 변환
       const attendanceData = {
-        summary: monthlyStats || {
+        summary: monthlyStats ? {
+          ...monthlyStats,
+          total_substitute_hours: totalSubstituteHours,
+          total_compensatory_hours: totalCompensatoryHours
+        } : {
           total_work_days: dailyRecords?.length || 0,
           total_basic_hours: dailyRecords?.reduce((sum, record) => sum + (record.basic_hours || 0), 0) || 0,
           total_overtime_hours: dailyRecords?.reduce((sum, record) => sum + (record.overtime_hours || 0), 0) || 0,
+          total_substitute_hours: totalSubstituteHours,
+          total_compensatory_hours: totalCompensatoryHours,
           average_daily_hours: dailyRecords?.length ? (dailyRecords.reduce((sum, record) => sum + (record.basic_hours || 0) + (record.overtime_hours || 0), 0) / dailyRecords.length) : 0,
           dinner_count: dailyRecords?.filter(record => record.had_dinner).length || 0,
           late_count: 0, // TODO: 지각 수 계산 로직 추가
@@ -1298,30 +1328,42 @@ export default function AdminEmployeeManagement() {
                     {/* Attendance Summary */}
                     {!attendanceLoading && attendanceData && (
                       <>
-                        {/* Monthly Summary Stats */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                          <div className="bg-white rounded-lg p-4 border">
-                            <div className="text-sm text-gray-500">총 근무일수</div>
-                            <div className="text-2xl font-bold text-gray-900">
+                        {/* Monthly Summary Stats - 모바일 최적화 */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3 lg:gap-4 mb-4 sm:mb-6">
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">총 근무일수</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                               {attendanceData.summary?.total_work_days || 0}일
                             </div>
                           </div>
-                          <div className="bg-white rounded-lg p-4 border">
-                            <div className="text-sm text-gray-500">총 근무시간</div>
-                            <div className="text-2xl font-bold text-gray-900">
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">총 근무시간</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                               {Math.round(((attendanceData.summary?.total_basic_hours || 0) + (attendanceData.summary?.total_overtime_hours || 0)) * 10) / 10}시간
                             </div>
                           </div>
-                          <div className="bg-white rounded-lg p-4 border">
-                            <div className="text-sm text-gray-500">초과근무시간</div>
-                            <div className="text-2xl font-bold text-blue-600">
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">초과근무시간</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
                               {attendanceData.summary?.total_overtime_hours || 0}시간
                             </div>
                           </div>
-                          <div className="bg-white rounded-lg p-4 border">
-                            <div className="text-sm text-gray-500">평균 일일 근무시간</div>
-                            <div className="text-2xl font-bold text-gray-900">
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">평균 일일 근무</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">
                               {Math.round(attendanceData.summary?.average_daily_hours * 10) / 10 || 0}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">대체휴가 발생</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-green-600">
+                              {Math.round((attendanceData.summary?.total_substitute_hours || 0) * 10) / 10}시간
+                            </div>
+                          </div>
+                          <div className="bg-white rounded-lg p-3 sm:p-4 border">
+                            <div className="text-xs sm:text-sm text-gray-500">보상휴가 발생</div>
+                            <div className="text-lg sm:text-xl lg:text-2xl font-bold text-purple-600">
+                              {Math.round((attendanceData.summary?.total_compensatory_hours || 0) * 10) / 10}시간
                             </div>
                           </div>
                         </div>
