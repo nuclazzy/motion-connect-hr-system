@@ -471,20 +471,75 @@ export default function CapsUploadManager() {
         errorCount: errors.length
       })
 
+      // 🔄 시간순 정렬 추가 (문제 해결: 출퇴근 기록 시간 순서 보장)
+      console.log('🔄 CSV 레코드 시간순 정렬 시작...')
+      
+      processedRecords.sort((a, b) => {
+        // 1차 정렬: 날짜 (record_date)
+        const dateCompare = a.record_date.localeCompare(b.record_date)
+        if (dateCompare !== 0) return dateCompare
+        
+        // 2차 정렬: 시간 (record_timestamp)
+        const timeA = new Date(a.record_timestamp)
+        const timeB = new Date(b.record_timestamp)
+        const timeCompare = timeA.getTime() - timeB.getTime()
+        if (timeCompare !== 0) return timeCompare
+        
+        // 3차 정렬: 사용자별 그룹화 (user_id)
+        const userCompare = a.user_id.localeCompare(b.user_id)
+        if (userCompare !== 0) return userCompare
+        
+        // 4차 정렬: 출근을 퇴근보다 먼저 (같은 시간일 경우)
+        if (a.record_type === '출근' && b.record_type === '퇴근') return -1
+        if (a.record_type === '퇴근' && b.record_type === '출근') return 1
+        
+        return 0
+      })
+      
+      console.log('✅ CSV 레코드 시간순 정렬 완료:', {
+        firstRecord: processedRecords[0] ? {
+          date: processedRecords[0].record_date,
+          time: processedRecords[0].record_time,
+          type: processedRecords[0].record_type,
+          source: processedRecords[0].source
+        } : null,
+        lastRecord: processedRecords[processedRecords.length - 1] ? {
+          date: processedRecords[processedRecords.length - 1].record_date,
+          time: processedRecords[processedRecords.length - 1].record_time,
+          type: processedRecords[processedRecords.length - 1].record_type,
+          source: processedRecords[processedRecords.length - 1].source
+        } : null
+      })
+
       // 안전한 UPSERT 방식으로 전환
       let insertedCount = 0
       let upsertErrors = 0
       
       if (processedRecords.length > 0) {
-        // 1. 고유한 레코드만 필터링 (같은 배치 내 중복 완전 제거)
+        // 1. 고유한 레코드만 필터링 (시간순 정렬 후 중복 완전 제거)
         const uniqueRecords = processedRecords.filter((record, index, self) => {
           const key = `${record.user_id}-${record.record_timestamp}-${record.record_type}`
-          return index === self.findIndex(r => 
+          const firstIndex = self.findIndex(r => 
             `${r.user_id}-${r.record_timestamp}-${r.record_type}` === key
           )
+          
+          // 첫 번째로 발견된 레코드만 유지 (시간순 정렬된 상태이므로 가장 앞선 기록)
+          return index === firstIndex
         })
 
-        console.log(`🔍 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
+        console.log(`🔍 시간순 정렬 후 중복 제거 결과: ${processedRecords.length}개 → ${uniqueRecords.length}개`)
+        
+        // 정렬 및 중복 제거 후 샘플 로그 (디버깅용)
+        if (uniqueRecords.length > 0) {
+          const sampleRecords = uniqueRecords.slice(0, 3).map(r => ({
+            date: r.record_date,
+            time: r.record_time,
+            type: r.record_type,
+            source: r.source,
+            timestamp: r.record_timestamp
+          }))
+          console.log('📋 정렬된 레코드 샘플 (처음 3개):', sampleRecords)
+        }
 
         // 2. 배치 처리로 성능 최적화 (기존 Sequential 처리 개선)
         console.log(`🚀 배치 처리 시작: ${uniqueRecords.length}개 레코드`)
@@ -628,13 +683,13 @@ export default function CapsUploadManager() {
       // 일별 근무시간 재계산
       for (const date of processedDates) {
         for (const userId of processedUserIds) {
-          // 해당일의 출퇴근 기록 조회
+          // 해당일의 출퇴근 기록 조회 (시간순 정렬 보장)
           const { data: dayRecords, error: dayError } = await supabase
             .from('attendance_records')
             .select('*')
             .eq('user_id', userId)
             .eq('record_date', date)
-            .order('record_timestamp')
+            .order('record_timestamp', { ascending: true }) // 명시적 시간순 정렬
           
           if (dayError) {
             console.error(`❌ ${date} 기록 조회 오류:`, dayError)
@@ -643,11 +698,22 @@ export default function CapsUploadManager() {
           
           if (!dayRecords || dayRecords.length === 0) continue
           
-          // 출근/퇴근 시간 찾기
-          // 출근: 첫 번째 출근 기록
+          // 출근/퇴근 시간 찾기 (시간순 정렬된 데이터 활용)
+          // 출근: 첫 번째 출근 기록 (시간순 정렬이므로 가장 이른 출근)
           const checkIn = dayRecords.find(r => r.record_type === '출근')
-          // 퇴근: 마지막 퇴근 기록
+          // 퇴근: 마지막 퇴근 기록 (시간순 정렬이므로 가장 늦은 퇴근)
           const checkOut = dayRecords.filter(r => r.record_type === '퇴근').pop()
+          
+          // 🔍 출퇴근 매칭 디버깅 로그 (문제 해결 추적용)
+          if (dayRecords.length > 0) {
+            console.log(`📊 ${date} ${userId.slice(0,8)}... 출퇴근 기록:`, {
+              totalRecords: dayRecords.length,
+              checkInTime: checkIn?.record_time || 'N/A',
+              checkOutTime: checkOut?.record_time || 'N/A',
+              recordTypes: dayRecords.map(r => `${r.record_time}(${r.record_type})`).join(', '),
+              sources: [...new Set(dayRecords.map(r => r.source))].join(', ')
+            })
+          }
           
           if (checkIn) {
             // 근무시간 계산
