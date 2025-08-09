@@ -21,8 +21,7 @@
     },
     {
       "path": "/api/cron/holiday-sync",
-      "schedule": "0 2 * * *",
-      "description": "Daily holiday sync with temporary holiday detection"
+      "schedule": "0 2 * * *"
     }
   ]
 }
