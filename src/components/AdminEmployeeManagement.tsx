@@ -8,6 +8,7 @@ import SpecialLeaveGrantModal from '@/components/SpecialLeaveGrantModal'
 import { ChevronLeft, ChevronRight, AlertCircle, Calendar, CalendarSync, FileUp } from 'lucide-react'
 import { calculateAnnualLeave } from '@/lib/calculateAnnualLeave'
 import { updateHolidayCache } from '@/lib/holidays'
+import { syncLeaveCalendar } from '@/lib/leave-calendar-sync'
 
 
 // Assuming a more complete User type
@@ -2473,15 +2474,31 @@ export default function AdminEmployeeManagement() {
                       onClick={async () => {
                         setSyncStatus({type: 'leave', status: 'loading'})
                         try {
-                          // TODO: Implement Google Calendar API integration
-                          // For now, we'll simulate the sync
-                          await new Promise(resolve => setTimeout(resolve, 2000))
+                          // 현재 연도와 이전 연도의 휴가 데이터 동기화
+                          const currentYear = new Date().getFullYear()
+                          const result = await syncLeaveCalendar(currentYear)
                           
-                          setSyncStatus({
-                            type: 'leave', 
-                            status: 'success', 
-                            message: '휴가 및 경조사 데이터가 성공적으로 동기화되었습니다.'
-                          })
+                          if (result.success) {
+                            // 이전 연도도 동기화 (선택적)
+                            const prevYearResult = await syncLeaveCalendar(currentYear - 1)
+                            
+                            const totalSynced = (result.syncedCount || 0) + (prevYearResult.syncedCount || 0)
+                            
+                            setSyncStatus({
+                              type: 'leave', 
+                              status: 'success', 
+                              message: `${currentYear}년과 ${currentYear - 1}년 휴가 데이터가 동기화되었습니다. (총 ${totalSynced}건)`
+                            })
+                            
+                            // 데이터 새로고침
+                            await fetchData()
+                          } else {
+                            setSyncStatus({
+                              type: 'leave', 
+                              status: 'error', 
+                              message: result.message
+                            })
+                          }
                         } catch (error) {
                           console.error('Leave sync error:', error)
                           setSyncStatus({
