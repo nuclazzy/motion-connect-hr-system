@@ -8,6 +8,13 @@ import { Calendar, Users, AlertCircle, Clock, TrendingUp, FileText, Edit2, Check
 import { CALENDAR_IDS } from '@/lib/calendarMapping'
 import { getHolidayInfoSync, isWeekend, initializeHolidayCache } from '@/lib/holidays'
 import { 
+  getMonthHolidayInfo, 
+  getCalendarCellStyle, 
+  getDayLabelStyle,
+  getHolidayBadgeProps,
+  type HolidayInfo 
+} from '@/lib/holiday-calendar-utils'
+import { 
   fetchCalendarEventsFromServer, 
   deleteCalendarEventFromServer,
   parseEventDate 
@@ -91,6 +98,8 @@ export default function AdminLeaveOverview() {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
   const [isManualView] = useState(false)
+  const [holidayMap, setHolidayMap] = useState<Map<string, HolidayInfo>>(new Map())
+  const [holidayLoading, setHolidayLoading] = useState(false)
 
   // 전체 휴가 현황 데이터 조회
   const fetchOverviewData = useCallback(async () => {
@@ -661,7 +670,7 @@ export default function AdminLeaveOverview() {
     })
   }
 
-  // 캘린더 렌더링 함수
+  // 캘린더 렌더링 함수 (공휴일 통합)
   const renderCalendar = () => {
     const daysInMonth = getDaysInMonth(currentDate)
     const firstDay = getFirstDayOfMonth(currentDate)
@@ -674,40 +683,40 @@ export default function AdminLeaveOverview() {
 
     // 현재 달의 날들
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day)
-      // 시간대 문제를 피하고 정확한 날짜 비교를 위해 YYYY-MM-DD 형식으로 직접 생성
       const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+      const holidayInfo = holidayMap.get(dateString) || {
+        date: dateString,
+        name: '',
+        isHoliday: false,
+        isWeekend: new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 0 || new Date(currentDate.getFullYear(), currentDate.getMonth(), day).getDay() === 6,
+        dayType: 'weekday' as const
+      }
       
       const dayEvents = leaveEvents.filter(event => {
         const startDateStr = event.start.includes('T') ? event.start.split('T')[0] : event.start
         const endDateStr = event.end.includes('T') ? event.end.split('T')[0] : event.end
-        
-        // Google Calendar의 종일 이벤트는 종료일을 포함하지 않으므로 (exclusive)
-        // 현재 날짜가 시작일(포함) 이상이고 종료일(미포함) 미만인지 확인
         return dateString >= startDateStr && dateString < endDateStr
       })
+      
       const isCurrentDay = isToday(currentDate, day)
-      const isWeekendDay = isWeekend(date)
-      const holidayInfo = getHolidayInfoSync(date)
-      const holiday = holidayInfo.isHoliday ? holidayInfo.name : null
+      const cellStyle = getCalendarCellStyle(holidayInfo, dayEvents.length > 0)
+      const labelStyle = getDayLabelStyle(holidayInfo)
+      const holidayBadge = getHolidayBadgeProps(holidayInfo)
 
       days.push(
         <div
           key={day}
-          className={`p-2 md:p-3 min-h-[80px] md:min-h-[100px] border border-gray-200 ${
-            isCurrentDay ? 'bg-blue-100 border-blue-300' : ''
-          } ${isWeekendDay || holiday ? 'bg-red-50' : ''}`}
+          className={`${cellStyle} ${isCurrentDay ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
         >
-          <div className={`text-xs md:text-sm ${
-            isCurrentDay ? 'text-blue-600 font-bold' : 
-            isWeekendDay || holiday ? 'text-red-600' : 'text-gray-900'
-          }`}>
-            {day}
+          <div className="flex items-start justify-between">
+            <div className={`text-xs md:text-sm font-semibold ${labelStyle} ${isCurrentDay ? '!text-blue-600' : ''}`}>
+              {day}
+            </div>
           </div>
-          {holiday && (
-            <div className="text-xs text-red-600 mt-1 truncate" title={holiday}>
-              <span className="md:hidden">{holiday.substring(0, 4)}...</span>
-              <span className="hidden md:inline">{holiday}</span>
+          {holidayInfo.isHoliday && holidayInfo.name && (
+            <div className="text-xs text-red-600 mt-1 font-medium truncate" title={holidayInfo.name}>
+              <span className="md:hidden">{holidayInfo.name.substring(0, 4)}...</span>
+              <span className="hidden md:inline">{holidayInfo.name}</span>
             </div>
           )}
           <div className="mt-1 md:mt-2 space-y-1">
@@ -741,9 +750,11 @@ export default function AdminLeaveOverview() {
 
     return (
       <div className="grid grid-cols-7 gap-0 border border-gray-200">
-        {['일', '월', '화', '수', '목', '금', '토'].map(day => (
-          <div key={day} className="p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium text-gray-700 border-b border-gray-200">
-            {day}
+        {['일', '월', '화', '수', '목', '금', '토'].map((dayName, idx) => (
+          <div key={dayName} className={`p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium border-b border-gray-200 ${
+            idx === 0 ? 'text-red-600' : idx === 6 ? 'text-blue-600' : 'text-gray-700'
+          }`}>
+            {dayName}
           </div>
         ))}
         {days}
@@ -859,6 +870,28 @@ export default function AdminLeaveOverview() {
       fetchLeaveEvents()
     }
   }, [activeTab, fetchLeaveEvents])
+
+  // 공휴일 정보 로드
+  useEffect(() => {
+    const loadHolidays = async () => {
+      setHolidayLoading(true)
+      try {
+        const holidays = await getMonthHolidayInfo(
+          currentDate.getFullYear(), 
+          currentDate.getMonth() + 1
+        )
+        setHolidayMap(holidays)
+      } catch (error) {
+        console.error('공휴일 정보 로드 실패:', error)
+      } finally {
+        setHolidayLoading(false)
+      }
+    }
+    
+    if (activeTab === 'calendar') {
+      loadHolidays()
+    }
+  }, [currentDate, activeTab])
 
   useEffect(() => {
     const loadData = async () => {

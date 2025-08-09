@@ -7,44 +7,12 @@ import {
   fetchCalendarEventsFromServer,
   parseEventDate
 } from '@/lib/googleCalendarClient'
-
-// 한국 공휴일 데이터 (2024-2025년)
-const koreanHolidays = {
-  '2024-01-01': '신정',
-  '2024-02-09': '설날 연휴',
-  '2024-02-10': '설날',
-  '2024-02-11': '설날 연휴',
-  '2024-02-12': '대체휴일',
-  '2024-03-01': '삼일절',
-  '2024-04-10': '국회의원선거',
-  '2024-05-05': '어린이날',
-  '2024-05-06': '대체휴일',
-  '2024-05-15': '부처님 오신 날',
-  '2024-06-06': '현충일',
-  '2024-08-15': '광복절',
-  '2024-09-16': '추석 연휴',
-  '2024-09-17': '추석',
-  '2024-09-18': '추석 연휴',
-  '2024-10-03': '개천절',
-  '2024-10-09': '한글날',
-  '2024-12-25': '성탄절',
-  '2025-01-01': '신정',
-  '2025-01-28': '설날 연휴',
-  '2025-01-29': '설날',
-  '2025-01-30': '설날 연휴',
-  '2025-03-01': '삼일절',
-  '2025-03-03': '대체휴일',
-  '2025-05-05': '어린이날',
-  '2025-05-13': '부처님 오신 날',
-  '2025-06-06': '현충일',
-  '2025-08-15': '광복절',
-  '2025-10-03': '개천절',
-  '2025-10-06': '추석 연휴',
-  '2025-10-07': '추석',
-  '2025-10-08': '추석 연휴',
-  '2025-10-09': '한글날',
-  '2025-12-25': '성탄절'
-}
+import { 
+  getMonthHolidayInfo, 
+  getCalendarCellStyle, 
+  getDayLabelStyle,
+  type HolidayInfo 
+} from '@/lib/holiday-calendar-utils'
 
 interface CalendarEvent {
   id: string
@@ -65,6 +33,8 @@ export default function LeaveManagement({}: LeaveManagementProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar')
   const [isManualView, setIsManualView] = useState(false)
+  const [holidayMap, setHolidayMap] = useState<Map<string, HolidayInfo>>(new Map())
+  const [holidayLoading, setHolidayLoading] = useState(false)
 
   // Google Calendar에서 직접 휴가 이벤트 조회 (보기 전용)
   const fetchLeaveEvents = useCallback(async () => {
@@ -142,6 +112,26 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     fetchLeaveEvents()
   }, [fetchLeaveEvents])
 
+  // 공휴일 정보 로드
+  useEffect(() => {
+    const loadHolidays = async () => {
+      setHolidayLoading(true)
+      try {
+        const holidays = await getMonthHolidayInfo(
+          currentDate.getFullYear(), 
+          currentDate.getMonth() + 1
+        )
+        setHolidayMap(holidays)
+      } catch (error) {
+        console.error('공휴일 정보 로드 실패:', error)
+      } finally {
+        setHolidayLoading(false)
+      }
+    }
+    
+    loadHolidays()
+  }, [currentDate])
+
   // 캘린더 헬퍼 함수들
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()
@@ -172,10 +162,6 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     })
   }
 
-  const isHoliday = (dateString: string) => {
-    return koreanHolidays[dateString as keyof typeof koreanHolidays]
-  }
-
   const navigateMonth = (direction: 'prev' | 'next') => {
     setCurrentDate(prev => {
       const newDate = new Date(prev)
@@ -203,28 +189,31 @@ export default function LeaveManagement({}: LeaveManagementProps) {
     // 현재 달의 날들
     for (let day = 1; day <= daysInMonth; day++) {
       const dateString = getDateString(year, month, day)
+      const holidayInfo = holidayMap.get(dateString) || {
+        date: dateString,
+        name: '',
+        isHoliday: false,
+        isWeekend: new Date(year, month, day).getDay() === 0 || new Date(year, month, day).getDay() === 6,
+        dayType: 'weekday' as const
+      }
+      
       const isCurrentDay = isToday(currentDate, day)
       const dayEvents = getEventsForDate(dateString)
-      const holiday = isHoliday(dateString)
-      const isWeekend = (firstDay + day - 1) % 7 === 0 || (firstDay + day - 1) % 7 === 6
+      const cellStyle = getCalendarCellStyle(holidayInfo, dayEvents.length > 0)
+      const labelStyle = getDayLabelStyle(holidayInfo)
 
       days.push(
         <div
           key={day}
-          className={`p-2 md:p-3 min-h-[80px] md:min-h-[100px] border border-gray-200 ${
-            isCurrentDay ? 'bg-blue-100 border-blue-300' : ''
-          } ${isWeekend || holiday ? 'bg-red-50' : ''}`}
+          className={`${cellStyle} ${isCurrentDay ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
         >
-          <div className={`text-xs md:text-sm ${
-            isCurrentDay ? 'text-blue-600 font-bold' : 
-            isWeekend || holiday ? 'text-red-600' : 'text-gray-900'
-          }`}>
+          <div className={`text-xs md:text-sm font-semibold ${labelStyle} ${isCurrentDay ? '!text-blue-600' : ''}`}>
             {day}
           </div>
-          {holiday && (
-            <div className="text-xs text-red-600 mt-1 truncate" title={holiday}>
-              <span className="md:hidden">{holiday.substring(0, 4)}...</span>
-              <span className="hidden md:inline">{holiday}</span>
+          {holidayInfo.isHoliday && holidayInfo.name && (
+            <div className="text-xs text-red-600 mt-1 font-medium truncate" title={holidayInfo.name}>
+              <span className="md:hidden">{holidayInfo.name.substring(0, 4)}...</span>
+              <span className="hidden md:inline">{holidayInfo.name}</span>
             </div>
           )}
           <div className="mt-1 md:mt-2 space-y-1">
@@ -248,9 +237,11 @@ export default function LeaveManagement({}: LeaveManagementProps) {
 
     return (
       <div className="grid grid-cols-7 gap-0 border border-gray-200">
-        {['일', '월', '화', '수', '목', '금', '토'].map(day => (
-          <div key={day} className="p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium text-gray-700 border-b border-gray-200">
-            {day}
+        {['일', '월', '화', '수', '목', '금', '토'].map((dayName, idx) => (
+          <div key={dayName} className={`p-2 md:p-3 bg-gray-50 text-center text-xs md:text-sm font-medium border-b border-gray-200 ${
+            idx === 0 ? 'text-red-600' : idx === 6 ? 'text-blue-600' : 'text-gray-700'
+          }`}>
+            {dayName}
           </div>
         ))}
         {days}

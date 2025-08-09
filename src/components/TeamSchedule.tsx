@@ -10,6 +10,12 @@ import {
   updateCalendarEventFromServer,
   deleteCalendarEventFromServer
 } from '@/lib/googleCalendarClient'
+import { 
+  getMonthHolidayInfo,
+  getCalendarCellStyle,
+  getDayLabelStyle,
+  type HolidayInfo
+} from '@/lib/holiday-calendar-utils'
 
 interface CalendarEvent {
   id: string
@@ -48,6 +54,8 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
   const [showEditForm, setShowEditForm] = useState(false)
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null)
   const [calendarLoading, setCalendarLoading] = useState(false)
+  const [holidayMap, setHolidayMap] = useState<Map<string, HolidayInfo>>(new Map())
+  const [holidayLoading, setHolidayLoading] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     date: '',
@@ -176,6 +184,28 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
   useEffect(() => {
     fetchCalendarEvents()
   }, [fetchCalendarEvents])
+
+  // 공휴일 정보 로드
+  useEffect(() => {
+    const loadHolidays = async () => {
+      setHolidayLoading(true)
+      try {
+        const startOfWeek = new Date(currentDate)
+        startOfWeek.setDate(currentDate.getDate() - currentDate.getDay())
+        const year = startOfWeek.getFullYear()
+        const month = startOfWeek.getMonth() + 1
+        
+        const holidays = await getMonthHolidayInfo(year, month)
+        setHolidayMap(holidays)
+      } catch (error) {
+        console.error('공휴일 정보 로드 실패:', error)
+      } finally {
+        setHolidayLoading(false)
+      }
+    }
+    
+    loadHolidays()
+  }, [currentDate])
 
   const getWeekDays = () => {
     const startOfWeek = new Date(currentDate)
@@ -650,19 +680,32 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       getDepartmentCalendars(user.department).own.includes(event.calendarId || '')
                     )
                     const isTodayDay = isToday(day)
-                    const isWeekend = index === 0 || index === 6
+                    
+                    // 날짜 문자열 생성 (YYYY-MM-DD 형식)
+                    const dateString = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+                    const holidayInfo = holidayMap.get(dateString) || {
+                      date: dateString,
+                      name: '',
+                      isHoliday: false,
+                      isWeekend: index === 0 || index === 6,
+                      dayType: 'weekday' as const
+                    }
+                    const labelStyle = getDayLabelStyle(holidayInfo)
                     
                     return (
                       <div key={index} className="flex flex-col">
-                        <div className={`text-center py-2 text-xs md:text-sm font-medium ${
-                          isTodayDay ? 'text-blue-600' : isWeekend ? 'text-red-600' : 'text-gray-700'
-                        }`}>
-                          <div>{dayName}</div>
+                        <div className={`text-center py-2 text-xs md:text-sm font-medium`}>
+                          <div className={labelStyle}>{dayName}</div>
                           <div className="h-6 md:h-8 flex items-center justify-center">
-                            <div className={`text-sm md:text-lg ${isTodayDay ? 'bg-blue-600 text-white rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center' : ''}`}>
+                            <div className={`text-sm md:text-lg ${isTodayDay ? 'bg-blue-600 text-white rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center' : labelStyle}`}>
                               {day.getDate()}
                             </div>
                           </div>
+                          {holidayInfo.isHoliday && holidayInfo.name && (
+                            <div className="text-xs text-red-600 font-medium mt-1 truncate" title={holidayInfo.name}>
+                              {holidayInfo.name}
+                            </div>
+                          )}
                         </div>
                         
                         <div className="min-h-[100px] md:min-h-[140px] bg-white rounded border p-1 md:p-2 space-y-1">
@@ -726,19 +769,32 @@ export default function TeamSchedule({ user }: TeamScheduleProps) {
                       getDepartmentCalendars(user.department).others.includes(event.calendarId || '')
                     )
                     const isTodayDay = isToday(day)
-                    const isWeekend = index === 0 || index === 6
+                    
+                    // 날짜 문자열 생성 (YYYY-MM-DD 형식)
+                    const dateString = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+                    const holidayInfo = holidayMap.get(dateString) || {
+                      date: dateString,
+                      name: '',
+                      isHoliday: false,
+                      isWeekend: index === 0 || index === 6,
+                      dayType: 'weekday' as const
+                    }
+                    const labelStyle = getDayLabelStyle(holidayInfo)
                     
                     return (
                       <div key={index} className="flex flex-col">
-                        <div className={`text-center py-2 text-xs md:text-sm font-medium ${
-                          isTodayDay ? 'text-indigo-600' : isWeekend ? 'text-red-600' : 'text-gray-700'
-                        }`}>
-                          <div>{dayName}</div>
+                        <div className={`text-center py-2 text-xs md:text-sm font-medium`}>
+                          <div className={labelStyle}>{dayName}</div>
                           <div className="h-6 md:h-8 flex items-center justify-center">
-                            <div className={`text-sm md:text-lg ${isTodayDay ? 'bg-indigo-600 text-white rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center' : ''}`}>
+                            <div className={`text-sm md:text-lg ${isTodayDay ? 'bg-indigo-600 text-white rounded-full w-6 h-6 md:w-8 md:h-8 flex items-center justify-center' : labelStyle}`}>
                               {day.getDate()}
                             </div>
                           </div>
+                          {holidayInfo.isHoliday && holidayInfo.name && (
+                            <div className="text-xs text-red-600 font-medium mt-1 truncate" title={holidayInfo.name}>
+                              {holidayInfo.name}
+                            </div>
+                          )}
                         </div>
                         
                         <div className="min-h-[100px] md:min-h-[140px] bg-white rounded border p-1 md:p-2 space-y-1">

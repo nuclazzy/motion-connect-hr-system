@@ -1,29 +1,17 @@
 /**
- * 실시간 공휴일 정보 API 프록시 엔드포인트
- * Multi-Source 하이브리드 접근법
- * Primary: distbe/holidays (GitHub 오픈소스)
- * Fallback: 한국천문연구원 API, 최소 fallback 데이터
+ * 공휴일 정보 API 프록시 엔드포인트
+ * 한국천문연구원(KASI) 특일정보 공식 API 사용
+ * Fallback: 최소 기본 공휴일 데이터
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 
-// Primary: distbe/holidays (GitHub 오픈소스 데이터)
-const DISTBE_API_BASE = 'https://holidays.dist.be'
-
-// Secondary: 한국천문연구원 API (백업용)
+// 한국천문연구원 API (Primary)
 const KASI_API_BASE = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService'
 // 환경변수에서 가져오고, 없으면 제공된 키 사용 (Decoding 버전)
 const SERVICE_KEY = process.env.HOLIDAY_API_KEY || 'VP255KCShsGZZNThSWhAt2qS05vMjkWlRbd1ebmhbizf7D7qLOEO4fu+sehXFLEAs97lyd8FlFjB3oVyNWzNjw=='
 
-// distbe/holidays API 인터페이스
-interface DistbeHolidayItem {
-  date: string        // YYYY-MM-DD
-  name: string        // 공휴일 이름
-  holiday: boolean    // 공휴일 여부
-  kind: number        // 공휴일 종류 (1: 법정공휴일, 2: 기념일)
-}
-
-// 한국천문연구원 API 인터페이스 (백업용)
+// 한국천문연구원 API 인터페이스
 interface HolidayApiResponse {
   response: {
     header: {
@@ -47,50 +35,7 @@ interface HolidayItem {
 }
 
 /**
- * Primary: distbe/holidays API를 통한 실시간 공휴일 데이터 조회
- */
-async function fetchHolidaysFromDistbe(year: number): Promise<{ [key: string]: string }> {
-  try {
-    console.log(`🌟 Fetching holidays from distbe for year ${year}`)
-    
-    const apiUrl = `${DISTBE_API_BASE}/${year}.json`
-    const response = await fetch(apiUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'User-Agent': 'Motion-Connect-HR-System'
-      },
-      // 5초 타임아웃 (GitHub CDN이므로 빠름)
-      signal: AbortSignal.timeout(5000)
-    })
-
-    if (!response.ok) {
-      throw new Error(`distbe API failed with status ${response.status}: ${response.statusText}`)
-    }
-
-    const data: DistbeHolidayItem[] = await response.json()
-    console.log(`✅ distbe API returned ${data.length} items for ${year}`)
-
-    // 공휴일만 필터링하고 YYYY-MM-DD: name 형식으로 변환
-    const holidays: { [key: string]: string } = {}
-    
-    data.forEach(item => {
-      if (item.holiday === true) {  // 공휴일만 선택
-        holidays[item.date] = item.name
-      }
-    })
-
-    console.log(`📅 Processed ${Object.keys(holidays).length} actual holidays for ${year}`)
-    return holidays
-
-  } catch (error) {
-    console.error(`❌ distbe API failed for ${year}:`, error)
-    throw error
-  }
-}
-
-/**
- * 백업: 한국천문연구원 API 호출 (개선된 버전)
+ * 한국천문연구원 API 호출 (Primary)
  */
 async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: string }> {
   try {
@@ -208,37 +153,12 @@ function getMinimalFallbackHolidays(year: number): { [key: string]: string } {
 }
 
 /**
- * Multi-Source 하이브리드 공휴일 데이터 조회 (정부발표 보완 포함)
- * 1순위: distbe/holidays (실시간) + 정부발표 보완
- * 2순위: 한국천문연구원 API (백업) + 정부발표 보완
- * 3순위: Enhanced fallback (정부발표 확정 임시공휴일 포함)
+ * 한국천문연구원 공휴일 데이터 조회 (정부발표 보완 포함)
+ * 1순위: 한국천문연구원 API (공식 데이터) + 정부발표 보완
+ * 2순위: Enhanced fallback (정부발표 확정 임시공휴일 포함)
  */
-async function fetchHolidaysHybrid(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
-  // 1순위: distbe/holidays 시도 + 정부발표 보완
-  try {
-    const holidays = await fetchHolidaysFromDistbe(year)
-    
-    // 🎯 정부 공식 발표 누락 데이터 보완 (2025년)
-    if (year === 2025) {
-      // 6월 3일 대통령 선거일 임시공휴일 강제 추가 (2025.4.8 정부 발표)
-      if (!holidays['2025-06-03']) {
-        holidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
-        console.log('🎯 Added missing June 3, 2025 presidential election holiday')
-      }
-      
-      // 1월 27일 설 연휴 임시공휴일 확인
-      if (!holidays['2025-01-27']) {
-        holidays['2025-01-27'] = '임시공휴일(설 연휴)'
-        console.log('🎯 Added missing January 27, 2025 Lunar New Year holiday')
-      }
-    }
-    
-    return { holidays, source: 'distbe-github-enhanced' }
-  } catch (error) {
-    console.warn(`⚠️ distbe API failed for ${year}, trying fallback...`)
-  }
-
-  // 2순위: 한국천문연구원 API 시도 + 정부발표 보완
+async function fetchHolidaysKASI(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
+  // 1순위: 한국천문연구원 API 시도 + 정부발표 보완
   try {
     const holidays = await fetchHolidaysFromKASI(year)
     
@@ -290,8 +210,8 @@ export async function GET(request: NextRequest) {
     const year = parseInt(yearParam)
     console.log(`🌟 GET request for ${year}${monthParam ? `/${monthParam}` : ''}`)
 
-    // 하이브리드 방식으로 공휴일 데이터 조회
-    const { holidays, source } = await fetchHolidaysHybrid(year)
+    // 한국천문연구원 API로 공휴일 데이터 조회
+    const { holidays, source } = await fetchHolidaysKASI(year)
     
     // 월별 필터링 (요청된 경우)
     let filteredHolidays = holidays
@@ -344,8 +264,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`🌟 POST request for full year ${year}`)
 
-    // 하이브리드 방식으로 공휴일 데이터 조회
-    const { holidays, source } = await fetchHolidaysHybrid(year)
+    // 한국천문연구원 API로 공휴일 데이터 조회
+    const { holidays, source } = await fetchHolidaysKASI(year)
 
     console.log(`✅ Returning ${Object.keys(holidays).length} holidays from source: ${source}`)
 

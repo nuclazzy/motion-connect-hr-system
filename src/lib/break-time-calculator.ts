@@ -6,11 +6,12 @@
  * 수정된 로직 구현
  * 
  * 규칙:
- * 1. 오후 12시(12:00) 이후 출근 시: 휴게시간 0분
- * 2. 그 외의 경우: 8시간까지만 단계적으로 부여
- *    - 4시간 이상 8시간 미만: 30분
- *    - 8시간 이상: 60분 (최대)
- * 3. 8시간 초과 시: 저녁식사 여부에 따라 추가 60분 결정
+ * 1. 점심시간 (12:00~13:00)
+ *    - 4시간 미만 근무: 휴게시간 없음
+ *    - 5시간 이상 근무: 자동 1시간 차감
+ * 2. 저녁시간 (18:00~19:00)
+ *    - 저녁식사 플래그(hadDinner)가 true인 경우만 1시간 차감
+ *    - 8시간 이상 근무 + 18:00 이전 출근 + 19:00 이후 퇴근 조건 충족 시 플래그 자동 설정
  */
 export function calculateBreakMinutes(
   checkInTime: string,
@@ -35,25 +36,16 @@ export function calculateBreakMinutes(
     const totalMinutes = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60)
     const totalHours = totalMinutes / 60
 
-    // 1. 오후 12시 이후 출근 확인
-    const checkInHour = checkIn.getHours()
-    if (checkInHour >= 12) {
-      // 12시 이후 출근 시 휴게시간 0분 (저녁식사 제외)
-      return hadDinner ? 60 : 0
-    }
-
-    // 2. 기본 휴게시간 계산 (8시간까지만)
     let breakMinutes = 0
-    
-    if (totalHours >= 4 && totalHours < 8) {
-      breakMinutes = 30 // 4시간 이상 8시간 미만: 30분
-    } else if (totalHours >= 8) {
-      breakMinutes = 60 // 8시간 이상: 60분 (최대)
+
+    // 1. 점심시간: 5시간 이상 근무 시 1시간 차감
+    if (totalHours >= 5) {
+      breakMinutes = 60 // 점심시간 1시간
     }
 
-    // 3. 8시간 초과 시 저녁식사 여부에 따라 추가 1시간
-    if (totalHours > 8 && hadDinner) {
-      breakMinutes += 60 // 저녁식사 시간 추가
+    // 2. 저녁시간: 플래그가 true인 경우만 1시간 추가 차감
+    if (hadDinner) {
+      breakMinutes += 60 // 저녁시간 1시간 추가
     }
 
     return breakMinutes
@@ -61,6 +53,58 @@ export function calculateBreakMinutes(
   } catch (error) {
     console.error('휴게시간 계산 오류:', error)
     return hadDinner ? 60 : 0
+  }
+}
+
+/**
+ * 저녁식사 플래그 자동 설정 여부 판단
+ * 8시간 이상 근무 + 18:00 이전 출근 + 19:00 이후 퇴근
+ */
+export function shouldAutoSetDinnerFlag(
+  checkInTime: string,
+  checkOutTime: string
+): boolean {
+  if (!checkInTime || !checkOutTime) {
+    return false
+  }
+
+  try {
+    const checkIn = parseTimeString(checkInTime)
+    const checkOut = parseTimeString(checkOutTime)
+
+    // 익일 퇴근 처리
+    if (checkOut <= checkIn) {
+      checkOut.setDate(checkOut.getDate() + 1)
+    }
+
+    // 총 근무 시간 확인
+    const totalMinutes = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60)
+    const totalHours = totalMinutes / 60
+
+    // 8시간 이상 근무 확인
+    if (totalHours < 8) {
+      return false
+    }
+
+    // 18:00 이전 출근 확인
+    const checkInHour = checkIn.getHours()
+    const checkInMinute = checkIn.getMinutes()
+    if (checkInHour > 18 || (checkInHour === 18 && checkInMinute > 0)) {
+      return false
+    }
+
+    // 19:00 이후 퇴근 확인
+    const checkOutHour = checkOut.getHours()
+    const checkOutMinute = checkOut.getMinutes()
+    if (checkOutHour < 19 && checkOut.getDate() === checkIn.getDate()) {
+      return false
+    }
+
+    return true
+
+  } catch (error) {
+    console.error('저녁식사 플래그 판단 오류:', error)
+    return false
   }
 }
 
@@ -138,24 +182,25 @@ export function calculateNetWorkHours(
  */
 export function testBreakTimeCalculation() {
   const testCases = [
-    // 12시 이후 출근
-    { checkIn: '13:00:00', checkOut: '18:00:00', hadDinner: false, expected: 0 },
-    { checkIn: '14:30:00', checkOut: '20:00:00', hadDinner: false, expected: 0 },
-    { checkIn: '15:00:00', checkOut: '24:00:00', hadDinner: true, expected: 60 },
+    // 4시간 미만 근무 - 휴게시간 없음
+    { checkIn: '09:00:00', checkOut: '12:00:00', hadDinner: false, expected: 0 }, // 3시간
+    { checkIn: '09:00:00', checkOut: '12:30:00', hadDinner: false, expected: 0 }, // 3.5시간
+    { checkIn: '09:00:00', checkOut: '12:59:00', hadDinner: false, expected: 0 }, // 3시간 59분
     
-    // 오전 출근 - 8시간까지만 단계적 계산
-    { checkIn: '09:00:00', checkOut: '13:00:00', hadDinner: false, expected: 30 }, // 4시간
+    // 5시간 이상 근무 - 점심시간 1시간
+    { checkIn: '09:00:00', checkOut: '14:00:00', hadDinner: false, expected: 60 }, // 5시간
+    { checkIn: '09:00:00', checkOut: '15:00:00', hadDinner: false, expected: 60 }, // 6시간
     { checkIn: '09:00:00', checkOut: '17:00:00', hadDinner: false, expected: 60 }, // 8시간
-    { checkIn: '08:00:00', checkOut: '20:00:00', hadDinner: false, expected: 60 }, // 12시간 (8시간 초과, 저녁식사 없음)
-    { checkIn: '08:00:00', checkOut: '21:00:00', hadDinner: false, expected: 60 }, // 13시간 (8시간 초과, 저녁식사 없음)
+    { checkIn: '09:00:00', checkOut: '18:00:00', hadDinner: false, expected: 60 }, // 9시간
     
-    // 8시간 초과 + 저녁식사
+    // 5시간 이상 + 저녁식사 플래그
     { checkIn: '09:00:00', checkOut: '19:00:00', hadDinner: true, expected: 120 }, // 10시간 + 저녁 (60 + 60)
     { checkIn: '08:00:00', checkOut: '20:00:00', hadDinner: true, expected: 120 }, // 12시간 + 저녁 (60 + 60)
-    { checkIn: '14:00:00', checkOut: '22:00:00', hadDinner: true, expected: 60 },  // 12시 이후 + 저녁
+    { checkIn: '09:00:00', checkOut: '21:00:00', hadDinner: true, expected: 120 }, // 12시간 + 저녁
     
-    // 8시간 정확히
-    { checkIn: '09:00:00', checkOut: '17:00:00', hadDinner: true, expected: 60 }, // 8시간 정확히, 저녁식사 없음 (8시간 초과가 아니므로)
+    // 4시간대 근무 + 저녁식사 플래그 (특수 케이스)
+    { checkIn: '16:00:00', checkOut: '20:00:00', hadDinner: true, expected: 60 },  // 4시간 + 저녁 (0 + 60)
+    { checkIn: '15:00:00', checkOut: '20:00:00', hadDinner: true, expected: 120 }, // 5시간 + 저녁 (60 + 60)
   ]
 
   console.log('🧪 수정된 휴게시간 계산 테스트 시작')
@@ -167,6 +212,32 @@ export function testBreakTimeCalculation() {
     console.log(
       `${passed ? '✅' : '❌'} ${testCase.checkIn}-${testCase.checkOut} (저녁:${testCase.hadDinner}) ` +
       `예상:${testCase.expected}분, 실제:${result}분`
+    )
+  }
+  
+  console.log('\n🧪 저녁식사 플래그 자동 설정 테스트')
+  
+  const dinnerFlagTests = [
+    // 조건 충족 케이스
+    { checkIn: '09:00:00', checkOut: '19:00:00', expected: true },  // 8시간 이상 + 18:00 이전 출근 + 19:00 이후 퇴근
+    { checkIn: '08:00:00', checkOut: '20:00:00', expected: true },
+    { checkIn: '10:00:00', checkOut: '21:00:00', expected: true },
+    { checkIn: '17:59:00', checkOut: '02:00:00', expected: true },  // 익일 퇴근도 가능
+    
+    // 조건 미충족 케이스
+    { checkIn: '09:00:00', checkOut: '16:00:00', expected: false }, // 8시간 미만
+    { checkIn: '18:01:00', checkOut: '02:00:00', expected: false }, // 18:00 이후 출근
+    { checkIn: '09:00:00', checkOut: '18:59:00', expected: false },    // 19:00 이전 퇴근
+    { checkIn: '13:00:00', checkOut: '20:00:00', expected: false },  // 8시간 미만 (7시간)
+  ]
+  
+  for (const testCase of dinnerFlagTests) {
+    const result = shouldAutoSetDinnerFlag(testCase.checkIn, testCase.checkOut)
+    const passed = result === testCase.expected
+    
+    console.log(
+      `${passed ? '✅' : '❌'} ${testCase.checkIn}-${testCase.checkOut} ` +
+      `예상:${testCase.expected}, 실제:${result}`
     )
   }
 }
