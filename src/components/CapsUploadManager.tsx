@@ -54,6 +54,7 @@ export default function CapsUploadManager() {
   const { supabase } = useSupabase()
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [uploading, setUploading] = useState(false)
+  const [loadingStep, setLoadingStep] = useState<string>('')
   const [dragOver, setDragOver] = useState(false)
   const [result, setResult] = useState<UploadResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -161,6 +162,7 @@ export default function CapsUploadManager() {
     }
 
     setUploading(true)
+    setLoadingStep('파일 분석 중...')
     setError(null)
     setResult(null)
 
@@ -195,6 +197,47 @@ export default function CapsUploadManager() {
         return
       }
 
+      // 🎯 CSV 데이터에서 연도 추출 및 공휴일 캐시 사전 로딩
+      setLoadingStep('연도 분석 및 공휴일 데이터 준비 중...')
+      console.log('📅 공휴일 캐시 사전 로딩 시작...')
+      const yearSet = new Set<number>()
+      
+      // CSV 데이터에서 모든 연도 추출
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+        
+        const values = line.split(',')
+        const dateStr = values[0]?.trim()
+        if (dateStr && dateStr.length >= 4) {
+          const year = parseInt(dateStr.substring(0, 4))
+          if (year >= 2020 && year <= 2030) {
+            yearSet.add(year)
+          }
+        }
+      }
+      
+      const years = Array.from(yearSet).sort()
+      console.log(`📊 추출된 연도들: ${years.join(', ')}`)
+      
+      // 추출된 연도들의 공휴일 데이터 사전 로드
+      const { updateHolidayCache } = await import('@/lib/holidays')
+      
+      for (const year of years) {
+        try {
+          setLoadingStep(`${year}년 공휴일 데이터 로딩 중...`)
+          console.log(`🔄 ${year}년 공휴일 데이터 로딩...`)
+          await updateHolidayCache(year)
+          console.log(`✅ ${year}년 공휴일 캐시 완료`)
+        } catch (error) {
+          console.warn(`⚠️ ${year}년 공휴일 로딩 실패:`, error)
+          // 실패해도 계속 진행 (fallback 사용)
+        }
+      }
+      
+      console.log('✅ 공휴일 캐시 사전 로딩 완료')
+
+      setLoadingStep('사용자 정보 조회 중...')
       // 모든 사용자 정보 미리 조회 (employee_number 포함)
       const { data: users, error: usersError } = await supabase
         .from('users')
@@ -219,6 +262,80 @@ export default function CapsUploadManager() {
         userByNameMap.set(user.name, user.id)
       })
 
+      // 🎯 휴가 데이터 사전 조회 및 캐싱
+      setLoadingStep('휴가 데이터 사전 조회 중...')
+      
+      // CSV에서 날짜 범위 추출
+      const dateSet = new Set<string>()
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+        
+        const values = line.split(',')
+        const dateStr = values[0]?.trim()
+        if (dateStr) {
+          // 날짜 형식 정규화 (2025. 7. 8 -> 2025-07-08)
+          const match = dateStr.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})\.?/)
+          if (match) {
+            const [_, year, month, day] = match
+            const normalizedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+            dateSet.add(normalizedDate)
+          } else if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            dateSet.add(dateStr)
+          }
+        }
+      }
+      
+      const dateRange = Array.from(dateSet).sort()
+      const minDate = dateRange[0]
+      const maxDate = dateRange[dateRange.length - 1]
+      
+      console.log(`📅 휴가 조회 기간: ${minDate} ~ ${maxDate} (총 ${dateRange.length}일)`)
+      
+      // 해당 기간의 모든 승인된 휴가 데이터 조회
+      const { data: leaveData, error: leaveError } = await supabase
+        .from('form_requests')
+        .select('user_id, leave_start_date, leave_end_date, leave_type, status')
+        .eq('form_type', 'leave')
+        .eq('status', 'approved')
+        .lte('leave_start_date', maxDate)
+        .gte('leave_end_date', minDate)
+      
+      if (leaveError) {
+        console.error('휴가 데이터 조회 오류:', leaveError)
+        // 오류가 발생해도 계속 진행 (휴가 정보 없이)
+      }
+      
+      // 휴가 데이터를 효율적인 조회를 위해 Map으로 캐싱
+      // Key: userId + date, Value: leave info
+      const leaveCache = new Map<string, {
+        leave_type: string
+        leave_start_date: string
+        leave_end_date: string
+      }>()
+      
+      if (leaveData && leaveData.length > 0) {
+        for (const leave of leaveData) {
+          // 휴가 기간 내 모든 날짜에 대해 캐시 생성
+          const startDate = new Date(leave.leave_start_date)
+          const endDate = new Date(leave.leave_end_date)
+          
+          for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const dateKey = d.toISOString().split('T')[0]
+            const cacheKey = `${leave.user_id}_${dateKey}`
+            leaveCache.set(cacheKey, {
+              leave_type: leave.leave_type,
+              leave_start_date: leave.leave_start_date,
+              leave_end_date: leave.leave_end_date
+            })
+          }
+        }
+        console.log(`✅ 휴가 캐시 생성 완료: ${leaveCache.size}개 항목`)
+      } else {
+        console.log('💡 해당 기간에 승인된 휴가가 없습니다.')
+      }
+
+      setLoadingStep('CSV 데이터 파싱 및 변환 중...')
       // CSV 데이터 파싱 및 변환
       const processedRecords: ProcessedRecord[] = []
       const errors: string[] = []
@@ -316,57 +433,180 @@ export default function CapsUploadManager() {
             return dateStr // 이미 올바른 형식이면 그대로 반환
           }
           
-          // 시간 형식 정규화 (오전 9:59:23 -> 09:59:23, PM 10:31:19 -> 22:31:19)
-          const parseTimeString = (timeStr: string): string => {
-            // "오전/오후" 한글 형식 처리
-            if (timeStr.includes('오전') || timeStr.includes('오후')) {
-              const isPM = timeStr.includes('오후')
-              const time = timeStr.replace(/오전|오후/g, '').trim()
-              const [hour, minute, second] = time.split(':').map(n => parseInt(n))
-              let hour24 = hour
-              if (isPM && hour !== 12) hour24 += 12
-              if (!isPM && hour === 12) hour24 = 0
-              return `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+          // 시간 형식 정규화 (개선된 파싱 및 검증 로직)
+          const parseTimeWithValidation = (timeStr: string, lineNumber?: number): { 
+            parsedTime: string, 
+            originalTime: string, 
+            isValid: boolean, 
+            warnings: string[] 
+          } => {
+            const warnings: string[] = []
+            const originalTime = timeStr.trim()
+            
+            // 결과 객체 초기화
+            const result = {
+              parsedTime: '00:00:00',
+              originalTime,
+              isValid: false,
+              warnings
             }
-            // "AM/PM" 영문 형식 처리
-            if (timeStr.includes('AM') || timeStr.includes('PM')) {
-              const isPM = timeStr.includes('PM')
-              const time = timeStr.replace(/AM|PM/g, '').trim()
-              const timeParts = time.split(':').map(n => parseInt(n))
-              
-              if (timeParts.length < 3) {
-                console.warn(`⚠️ 시간 형식 오류: ${timeStr}`)
-                return '00:00:00' // 기본값 반환
+            
+            try {
+              // "오전/오후" 한글 형식 처리
+              if (timeStr.includes('오전') || timeStr.includes('오후')) {
+                const isPM = timeStr.includes('오후')
+                const time = timeStr.replace(/오전|오후/g, '').trim()
+                const timeParts = time.split(':')
+                
+                if (timeParts.length !== 3) {
+                  warnings.push(`시간 구성요소 부족: ${originalTime} (${timeParts.length}개 구성요소)`)
+                  return result
+                }
+                
+                const [hour, minute, second] = timeParts.map(n => parseInt(n.trim()))
+                
+                // 기본 유효성 검사
+                if (isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                  warnings.push(`숫자 변환 실패: ${originalTime}`)
+                  return result
+                }
+                
+                if (hour < 1 || hour > 12 || minute < 0 || minute > 59 || second < 0 || second > 59) {
+                  warnings.push(`12시간 형식 범위 오류: ${originalTime} (${hour}:${minute}:${second})`)
+                  return result
+                }
+                
+                // 12시간 → 24시간 변환
+                let hour24 = hour
+                if (isPM && hour !== 12) {
+                  hour24 = hour + 12
+                } else if (!isPM && hour === 12) {
+                  hour24 = 0
+                }
+                
+                result.parsedTime = `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+                result.isValid = true
+                
+                console.log(`✅ 한글 시간 파싱 성공: ${originalTime} → ${result.parsedTime}${lineNumber ? ` (${lineNumber}행)` : ''}`)
+                return result
               }
               
-              const [hour, minute, second] = timeParts
-              
-              // 시간 유효성 검사
-              if (hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 || second > 59) {
-                console.warn(`⚠️ 유효하지 않은 시간: ${timeStr} (${hour}:${minute}:${second})`)
-                return '00:00:00' // 기본값 반환
+              // "AM/PM" 영문 형식 처리
+              if (timeStr.includes('AM') || timeStr.includes('PM')) {
+                const isPM = timeStr.includes('PM')
+                const time = timeStr.replace(/AM|PM/g, '').trim()
+                const timeParts = time.split(':')
+                
+                if (timeParts.length < 2 || timeParts.length > 3) {
+                  warnings.push(`시간 구성요소 오류: ${originalTime} (${timeParts.length}개 구성요소)`)
+                  return result
+                }
+                
+                // 초가 없으면 0으로 설정
+                if (timeParts.length === 2) {
+                  timeParts.push('0')
+                }
+                
+                const [hour, minute, second] = timeParts.map(n => parseInt(n.trim()))
+                
+                // 기본 유효성 검사
+                if (isNaN(hour) || isNaN(minute) || isNaN(second)) {
+                  warnings.push(`숫자 변환 실패: ${originalTime}`)
+                  return result
+                }
+                
+                if (minute < 0 || minute > 59 || second < 0 || second > 59) {
+                  warnings.push(`분/초 범위 오류: ${originalTime} (분:${minute}, 초:${second})`)
+                  return result
+                }
+                
+                let hour24 = hour
+                
+                // 💡 개선된 AM/PM 처리 로직
+                // 1. 비정상적인 24시간 형식 감지 (PM 13:xx, AM 14:xx 등)
+                if (hour >= 13) {
+                  if (isPM) {
+                    warnings.push(`비정상 PM 24시간 형식 감지: ${originalTime} - PM 무시하고 24시간 형식으로 처리`)
+                    hour24 = hour
+                  } else {
+                    warnings.push(`비정상 AM 24시간 형식 감지: ${originalTime} - AM 무시하고 24시간 형식으로 처리`)
+                    hour24 = hour
+                  }
+                } 
+                // 2. 시간 0은 오류로 처리
+                else if (hour === 0) {
+                  warnings.push(`시간 0 오류: ${originalTime} - 12시간 형식에서 0시는 유효하지 않음`)
+                  return result
+                }
+                // 3. 정상적인 12시간 형식 (1-12)
+                else if (hour >= 1 && hour <= 12) {
+                  if (isPM && hour !== 12) {
+                    hour24 = hour + 12
+                  } else if (!isPM && hour === 12) {
+                    hour24 = 0
+                  } else {
+                    hour24 = hour
+                  }
+                }
+                // 4. 기타 유효하지 않은 시간
+                else {
+                  warnings.push(`유효하지 않은 시간: ${originalTime} (시간: ${hour})`)
+                  return result
+                }
+                
+                // 최종 24시간 형식 유효성 검사
+                if (hour24 < 0 || hour24 > 23) {
+                  warnings.push(`24시간 형식 범위 초과: ${originalTime} → ${hour24}:${minute}:${second}`)
+                  return result
+                }
+                
+                result.parsedTime = `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+                result.isValid = true
+                
+                // 변환 결과 로깅
+                if (warnings.length > 0) {
+                  console.warn(`⚠️ 영문 시간 파싱 (경고): ${originalTime} → ${result.parsedTime}${lineNumber ? ` (${lineNumber}행)` : ''}, 경고: ${warnings.join(', ')}`)
+                } else {
+                  console.log(`✅ 영문 시간 파싱 성공: ${originalTime} → ${result.parsedTime}${lineNumber ? ` (${lineNumber}행)` : ''}`)
+                }
+                
+                return result
               }
               
-              let hour24 = hour
-              
-              // AM/PM이 있는데 이미 24시간 형식인 경우 (예: PM 13:32:00)
-              if (hour >= 13 && isPM) {
-                // 이미 24시간 형식으로 보임 - PM 무시
-                hour24 = hour
-                console.warn(`⚠️ 잘못된 형식 감지: ${timeStr} - PM을 무시하고 24시간 형식으로 처리`)
-              } else if (hour >= 13 && !isPM) {
-                // AM인데 13시 이상 - 24시간 형식으로 처리
-                hour24 = hour
-                console.warn(`⚠️ 잘못된 형식 감지: ${timeStr} - AM을 무시하고 24시간 형식으로 처리`)
+              // 이미 24시간 형식인 경우 (HH:MM:SS 또는 H:MM:SS)
+              const timeParts = timeStr.split(':')
+              if (timeParts.length >= 2 && timeParts.length <= 3) {
+                // 초가 없으면 0으로 설정
+                if (timeParts.length === 2) {
+                  timeParts.push('0')
+                }
+                
+                const [hour, minute, second] = timeParts.map(n => parseInt(n.trim()))
+                
+                if (!isNaN(hour) && !isNaN(minute) && !isNaN(second)) {
+                  if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59 && second >= 0 && second <= 59) {
+                    result.parsedTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+                    result.isValid = true
+                    console.log(`✅ 24시간 형식 파싱 성공: ${originalTime} → ${result.parsedTime}${lineNumber ? ` (${lineNumber}행)` : ''}`)
+                    return result
+                  } else {
+                    warnings.push(`24시간 형식 범위 오류: ${originalTime} (${hour}:${minute}:${second})`)
+                  }
+                } else {
+                  warnings.push(`24시간 형식 숫자 변환 실패: ${originalTime}`)
+                }
               } else {
-                // 정상적인 12시간 형식
-                if (isPM && hour !== 12) hour24 += 12
-                if (!isPM && hour === 12) hour24 = 0
+                warnings.push(`알 수 없는 시간 형식: ${originalTime}`)
               }
               
-              return `${hour24.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:${second.toString().padStart(2, '0')}`
+            } catch (error) {
+              warnings.push(`파싱 중 예외 발생: ${originalTime} - ${error}`)
+              console.error(`❌ 시간 파싱 예외:`, error, { originalTime, lineNumber })
             }
-            return timeStr // 이미 24시간 형식이면 그대로 반환
+            
+            // 파싱 실패 시 로그
+            console.error(`❌ 시간 파싱 실패: ${originalTime}${lineNumber ? ` (${lineNumber}행)` : ''}, 경고: ${warnings.join(', ')}`)
+            return result
           }
           
           // 웹앱 데이터 처리 (GPS 정보 파싱 포함)
@@ -386,9 +626,24 @@ export default function CapsUploadManager() {
             console.log(`✅ 웹앱 데이터 처리: ${record.이름} ${record.발생일자} ${record.발생시각} ${recordType}`)
           }
           
-          // 날짜/시간 파싱
+          // 날짜/시간 파싱 (개선된 검증 시스템 적용)
           const recordDate = parseDateString(record.발생일자)
-          const recordTime = parseTimeString(record.발생시각)
+          const timeParseResult = parseTimeWithValidation(record.발생시각, i + 1)
+          
+          // 시간 파싱 실패 시 에러 처리
+          if (!timeParseResult.isValid) {
+            const errorMsg = `${i + 1}행: 시간 파싱 실패 - 원본: "${timeParseResult.originalTime}", 오류: ${timeParseResult.warnings.join(', ')}`
+            errors.push(errorMsg)
+            console.error(`❌ ${errorMsg}`)
+            continue
+          }
+          
+          const recordTime = timeParseResult.parsedTime
+          
+          // 경고가 있는 경우 별도 로깅 (처리는 계속)
+          if (timeParseResult.warnings.length > 0) {
+            console.warn(`⚠️ ${i + 1}행: 시간 파싱 경고 - 원본: "${timeParseResult.originalTime}" → 변환: "${recordTime}", 경고: ${timeParseResult.warnings.join(', ')}`)
+          }
           
           // 타임스탬프 생성 및 검증
           const recordTimestamp = new Date(`${recordDate}T${recordTime}+09:00`) // KST
@@ -550,7 +805,11 @@ export default function CapsUploadManager() {
         
         for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
           const batch = uniqueRecords.slice(i, i + BATCH_SIZE)
-          console.log(`📦 배치 ${Math.floor(i/BATCH_SIZE) + 1}/${Math.ceil(uniqueRecords.length/BATCH_SIZE)} 처리 중...`)
+          const batchNumber = Math.floor(i/BATCH_SIZE) + 1
+          const totalBatches = Math.ceil(uniqueRecords.length/BATCH_SIZE)
+          
+          setLoadingStep(`데이터베이스 저장 중... (${batchNumber}/${totalBatches})`)
+          console.log(`📦 배치 ${batchNumber}/${totalBatches} 처리 중...`)
           
           // 배치 내 병렬 처리 (직접 INSERT/UPSERT/OVERWRITE 방식)
           const batchPromises = batch.map(async (record) => {
@@ -695,6 +954,7 @@ export default function CapsUploadManager() {
         overwriteMode
       })
 
+      setLoadingStep('근무시간 재계산 중...')
       // 🔄 업로드된 데이터의 daily_work_summary 강제 재계산
       console.log('🔄 daily_work_summary 강제 재계산 시작...')
       
@@ -757,7 +1017,67 @@ export default function CapsUploadManager() {
           if (!dayRecords || dayRecords.length === 0) continue
           
           // 출근/퇴근 시간 찾기 (시간순 정렬된 데이터 활용)
-          // 🎯 개선된 로직: 연속된 해제/세트 쌍 감지 및 필터링
+          // 🎯 개선된 로직: 정교한 해제/세트 감지 및 필터링
+          
+          // 보안 시스템 해제/세트 감지 함수
+          const isSecurityPair = (record1: any, record2: any): boolean => {
+            if (!record1 || !record2) return false
+            
+            // 1. 출근→퇴근 순서 확인 (해제→세트)
+            if (record1.record_type !== '출근' || record2.record_type !== '퇴근') return false
+            
+            // 2. 시간 간격 체크 (10분 이내)
+            const timeDiff = (new Date(record2.record_timestamp).getTime() - 
+                            new Date(record1.record_timestamp).getTime()) / (1000 * 60)
+            if (timeDiff > 10) return false
+            
+            // 3. 동일 소스 확인 (CAPS 시스템만 보안 모드 존재)
+            const isSameSource = record1.source === record2.source
+            const isCapsSource = record1.source === 'CAPS' && record2.source === 'CAPS'
+            
+            // 4. 컨텍스트 기반 패턴 분석
+            const hour1 = new Date(record1.record_timestamp).getHours()
+            const hour2 = new Date(record2.record_timestamp).getHours()
+            
+            // 보안 모드 전형적 패턴: 퇴근 시간대(17-23시) 또는 새벽 시간대(0-6시)
+            const isSecurityTimeFrame = (hour1 >= 17 && hour1 <= 23) || 
+                                      (hour1 >= 0 && hour1 <= 6) ||
+                                      (hour2 >= 17 && hour2 <= 23) || 
+                                      (hour2 >= 0 && hour2 <= 6)
+            
+            // 5. 사원번호 일치 확인 (동일 단말기 사용)
+            const sameEmployeeNumber = record1.employee_number === record2.employee_number
+            
+            // 최종 판단 로직
+            const isSecurityPattern = isCapsSource && isSameSource && sameEmployeeNumber && 
+                                    timeDiff <= 5 && isSecurityTimeFrame
+            
+            if (isSecurityPattern) {
+              console.log(`🔒 보안 시스템 해제/세트 상세 분석:`, {
+                timeDiff: `${timeDiff.toFixed(1)}분`,
+                source: record1.source,
+                employeeNumber: record1.employee_number,
+                timeFrame: `${record1.record_time} → ${record2.record_time}`,
+                hours: `${hour1}시 → ${hour2}시`,
+                isSecurityTime: isSecurityTimeFrame,
+                pattern: '해제→세트 연속 쌍'
+              })
+              return true
+            }
+            
+            // 일반적인 짧은 간격 출퇴근 (실제 근무일 수 있음)
+            if (timeDiff <= 10 && !isSecurityPattern) {
+              console.log(`⚠️ 짧은 간격 출퇴근 감지 (실제 근무 가능):`, {
+                timeDiff: `${timeDiff.toFixed(1)}분`,
+                source: `${record1.source} → ${record2.source}`,
+                timeFrame: `${record1.record_time} → ${record2.record_time}`,
+                reason: '보안 패턴과 일치하지 않음'
+              })
+              return false
+            }
+            
+            return false
+          }
           
           // 1. 실제 근무 시작/종료 찾기 (해제/세트 연속 쌍 제외)
           let checkIn = null
@@ -767,18 +1087,14 @@ export default function CapsUploadManager() {
           for (let i = 0; i < dayRecords.length; i++) {
             const record = dayRecords[i]
             if (record.record_type === '출근') {
-              // 다음 기록이 5분 이내 퇴근인지 확인 (해제/세트 쌍 감지)
               const nextRecord = dayRecords[i + 1]
-              if (nextRecord && nextRecord.record_type === '퇴근') {
-                const timeDiff = (new Date(nextRecord.record_timestamp).getTime() - 
-                                new Date(record.record_timestamp).getTime()) / (1000 * 60) // 분 단위
-                if (timeDiff <= 10) {
-                  // 10분 이내 출퇴근은 보안 시스템 해제/세트로 간주하고 건너뛰기
-                  console.log(`🔒 보안 시스템 해제/세트 감지 (${timeDiff.toFixed(1)}분 간격): ${record.record_time} → ${nextRecord.record_time}`)
-                  i++ // 다음 기록도 건너뛰기
-                  continue
-                }
+              
+              // 보안 시스템 쌍 검사
+              if (isSecurityPair(record, nextRecord)) {
+                i++ // 다음 기록도 건너뛰기 (세트 기록)
+                continue
               }
+              
               // 유효한 출근 기록
               if (!checkIn) {
                 checkIn = record
@@ -790,17 +1106,14 @@ export default function CapsUploadManager() {
           for (let i = dayRecords.length - 1; i >= 0; i--) {
             const record = dayRecords[i]
             if (record.record_type === '퇴근') {
-              // 이전 기록이 5분 이내 출근인지 확인 (해제/세트 쌍 감지)
               const prevRecord = dayRecords[i - 1]
-              if (prevRecord && prevRecord.record_type === '출근') {
-                const timeDiff = (new Date(record.record_timestamp).getTime() - 
-                                new Date(prevRecord.record_timestamp).getTime()) / (1000 * 60) // 분 단위
-                if (timeDiff <= 10) {
-                  // 10분 이내 출퇴근은 보안 시스템 해제/세트로 간주하고 건너뛰기
-                  i-- // 이전 기록도 건너뛰기
-                  continue
-                }
+              
+              // 보안 시스템 쌍 검사 (역순)
+              if (isSecurityPair(prevRecord, record)) {
+                i-- // 이전 기록도 건너뛰기 (해제 기록)
+                continue
               }
+              
               // 유효한 퇴근 기록
               if (!checkOut) {
                 checkOut = record
@@ -832,6 +1145,9 @@ export default function CapsUploadManager() {
             // 근무시간 계산
             let basicHours = 0
             let overtimeHours = 0
+            let nightHours = 0
+            let substituteHours = 0
+            let compensatoryHours = 0
             let hadDinner = false
             let workStatus = ''
             
@@ -959,7 +1275,7 @@ export default function CapsUploadManager() {
             }
               
               // 야간근무 시간 계산 (22시-06시) - GAS 라인 100-106, 971-977
-              let nightHours = 0
+              nightHours = 0
               let nightPayHours = 0  // 야간근무 수당 시간 (1.5배)
               const tempTime = new Date(startTime.getTime())
               while (tempTime < endTime) {
@@ -981,8 +1297,8 @@ export default function CapsUploadManager() {
               }
               
               // 대체휴가, 보상휴가 시간 계산 (토요일/일요일/공휴일 구분)
-              let substituteHours = 0  // 대체휴가 (토요일)
-              let compensatoryHours = 0  // 보상휴가 (일요일/공휴일)
+              substituteHours = 0  // 대체휴가 (토요일)
+              compensatoryHours = 0  // 보상휴가 (일요일/공휴일)
               
               if (isWeekend || isHoliday) {
                 if (dayOfWeek === 6) {  // 토요일
@@ -1052,18 +1368,10 @@ export default function CapsUploadManager() {
               // 공휴일/주말 근무 확인 (work_status에 추가 정보 포함)
               // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
               
-              // 승인된 휴가 확인
-              const { data: leaveData } = await supabase
-                .from('form_requests')
-                .select('leave_start_date, leave_end_date, leave_type')
-                .eq('user_id', userId)
-                .eq('form_type', 'leave')
-                .eq('status', 'approved')
-                .lte('leave_start_date', date)
-                .gte('leave_end_date', date)
-                .limit(1)
-              
-              const hasApprovedLeave = leaveData && leaveData.length > 0
+              // 🎯 캐시된 휴가 데이터 확인
+              const leaveCacheKey = `${userId}_${date}`
+              const leaveInfo = leaveCache.get(leaveCacheKey)
+              const hasApprovedLeave = !!leaveInfo
               
               // 기본 근무 상태 판별 (0시간/음수 시간은 오류로 처리)
               let baseStatus = ''
@@ -1078,16 +1386,24 @@ export default function CapsUploadManager() {
               }
               
               // 특수 상황에 따른 work_status 설정 (우선순위: 휴가 > 공휴일 > 주말)
-              if (hasApprovedLeave) {
-                const leaveType = leaveData[0].leave_type
+              if (hasApprovedLeave && leaveInfo) {
+                const leaveType = leaveInfo.leave_type
+                // 휴가 중 실제 근무한 경우와 휴가만 있는 경우 구분
                 if (leaveType === 'half_day_am' || leaveType === 'half_day_pm') {
-                  workStatus = `${baseStatus}(반차)`
+                  // 반차: 실제 4시간 이상 근무했으면 "반차근무", 아니면 근무 시간에 따라 판단
+                  if (basicHours >= 4) {
+                    workStatus = `${baseStatus}(반차)`
+                  } else {
+                    workStatus = `${baseStatus}(반차근무)`
+                  }
                 } else if (leaveType === 'hourly') {
+                  // 시간차: 실제 근무한 경우
                   workStatus = `${baseStatus}(시간차)`
                 } else {
+                  // 연차: 출근 기록이 있는 경우는 휴가 중 근무
                   workStatus = `${baseStatus}(휴가중근무)`
                 }
-                console.log(`📅 휴가 중 근무 확인: ${date} - ${workStatus}`)
+                console.log(`📅 휴가 중 근무 확인: ${date} - ${workStatus} (${leaveType})`)
               } else if (isHoliday) {
                 workStatus = `${baseStatus}(공휴일)`
                 console.log(`📅 공휴일 근무 확인: ${date} - ${workStatus}, ${holidayInfo.name}`)
@@ -1128,22 +1444,14 @@ export default function CapsUploadManager() {
               // 둘 다 없음 - 공휴일, 주말, 휴가 상태 확인
               // dayOfWeek, isWeekend, isHoliday, holidayInfo 변수들은 이미 위에서 정의됨
               
-              // 승인된 휴가 확인
-              const { data: leaveData } = await supabase
-                .from('form_requests')
-                .select('leave_start_date, leave_end_date, leave_type')
-                .eq('user_id', userId)
-                .eq('form_type', 'leave')
-                .eq('status', 'approved')
-                .lte('leave_start_date', date)
-                .gte('leave_end_date', date)
-                .limit(1)
-              
-              const hasApprovedLeave = leaveData && leaveData.length > 0
+              // 🎯 캐시된 휴가 데이터 확인
+              const leaveCacheKey = `${userId}_${date}`
+              const leaveInfo = leaveCache.get(leaveCacheKey)
+              const hasApprovedLeave = !!leaveInfo
               
               // work_status 우선순위: 휴가 > 공휴일 > 주말 > 기록없음
-              if (hasApprovedLeave) {
-                const leaveType = leaveData[0].leave_type
+              if (hasApprovedLeave && leaveInfo) {
+                const leaveType = leaveInfo.leave_type
                 if (leaveType === 'half_day_am' || leaveType === 'half_day_pm') {
                   workStatus = '반차'
                 } else if (leaveType === 'hourly') {
@@ -1193,9 +1501,9 @@ export default function CapsUploadManager() {
                 check_out_time: checkOut?.record_timestamp || null,
                 basic_hours: roundToOneDecimal(basicHours),
                 overtime_hours: roundToOneDecimal(overtimeHours),
-                night_hours: 0,  // 야간근무 시간 (현재 미구현)
-                substitute_hours: 0,  // 대체휴가 시간 (현재 미구현)
-                compensatory_hours: 0,  // 보상휴가 시간 (현재 미구현)
+                night_hours: roundToOneDecimal(nightHours),
+                substitute_hours: roundToOneDecimal(substituteHours),
+                compensatory_hours: roundToOneDecimal(compensatoryHours),
                 work_status: workStatus,
                 had_dinner: hadDinner,
                 auto_calculated: true,
@@ -1240,6 +1548,7 @@ export default function CapsUploadManager() {
       
       console.log(`✅ daily_work_summary 재계산 완료: ${recalculatedDays}일`)
       
+      setLoadingStep('월별 통계 재계산 중...')
       // 🔄 월별 통계 강제 재계산
       let recalculatedMonths = 0
       for (const yearMonth of affectedMonths) {
@@ -1305,6 +1614,7 @@ export default function CapsUploadManager() {
       }
       
       console.log(`✅ monthly_work_stats 재계산 완료: ${recalculatedMonths}월`)
+      setLoadingStep('업로드 완료 처리 중...')
       console.log(`🎯 전체 재계산 완료: 일별 ${recalculatedDays}건, 월별 ${recalculatedMonths}건`)
       
       // 3개월 탄력근무제 정산 처리
@@ -1434,6 +1744,7 @@ export default function CapsUploadManager() {
       setError('업로드 중 오류가 발생했습니다: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setUploading(false)
+      setLoadingStep('')
     }
   }
 
@@ -1544,7 +1855,9 @@ export default function CapsUploadManager() {
           <div className="flex flex-col items-center">
             <RefreshCw className="h-10 w-10 sm:h-12 sm:w-12 text-blue-500 animate-spin mb-3 sm:mb-4" />
             <p className="text-base sm:text-lg font-medium text-blue-600">업로드 중...</p>
-            <p className="text-xs sm:text-sm text-gray-500">데이터를 처리하고 있습니다.</p>
+            <p className="text-xs sm:text-sm text-gray-500">
+              {loadingStep || '데이터를 처리하고 있습니다.'}
+            </p>
           </div>
         ) : (
           <div className="flex flex-col items-center">
@@ -1662,6 +1975,7 @@ export default function CapsUploadManager() {
               )}
               <br /><strong>📊 재계산 완료:</strong> attendance_records → daily_work_summary → monthly_work_stats 순서로 연동되어 업데이트됩니다.
               <br /><strong>🔍 확인 방법:</strong> 관리자 &gt; 출퇴근 관리에서 해당 날짜의 근무시간을 확인하세요.
+              <br /><strong>🕐 시간 파싱 개선:</strong> AM/PM 경계값 처리 개선, 원본 시간 보존, 상세한 오류 추적이 적용되었습니다.
             </p>
           </div>
         </div>
