@@ -11,8 +11,9 @@ import { NextRequest, NextResponse } from 'next/server'
 const DISTBE_API_BASE = 'https://holidays.dist.be'
 
 // Secondary: 한국천문연구원 API (백업용)
-const KASI_API_BASE = 'http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService'
-const SERVICE_KEY = process.env.HOLIDAY_API_KEY
+const KASI_API_BASE = 'https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService'
+// 환경변수에서 가져오고, 없으면 제공된 키 사용 (Decoding 버전)
+const SERVICE_KEY = process.env.HOLIDAY_API_KEY || 'VP255KCShsGZZNThSWhAt2qS05vMjkWlRbd1ebmhbizf7D7qLOEO4fu+sehXFLEAs97lyd8FlFjB3oVyNWzNjw=='
 
 // distbe/holidays API 인터페이스
 interface DistbeHolidayItem {
@@ -89,56 +90,90 @@ async function fetchHolidaysFromDistbe(year: number): Promise<{ [key: string]: s
 }
 
 /**
- * 백업: 한국천문연구원 API 호출
+ * 백업: 한국천문연구원 API 호출 (개선된 버전)
  */
 async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: string }> {
-  if (!SERVICE_KEY) {
-    throw new Error('KASI API key not available')
-  }
-
-  const params = new URLSearchParams({
-    ServiceKey: SERVICE_KEY,
-    pageNo: '1',
-    numOfRows: '100',
-    solYear: year.toString()
-  })
-
-  const apiUrl = `${KASI_API_BASE}/getRestDeInfo?${params.toString()}`
-  const response = await fetch(apiUrl, {
-    method: 'GET',
-    headers: { 'Accept': 'application/xml' },
-    signal: AbortSignal.timeout(10000)
-  })
-
-  if (!response.ok) {
-    throw new Error(`KASI API failed with status ${response.status}`)
-  }
-
-  const xml = await response.text()
-  
-  // 간단한 XML 파싱 (정규식 사용 - ES2015 호환)
-  const holidays: { [key: string]: string } = {}
-  const itemRegex = /<item>([\s\S]*?)<\/item>/g
-  const itemMatches = xml.match(itemRegex) || []
-  
-  for (const itemMatch of itemMatches) {
-    // Extract the content inside <item> tags
-    const itemContentMatch = itemMatch.match(/<item>([\s\S]*?)<\/item>/)
-    if (!itemContentMatch) continue
+  try {
+    console.log(`🔍 Attempting KASI API for year ${year}`)
     
-    const itemXml = itemContentMatch[1]
-    const dateNameMatch = itemXml.match(/<dateName>([^<]+)<\/dateName>/)
-    const isHolidayMatch = itemXml.match(/<isHoliday>([^<]+)<\/isHoliday>/)
-    const locdateMatch = itemXml.match(/<locdate>([^<]+)<\/locdate>/)
-    
-    if (dateNameMatch && isHolidayMatch && locdateMatch && isHolidayMatch[1] === 'Y') {
-      const dateStr = locdateMatch[1]
-      const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`
-      holidays[formattedDate] = dateNameMatch[1]
+    // API 키 확인
+    if (!SERVICE_KEY) {
+      throw new Error('KASI API key not available')
     }
-  }
 
-  return holidays
+    // API 파라미터 설정
+    const params = new URLSearchParams({
+      ServiceKey: SERVICE_KEY,
+      pageNo: '1',
+      numOfRows: '100',
+      solYear: year.toString(),
+      _type: 'json'  // JSON 응답 시도
+    })
+
+    const apiUrl = `${KASI_API_BASE}/getRestDeInfo?${params.toString()}`
+    console.log(`📡 KASI API URL: ${apiUrl.replace(SERVICE_KEY, 'API_KEY_HIDDEN')}`)
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: { 
+        'Accept': 'application/json, application/xml',
+        'User-Agent': 'Motion-Connect-HR-System'
+      },
+      signal: AbortSignal.timeout(10000)
+    })
+
+    if (!response.ok) {
+      throw new Error(`KASI API failed with status ${response.status}: ${response.statusText}`)
+    }
+
+    const contentType = response.headers.get('content-type')
+    const holidays: { [key: string]: string } = {}
+    
+    // JSON 응답 처리
+    if (contentType?.includes('application/json')) {
+      const data = await response.json()
+      console.log('📊 KASI API returned JSON response')
+      
+      // JSON 응답 구조 처리
+      const items = data?.response?.body?.items?.item || []
+      for (const item of Array.isArray(items) ? items : [items]) {
+        if (item.isHoliday === 'Y') {
+          const dateStr = String(item.locdate)
+          const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`
+          holidays[formattedDate] = item.dateName
+        }
+      }
+    } 
+    // XML 응답 처리
+    else {
+      const xml = await response.text()
+      console.log('📄 KASI API returned XML response')
+      
+      // 개선된 XML 파싱
+      const itemRegex = /<item>([\s\S]*?)<\/item>/g
+      const itemMatches = xml.match(itemRegex) || []
+      
+      for (const itemMatch of itemMatches) {
+        const itemXml = itemMatch
+        const dateNameMatch = itemXml.match(/<dateName>([^<]+)<\/dateName>/)
+        const isHolidayMatch = itemXml.match(/<isHoliday>([^<]+)<\/isHoliday>/)
+        const locdateMatch = itemXml.match(/<locdate>([^<]+)<\/locdate>/)
+        
+        if (dateNameMatch && isHolidayMatch && locdateMatch && isHolidayMatch[1] === 'Y') {
+          const dateStr = locdateMatch[1]
+          const formattedDate = `${dateStr.slice(0,4)}-${dateStr.slice(4,6)}-${dateStr.slice(6,8)}`
+          holidays[formattedDate] = dateNameMatch[1]
+        }
+      }
+    }
+
+    console.log(`✅ KASI API returned ${Object.keys(holidays).length} holidays for ${year}`)
+    return holidays
+    
+  } catch (error) {
+    console.error(`❌ KASI API error for ${year}:`, error)
+    throw error
+  }
 }
 
 /**
