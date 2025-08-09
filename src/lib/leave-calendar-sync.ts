@@ -155,21 +155,40 @@ function parseLeaveEvent(event: LeaveEvent): ParsedLeaveData | null {
 }
 
 /**
- * 직원 이름으로 사용자 ID 조회
+ * 직원 이름으로 사용자 ID 조회 (유연한 매칭)
  */
 async function getUserIdByName(supabase: any, name: string): Promise<string | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('id')
-    .eq('name', name)
-    .single()
-
-  if (error || !data) {
-    console.warn(`User not found: ${name}`)
+  try {
+    // 먼저 정확한 이름으로 검색
+    let { data, error } = await supabase
+      .from('users')
+      .select('id, name')
+      .eq('name', name)
+      .maybeSingle()
+    
+    // 정확한 매칭이 없으면 부분 매칭 시도
+    if (!data) {
+      const result = await supabase
+        .from('users')
+        .select('id, name')
+        .ilike('name', `%${name}%`)
+        .limit(1)
+      
+      data = result.data?.[0] || null
+      error = result.error
+    }
+    
+    if (error || !data) {
+      console.warn(`User not found: ${name}`)
+      return null
+    }
+    
+    console.log(`Found user: ${data.name} (ID: ${data.id})`)
+    return data.id
+  } catch (error) {
+    console.error(`Error fetching user ${name}:`, error)
     return null
   }
-
-  return data.id
 }
 
 /**
@@ -182,15 +201,33 @@ async function saveLeaveData(
 ): Promise<boolean> {
   try {
     // 중복 체크 (Google Event ID 기준)
-    const { data: existing } = await supabase
-      .from('leave_records')
-      .select('id')
-      .eq('google_event_id', leaveData.googleEventId)
-      .single()
+    if (leaveData.googleEventId) {
+      const { data: existing } = await supabase
+        .from('leave_records')
+        .select('id')
+        .eq('google_event_id', leaveData.googleEventId)
+        .maybeSingle()
 
-    if (existing) {
-      console.log(`Leave record already exists for event: ${leaveData.googleEventId}`)
-      return false
+      if (existing) {
+        console.log(`Leave record already exists for event: ${leaveData.googleEventId}`)
+        // 기존 레코드 업데이트
+        const { error } = await supabase
+          .from('leave_records')
+          .update({
+            leave_type: leaveData.leaveType,
+            start_date: leaveData.startDate,
+            end_date: leaveData.endDate,
+            reason: leaveData.description,
+            synced_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+        
+        if (error) {
+          console.error(`Failed to update leave record:`, error)
+          return false
+        }
+        return true
+      }
     }
 
     // 휴가 일수 계산
@@ -199,7 +236,7 @@ async function saveLeaveData(
     const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1
     const leaveDays = leaveData.isHalfDay ? 0.5 : daysDiff
 
-    // 휴가 기록 저장
+    // 휴가 기록 저장 (insert or update)
     const { error } = await supabase
       .from('leave_records')
       .insert({
@@ -210,11 +247,16 @@ async function saveLeaveData(
         reason: leaveData.description,
         days_requested: leaveDays,
         status: 'approved', // 캘린더에 있는 것은 이미 승인된 것으로 간주
-        google_event_id: leaveData.googleEventId,
+        google_event_id: leaveData.googleEventId || null,
         synced_at: new Date().toISOString()
       })
 
     if (error) {
+      // 중복 키 오류는 무시
+      if (error.code === '23505') {
+        console.log(`Duplicate leave record skipped for ${leaveData.employeeName}`)
+        return true
+      }
       console.error(`Failed to save leave record:`, error)
       return false
     }
