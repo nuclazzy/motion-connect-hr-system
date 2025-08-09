@@ -445,7 +445,7 @@ export default function AdminEmployeeManagement() {
       
       // 휴가 신청 기록 조회 (해당 월에 포함되는 휴가만 정확히 조회)
       const { data: leaveRecords, error: leaveError } = await supabase
-        .from('leave_applications')
+        .from('leave_records')
         .select('*')
         .eq('user_id', selectedEmployee.id)
         .eq('status', 'approved') // 승인된 휴가만
