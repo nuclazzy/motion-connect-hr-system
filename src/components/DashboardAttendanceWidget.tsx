@@ -1336,9 +1336,11 @@ export default function DashboardAttendanceWidget({ user }: DashboardAttendanceW
                                   ? 'bg-orange-100 text-orange-800'
                                   : record.work_status === '결근'
                                   ? 'bg-red-100 text-red-800'
+                                  : record.work_status === '근무시간 오류'
+                                  ? 'bg-red-200 text-red-900'
                                   : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {record.work_status}
+                                {record.work_status === '근무시간 오류' && '⚠️ '}{record.work_status}
                               </span>
                             )}
                             

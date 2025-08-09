@@ -651,24 +651,49 @@ export default function AttendanceDashboard() {
           {/* 최근 기록 탭 */}
           {activeTab === 'recent' && summaryData?.recentStats && (
             <div className="space-y-3">
-              {summaryData.recentStats.map((record, index) => (
-                <div key={index} className="p-4 border border-gray-200 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="font-medium">{record.work_date}</div>
-                      <div className="text-sm text-gray-600">{record.work_status}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">
-                        {(record.basic_hours + record.overtime_hours).toFixed(1)}h
+              {summaryData.recentStats.map((record, index) => {
+                // 근무시간 오류 상태 감지
+                const isWorkTimeError = record.work_status === '근무시간 오류' || record.basic_hours <= 0
+                
+                return (
+                  <div 
+                    key={index} 
+                    className={`p-4 border rounded-lg ${
+                      isWorkTimeError 
+                        ? 'border-red-300 bg-red-50' 
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{record.work_date}</div>
+                        <div className={`text-sm ${
+                          isWorkTimeError ? 'text-red-600 font-medium' : 'text-gray-600'
+                        }`}>
+                          {isWorkTimeError && '⚠️ '}{record.work_status}
+                        </div>
+                        {isWorkTimeError && (
+                          <div className="text-xs text-red-500 mt-1">
+                            데이터 확인이 필요합니다
+                          </div>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-600">
-                        기본 {record.basic_hours}h + 연장 {record.overtime_hours}h
+                      <div className="text-right">
+                        <div className={`font-medium ${
+                          isWorkTimeError ? 'text-red-600' : ''
+                        }`}>
+                          {(record.basic_hours + record.overtime_hours).toFixed(1)}h
+                        </div>
+                        <div className={`text-sm ${
+                          isWorkTimeError ? 'text-red-500' : 'text-gray-600'
+                        }`}>
+                          기본 {record.basic_hours}h + 연장 {record.overtime_hours}h
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </>

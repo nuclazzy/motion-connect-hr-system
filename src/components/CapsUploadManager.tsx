@@ -1001,8 +1001,10 @@ export default function CapsUploadManager() {
                 }
               }
               
-              // 근무 상태 판별
-              if (basicHours < 4) {
+              // 근무 상태 판별 (0시간/음수 시간은 오류로 처리)
+              if (basicHours <= 0) {
+                workStatus = '근무시간 오류'
+              } else if (basicHours < 4) {
                 workStatus = '조기퇴근'
               } else if (basicHours < 8) {
                 workStatus = '조정근무'  // "단축근무"보다 부드러운 표현
