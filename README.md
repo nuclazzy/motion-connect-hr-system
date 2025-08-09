@@ -112,3 +112,4 @@ http://localhost:3000에서 애플리케이션 확인
 
 **Motion Connect v1.0** - 모던 HR 관리 시스템
 # Force redeploy Wed Jul 16 21:15:59 KST 2025
+# Deployment verification - Sat Aug  9 12:23:33 KST 2025
