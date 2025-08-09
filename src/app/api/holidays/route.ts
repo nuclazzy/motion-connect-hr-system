@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { fetchHolidaysFromMultipleSources, validateHolidayData } from '@/lib/holiday-sources'
 
 // Supabase client
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -170,12 +171,58 @@ async function fetchCustomHolidays(year: number): Promise<{ [key: string]: strin
 }
 
 /**
- * 공휴일 데이터 조회 (실시간 연동)
- * 1. 한국천문연구원 API (정규 공휴일)
- * 2. Supabase custom_holidays 테이블 (임시공휴일)
- * 두 데이터를 병합하여 완전한 공휴일 목록 제공
+ * 공휴일 데이터 조회 (멀티소스 통합 시스템)
+ * 1. Google Calendar API (가장 신뢰할 수 있음)
+ * 2. 한국천문연구원 API (정규 공휴일)
+ * 3. Supabase custom_holidays 테이블 (임시공휴일)
+ * 모든 데이터를 병합하여 완전한 공휴일 목록 제공
  */
 async function fetchHolidaysRealtime(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
+  try {
+    // 멀티소스 시스템 사용
+    const { holidays: holidayMap, sources, conflicts } = await fetchHolidaysFromMultipleSources(year)
+    
+    // Map을 객체로 변환
+    const holidays: { [key: string]: string } = {}
+    for (const [date, holiday] of holidayMap) {
+      holidays[date] = holiday.name
+    }
+    
+    // 충돌이 있을 경우 로그
+    if (conflicts.length > 0) {
+      console.warn(`⚠️ ${conflicts.length}개의 데이터 충돌 감지:`)
+      conflicts.forEach(conflict => {
+        console.warn(`  - ${conflict.date}: ${conflict.sources.map(h => `${h.name}(${h.source})`).join(', ')}`)
+      })
+    }
+    
+    // 데이터 검증
+    const validation = await validateHolidayData(year)
+    if (!validation.isValid) {
+      console.warn(`⚠️ 공휴일 데이터 검증 경고:`)
+      validation.recommendations.forEach(rec => console.warn(`  - ${rec}`))
+    }
+    
+    const sourceStr = sources.length > 0 ? sources.join('+') : 'none'
+    console.log(`✅ ${Object.keys(holidays).length}개 공휴일 조회 완료 (소스: ${sourceStr})`)
+    
+    return { 
+      holidays, 
+      source: sourceStr 
+    }
+  } catch (error) {
+    console.error(`❌ 멀티소스 공휴일 조회 실패:`, error)
+    
+    // 폴백: 기존 시스템 사용
+    console.log('📊 폴백: 기존 KASI + Custom 시스템 사용')
+    return fetchHolidaysLegacy(year)
+  }
+}
+
+/**
+ * 기존 공휴일 조회 시스템 (폴백용)
+ */
+async function fetchHolidaysLegacy(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
   let holidays: { [key: string]: string } = {}
   let source = 'none'
   
@@ -187,12 +234,9 @@ async function fetchHolidaysRealtime(year: number): Promise<{ holidays: { [key: 
       holidays = { ...kasiHolidays }
       source = 'kasi-api'
       console.log(`✅ KASI API: ${Object.keys(kasiHolidays).length}개 정규 공휴일 조회`)
-    } else {
-      console.warn(`⚠️ KASI API: 공휴일 데이터 없음`)
     }
   } catch (error) {
     console.error(`❌ KASI API 실패:`, error)
-    // API 실패해도 계속 진행 (custom_holidays는 조회)
   }
   
   // 2. Supabase custom_holidays 테이블에서 임시공휴일 조회
@@ -208,16 +252,10 @@ async function fetchHolidaysRealtime(year: number): Promise<{ holidays: { [key: 
     console.error(`❌ Custom holidays 조회 실패:`, error)
   }
   
-  // 공휴일이 하나도 없으면 에러
   if (Object.keys(holidays).length === 0) {
-    console.error(`❌ ${year}년 공휴일 데이터를 가져올 수 없습니다`)
-    return { 
-      holidays: {}, 
-      source: 'error' 
-    }
+    return { holidays: {}, source: 'error' }
   }
   
-  console.log(`📅 총 ${Object.keys(holidays).length}개 공휴일 (source: ${source})`)
   return { holidays, source }
 }
 
