@@ -135,51 +135,6 @@ async function fetchHolidaysFromKASI(year: number): Promise<{ [key: string]: str
   }
 }
 
-/**
- * 최소한의 fallback 데이터 + 최신 정부발표 보완
- * (현재년도 ±2년, 고정 공휴일 + 확정된 임시공휴일)
- */
-function getMinimalFallbackHolidays(year: number): { [key: string]: string } {
-  const holidays: { [key: string]: string } = {}
-  
-  // 고정 공휴일 추가
-  holidays[`${year}-01-01`] = '1월1일'
-  holidays[`${year}-03-01`] = '삼일절'
-  holidays[`${year}-05-05`] = '어린이날'
-  holidays[`${year}-06-06`] = '현충일'
-  holidays[`${year}-08-15`] = '광복절'
-  holidays[`${year}-10-03`] = '개천절'
-  holidays[`${year}-10-09`] = '한글날'
-  holidays[`${year}-12-25`] = '기독탄신일'
-  
-  // 🎯 2025년 특별 공휴일 (정부 공식 발표 + 일반 공휴일)
-  if (year === 2025) {
-    // 설 연휴
-    holidays[`${year}-01-27`] = '임시공휴일'
-    holidays[`${year}-01-28`] = '설날'
-    holidays[`${year}-01-29`] = '설날'
-    holidays[`${year}-01-30`] = '설날'
-    
-    // 삼일절 대체공휴일
-    holidays[`${year}-03-03`] = '대체공휴일'
-    
-    // 어린이날/부처님오신날 (5월 5일 중복)
-    holidays[`${year}-05-06`] = '대체공휴일'
-    
-    // 🚨 제21대 대통령 선거일 임시공휴일
-    holidays[`${year}-06-03`] = '임시공휴일(제21대 대통령 선거)'
-    
-    // 추석 연휴
-    holidays[`${year}-10-05`] = '추석'
-    holidays[`${year}-10-06`] = '추석'
-    holidays[`${year}-10-07`] = '추석'
-    holidays[`${year}-10-08`] = '대체공휴일'
-  }
-  
-  const totalCount = Object.keys(holidays).length
-  console.log(`📋 Enhanced fallback: ${totalCount}개 공휴일 (${year}년)`)
-  return holidays
-}
 
 /**
  * Supabase custom_holidays 테이블에서 임시공휴일 조회
@@ -215,50 +170,55 @@ async function fetchCustomHolidays(year: number): Promise<{ [key: string]: strin
 }
 
 /**
- * 한국천문연구원 공휴일 데이터 조회 (정부발표 보완 포함)
- * 1순위: Supabase custom_holidays 테이블 (임시공휴일)
- * 2순위: 한국천문연구원 API (공식 데이터) + 정부발표 보완
- * 3순위: Enhanced fallback (정부발표 확정 임시공휴일 포함)
+ * 공휴일 데이터 조회 (실시간 연동)
+ * 1. 한국천문연구원 API (정규 공휴일)
+ * 2. Supabase custom_holidays 테이블 (임시공휴일)
+ * 두 데이터를 병합하여 완전한 공휴일 목록 제공
  */
-async function fetchHolidaysKASI(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
-  // 1순위: 한국천문연구원 API 시도
+async function fetchHolidaysRealtime(year: number): Promise<{ holidays: { [key: string]: string }, source: string }> {
+  let holidays: { [key: string]: string } = {}
+  let source = 'none'
+  
+  // 1. 한국천문연구원 API에서 정규 공휴일 조회
   try {
-    const holidays = await fetchHolidaysFromKASI(year)
+    const kasiHolidays = await fetchHolidaysFromKASI(year)
     
-    // API가 실제 공휴일을 반환했는지 확인 (5개 이상이면 성공으로 간주)
-    if (Object.keys(holidays).length >= 5) {
-      console.log(`✅ KASI API 성공: ${Object.keys(holidays).length}개 공휴일 조회`)
-      
-      // 🎯 Supabase custom_holidays 테이블에서 임시공휴일 추가
-      const customHolidays = await fetchCustomHolidays(year)
-      Object.assign(holidays, customHolidays)
-      
-      if (Object.keys(customHolidays).length > 0) {
-        console.log(`✅ Custom holidays 추가: ${Object.keys(customHolidays).length}개`)
-      }
-      
-      return { holidays, source: 'kasi-api+custom' }
+    if (Object.keys(kasiHolidays).length > 0) {
+      holidays = { ...kasiHolidays }
+      source = 'kasi-api'
+      console.log(`✅ KASI API: ${Object.keys(kasiHolidays).length}개 정규 공휴일 조회`)
     } else {
-      console.warn(`⚠️ KASI API 응답 부족: ${Object.keys(holidays).length}개만 조회됨, fallback 사용`)
-      throw new Error('Insufficient KASI API response')
+      console.warn(`⚠️ KASI API: 공휴일 데이터 없음`)
     }
   } catch (error) {
-    console.warn(`⚠️ KASI API 실패 for ${year}, enhanced fallback 사용...`)
-  }
-
-  // 2순위: Enhanced fallback + Custom holidays
-  console.log(`📋 Enhanced fallback 사용 for ${year}`)
-  const holidays = getMinimalFallbackHolidays(year)
-  
-  // Supabase custom_holidays 테이블에서 임시공휴일 추가
-  const customHolidays = await fetchCustomHolidays(year)
-  Object.assign(holidays, customHolidays)
-  
-  if (Object.keys(customHolidays).length > 0) {
-    console.log(`✅ Custom holidays 추가: ${Object.keys(customHolidays).length}개`)
+    console.error(`❌ KASI API 실패:`, error)
+    // API 실패해도 계속 진행 (custom_holidays는 조회)
   }
   
-  return { holidays, source: 'enhanced-fallback+custom' }
+  // 2. Supabase custom_holidays 테이블에서 임시공휴일 조회
+  try {
+    const customHolidays = await fetchCustomHolidays(year)
+    
+    if (Object.keys(customHolidays).length > 0) {
+      Object.assign(holidays, customHolidays)
+      source = source === 'kasi-api' ? 'kasi-api+custom' : 'custom-only'
+      console.log(`✅ Custom holidays: ${Object.keys(customHolidays).length}개 임시공휴일 추가`)
+    }
+  } catch (error) {
+    console.error(`❌ Custom holidays 조회 실패:`, error)
+  }
+  
+  // 공휴일이 하나도 없으면 에러
+  if (Object.keys(holidays).length === 0) {
+    console.error(`❌ ${year}년 공휴일 데이터를 가져올 수 없습니다`)
+    return { 
+      holidays: {}, 
+      source: 'error' 
+    }
+  }
+  
+  console.log(`📅 총 ${Object.keys(holidays).length}개 공휴일 (source: ${source})`)
+  return { holidays, source }
 }
 
 /**
@@ -280,8 +240,8 @@ export async function GET(request: NextRequest) {
     const year = parseInt(yearParam)
     console.log(`🌟 GET request for ${year}${monthParam ? `/${monthParam}` : ''}`)
 
-    // 한국천문연구원 API로 공휴일 데이터 조회
-    const { holidays, source } = await fetchHolidaysKASI(year)
+    // 실시간 공휴일 데이터 조회
+    const { holidays, source } = await fetchHolidaysRealtime(year)
     
     // 월별 필터링 (요청된 경우)
     let filteredHolidays = holidays
@@ -334,8 +294,8 @@ export async function POST(request: NextRequest) {
 
     console.log(`🌟 POST request for full year ${year}`)
 
-    // 한국천문연구원 API로 공휴일 데이터 조회
-    const { holidays, source } = await fetchHolidaysKASI(year)
+    // 실시간 공휴일 데이터 조회
+    const { holidays, source } = await fetchHolidaysRealtime(year)
 
     console.log(`✅ Returning ${Object.keys(holidays).length} holidays from source: ${source}`)
 

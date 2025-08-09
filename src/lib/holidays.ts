@@ -1,7 +1,8 @@
 /**
- * 한국천문연구원(KASI) 공휴일 API 통합 시스템 🏛️
- * 공식 특일정보 API 사용
- * Fallback: 최소 기본 공휴일 데이터 📅
+ * 공휴일 API 통합 시스템 🏛️
+ * 1. 한국천문연구원(KASI) 공식 특일정보 API
+ * 2. Supabase custom_holidays 테이블 (임시공휴일)
+ * 실시간 연동 데이터만 사용 (Fallback 없음)
  */
 
 // API 설정
@@ -10,8 +11,8 @@ const API_ENDPOINTS = {
   fullYear: '/api/holidays' // POST 요청으로 전체 연도 데이터
 }
 
-// 🗑️ 하드코딩 데이터 제거됨!
-// 이제 한국천문연구원 API + Fallback (route.ts)에서 모든 데이터 처리
+// 🗑️ 하드코딩 및 Fallback 데이터 제거됨!
+// 실시간 API 연동 데이터만 사용 (KASI API + custom_holidays 테이블)
 
 // 공휴일 데이터 캐시 (API에서 동적으로 채워짐)
 let holidayCache: { [key: string]: string } = {}
@@ -33,7 +34,7 @@ export const initializeHolidayCache = async (year?: number) => {
 
 /**
  * 내부 API 엔드포인트를 통해 공휴일 정보 가져오기 (실시간 연동)
- * Source: /api/holidays → KASI API → enhanced fallback
+ * Source: /api/holidays → KASI API + custom_holidays 테이블
  */
 export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string]: string }> => {
   try {
@@ -66,47 +67,9 @@ export const fetchHolidaysFromAPI = async (year: number): Promise<{ [key: string
     }
     
   } catch (error) {
-    console.warn(`⚠️ Internal API fetch failed for ${year}, using emergency fallback:`, error)
-    
-    // 🚨 긴급 복구: 최소한의 핵심 공휴일 보장
-    const emergencyHolidays: { [key: string]: string } = {}
-    
-    // 고정 공휴일 (매년 동일)
-    emergencyHolidays[`${year}-01-01`] = '신정'
-    emergencyHolidays[`${year}-03-01`] = '삼일절'
-    emergencyHolidays[`${year}-05-05`] = '어린이날'
-    emergencyHolidays[`${year}-06-06`] = '현충일'
-    emergencyHolidays[`${year}-08-15`] = '광복절'
-    emergencyHolidays[`${year}-10-03`] = '개천절'
-    emergencyHolidays[`${year}-10-09`] = '한글날'
-    emergencyHolidays[`${year}-12-25`] = '성탄절'
-    
-    // 🎯 2025년 모든 공휴일 보장 (정부 발표 포함)
-    if (year === 2025) {
-      // 설 연휴
-      emergencyHolidays['2025-01-27'] = '임시공휴일(설 연휴)'
-      emergencyHolidays['2025-01-28'] = '설날'
-      emergencyHolidays['2025-01-29'] = '설날'
-      emergencyHolidays['2025-01-30'] = '설날'
-      
-      // 삼일절 대체공휴일
-      emergencyHolidays['2025-03-03'] = '대체공휴일'
-      
-      // 어린이날 대체공휴일
-      emergencyHolidays['2025-05-06'] = '대체공휴일'
-      
-      // 🚨 대통령 선거일 임시공휴일
-      emergencyHolidays['2025-06-03'] = '임시공휴일(대통령 선거일)'
-      
-      // 추석 연휴
-      emergencyHolidays['2025-10-05'] = '추석'
-      emergencyHolidays['2025-10-06'] = '추석'
-      emergencyHolidays['2025-10-07'] = '추석'
-      emergencyHolidays['2025-10-08'] = '대체공휴일'
-    }
-    
-    console.log(`🚨 Using emergency fallback: ${Object.keys(emergencyHolidays).length} core holidays for ${year}`)
-    return emergencyHolidays
+    console.error(`❌ API fetch failed for ${year}:`, error)
+    // API 실패 시 빈 객체 반환 (실시간 데이터만 사용)
+    return {}
   }
 }
 
@@ -137,10 +100,8 @@ export const fetchMonthlyHolidays = async (year: number, month: number): Promise
     }
     
   } catch (error) {
-    console.warn(`⚠️ Internal monthly API failed for ${year}/${month}, no local fallback available:`, error)
-    
-    // 월별 API 실패 시 빈 객체 반환
-    console.log(`📅 Monthly API failed for ${year}/${month}, using fallback system`)
+    console.error(`❌ Monthly API failed for ${year}/${month}:`, error)
+    // API 실패 시 빈 객체 반환 (실시간 데이터만 사용)
     return {}
   }
 }
@@ -198,7 +159,7 @@ export const updateHolidayCache = async (year: number) => {
     console.log(`✅ Successfully cached ${Object.keys(holidays).length} holidays for ${year}`)
   } catch (error) {
     console.error(`❌ Failed to update holiday cache for ${year}:`, error)
-    console.warn(`⚠️ No local fallback data available, relying on route.ts Enhanced Fallback system`)
+    // 실시간 데이터만 사용하므로 캐시 업데이트 실패 시 빈 상태 유지
   }
 }
 
@@ -388,5 +349,5 @@ export const clearHolidayCache = () => {
     })
   }
   
-  console.log('📅 Holiday cache cleared - will be repopulated from hybrid API')
+  console.log('📅 Holiday cache cleared - will be repopulated from realtime API')
 }
