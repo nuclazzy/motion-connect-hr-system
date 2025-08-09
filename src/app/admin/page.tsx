@@ -15,8 +15,10 @@ import AdminLeaveOverview from '@/components/AdminLeaveOverview'
 import WorkScheduleManagement from '@/components/WorkScheduleManagement'
 import FormApplicationModal from '@/components/FormApplicationModal'
 import DashboardAttendanceWidget from '@/components/DashboardAttendanceWidget'
+import CapsUploadManager from '@/components/CapsUploadManager'
 import { useSupabase } from '@/components/SupabaseProvider'
-import { User as UserIcon, Shield } from 'lucide-react'
+import { User as UserIcon, Shield, FileUp, Calendar, CalendarSync, CheckCircle, AlertCircle } from 'lucide-react'
+import { updateHolidayCache } from '@/lib/holidays'
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<User | null>(null)
