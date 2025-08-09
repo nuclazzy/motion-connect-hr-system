@@ -1463,8 +1463,12 @@ export default function AdminEmployeeManagement() {
                                             )}
                                             {hasLeave && (
                                               <div className="text-xs text-yellow-600 mt-1">
-                                                {record.leave_info.type === 'annual' ? '연차' : 
-                                                 record.leave_info.type === 'sick' ? '병가' :
+                                                {record.leave_info.category === 'annual' ? '연차' : 
+                                                 record.leave_info.category === 'substitute' ? '대체휴가' :
+                                                 record.leave_info.category === 'compensatory' ? '보상휴가' :
+                                                 record.leave_info.category === 'sick' ? '병가' :
+                                                 record.leave_info.category === 'official' ? '공가' :
+                                                 record.leave_info.category === 'condolence' ? '경조사휴가' :
                                                  record.leave_info.type === 'special' ? '특별휴가' : '기타'}
                                                 {isHalfDayLeave && ` (${record.leave_info.period === 'morning' ? '오전' : '오후'}반차)`}
                                               </div>
@@ -1499,11 +1503,20 @@ export default function AdminEmployeeManagement() {
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">
                                           {isFullDayLeave ? (
-                                            <span className="text-yellow-600">8시간 (연차)</span>
+                                            <span className="text-yellow-600">
+                                              8시간 ({record.leave_info.category === 'annual' ? '연차' : 
+                                                      record.leave_info.category === 'substitute' ? '대체휴가' :
+                                                      record.leave_info.category === 'compensatory' ? '보상휴가' :
+                                                      record.leave_info.category === 'sick' ? '병가' :
+                                                      record.leave_info.category === 'official' ? '공가' :
+                                                      record.leave_info.category === 'condolence' ? '경조사' : '휴가'})
+                                            </span>
                                           ) : isHalfDayLeave ? (
                                             <span className="text-blue-600">
                                               {record.basic_hours || 0}시간 
-                                              ({record.leave_info?.period === 'morning' ? '오전' : '오후'}반차)
+                                              ({record.leave_info.category === 'annual' ? '연차' : 
+                                                record.leave_info.category === 'substitute' ? '대체휴가' :
+                                                record.leave_info.category === 'compensatory' ? '보상휴가' : '휴가'} {record.leave_info?.period === 'morning' ? '오전' : '오후'}반차)
                                             </span>
                                           ) : (
                                             <span>{record.basic_hours || 0}시간</span>
@@ -2507,6 +2520,11 @@ export default function AdminEmployeeManagement() {
                             
                             // 데이터 새로고침
                             await fetchData()
+                            
+                            // 근무시간 관리 탭이 활성화된 경우 출근 데이터도 새로고침
+                            if (selectedEmployee && activeTab === 'attendance') {
+                              await fetchAttendanceData()
+                            }
                           } else {
                             setSyncStatus({
                               type: 'leave', 
